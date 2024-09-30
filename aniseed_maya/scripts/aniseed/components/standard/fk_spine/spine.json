@@ -1,0 +1,112 @@
+[
+    {
+        "background": "spine.png",
+        "type": "view"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                148.0,
+                143.0
+            ],
+            [
+                133.0,
+                177.0
+            ]
+        ],
+        "thickness": 5,
+        "type": "line"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                131.0,
+                182.0
+            ],
+            [
+                130.0,
+                201.0
+            ]
+        ],
+        "thickness": 5,
+        "type": "line"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                131.0,
+                204.0
+            ],
+            [
+                136.0,
+                236.0
+            ]
+        ],
+        "thickness": 5,
+        "type": "line"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                136.0,
+                239.0
+            ],
+            [
+                136.0,
+                261.0
+            ]
+        ],
+        "thickness": 5,
+        "type": "line"
+    },
+    {
+        "color": [
+            179,
+            255,
+            14
+        ],
+        "location": [
+            157.0,
+            117.0
+        ],
+        "name": "chest",
+        "radius": 50,
+        "type": "circle",
+        "variable_type": "requirement"
+    },
+    {
+        "color": [
+            202,
+            255,
+            10
+        ],
+        "location": [
+            132.0,
+            289.0
+        ],
+        "name": "hip",
+        "radius": 50,
+        "type": "circle",
+        "variable_type": "requirement"
+    }
+]

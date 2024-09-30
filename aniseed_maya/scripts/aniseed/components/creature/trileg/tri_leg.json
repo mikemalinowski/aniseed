@@ -1,0 +1,102 @@
+{
+    "ankle": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 52.022122942902776,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 42.00000000000003,
+            "translateY": 0.0,
+            "translateZ": -5.5067062021407764e-14
+        },
+        "name": "ankle",
+        "parent": "lower",
+        "radius": 1.422540822666062,
+        "type": "joint"
+    },
+    "foot": {
+        "attributes": {
+            "jointOrientX": 179.99999999999974,
+            "jointOrientY": -1.6896786578674055e-14,
+            "jointOrientZ": -3.1805546814635176e-15,
+            "rotateX": 179.9999999997634,
+            "rotateY": 0.0,
+            "rotateZ": -67.73023519727852,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 22.000000000000007,
+            "translateY": -9.423017921506016e-15,
+            "translateZ": -2.6645352591003757e-14
+        },
+        "name": "foot",
+        "parent": "ankle",
+        "radius": 0.9337644710419017,
+        "type": "joint"
+    },
+    "lower": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": -52.16958654499407,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 41.99999999999997,
+            "translateY": -7.105427357601002e-15,
+            "translateZ": -3.552713678800501e-15
+        },
+        "name": "lower",
+        "parent": "upper",
+        "radius": 2.0,
+        "type": "joint"
+    },
+    "toe": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 9.386113106810116,
+            "translateY": -8.43769498715119e-15,
+            "translateZ": 1.7763568394002505e-14
+        },
+        "name": "toe",
+        "parent": "foot",
+        "radius": 0.9337644710419017,
+        "type": "joint"
+    },
+    "upper": {
+        "attributes": {
+            "jointOrientX": 90.00000000000001,
+            "jointOrientY": 89.99999999999997,
+            "jointOrientZ": 0.0,
+            "rotateX": 89.99999999981885,
+            "rotateY": -20.589260160507923,
+            "rotateZ": -89.99999999985602,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": -6.6586548129397585,
+            "translateY": 1.3788356026076733,
+            "translateZ": -9.700703262564764
+        },
+        "name": "upper",
+        "parent": null,
+        "radius": 2.0,
+        "type": "joint"
+    }
+}

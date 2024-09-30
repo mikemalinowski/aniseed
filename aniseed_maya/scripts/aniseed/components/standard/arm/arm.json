@@ -1,0 +1,74 @@
+[
+    {
+        "background": "arm.png",
+        "type": "view"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                93.0,
+                193.0
+            ],
+            [
+                184.0,
+                193.0
+            ]
+        ],
+        "thickness": 10,
+        "type": "line"
+    },
+    {
+        "color": [
+            0,
+            0,
+            0
+        ],
+        "location": [
+            [
+                225.0,
+                164.0
+            ],
+            [
+                179.0,
+                101.0
+            ]
+        ],
+        "thickness": 10,
+        "type": "line"
+    },
+    {
+        "color": [
+            85,
+            255,
+            127
+        ],
+        "location": [
+            54.0,
+            199.0
+        ],
+        "name": "Shoulder",
+        "radius": 45,
+        "type": "circle",
+        "variable_type": "requirement"
+    },
+    {
+        "color": [
+            85,
+            255,
+            127
+        ],
+        "location": [
+            149.0,
+            76.0
+        ],
+        "name": "Hand",
+        "radius": 45,
+        "type": "circle",
+        "variable_type": "requirement"
+    }
+]

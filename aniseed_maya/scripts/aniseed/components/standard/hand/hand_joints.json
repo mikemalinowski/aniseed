@@ -1,0 +1,496 @@
+{
+    "JNT_Hand_01_LF": {
+        "attributes": {
+            "jointOrientX": 1.7694127483975248,
+            "jointOrientY": -0.8564951593618376,
+            "jointOrientZ": 3.847295641055272,
+            "rotateX": 12.127832325737124,
+            "rotateY": 10.35569428703201,
+            "rotateZ": -3.343784831972101,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 23.977872848511545,
+            "translateY": 4.867217739956686e-13,
+            "translateZ": 2.8990143619012088e-12
+        },
+        "name": "JNT_Hand_01_LF",
+        "parent": null,
+        "radius": 1.0
+    },
+    "JNT_IndexFingerBase_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000002,
+            "scaleY": 0.9999999999999997,
+            "scaleZ": 0.9999999999999998,
+            "translateX": 0.9340218901634216,
+            "translateY": -0.49999999999978684,
+            "translateZ": 0.06148637458562689
+        },
+        "name": "JNT_IndexFingerBase_01_LF",
+        "parent": "JNT_Hand_01_LF",
+        "radius": 1.0
+    },
+    "JNT_IndexFinger_01_LF": {
+        "attributes": {
+            "jointOrientX": -14.967298466176196,
+            "jointOrientY": -3.67221121597361,
+            "jointOrientZ": 12.853713737681067,
+            "rotateX": 9.486657009803348,
+            "rotateY": 19.28187730986244,
+            "rotateZ": -17.404518161753426,
+            "scaleX": 1.0,
+            "scaleY": 1.0000000000000004,
+            "scaleZ": 1.0000000000000016,
+            "translateX": 8.368755076279825,
+            "translateY": -1.8382898118332456,
+            "translateZ": 0.07503410083998574
+        },
+        "name": "JNT_IndexFinger_01_LF",
+        "parent": "JNT_IndexFingerBase_01_LF",
+        "radius": 1.0
+    },
+    "JNT_IndexFinger_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 18.204397795390282,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000016,
+            "scaleY": 1.0000000000000004,
+            "scaleZ": 1.0000000000000022,
+            "translateX": 2.9700217247010343,
+            "translateY": -7.105427357601002e-15,
+            "translateZ": -2.2737367544323206e-13
+        },
+        "name": "JNT_IndexFinger_02_LF",
+        "parent": "JNT_IndexFinger_01_LF",
+        "radius": 1.0
+    },
+    "JNT_IndexFinger_03_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.723082825973119,
+            "rotateZ": 0.0,
+            "scaleX": 1.000000000000002,
+            "scaleY": 0.9999999999999997,
+            "scaleZ": 1.000000000000001,
+            "translateX": 2.573226213455215,
+            "translateY": 1.3500311979441904e-13,
+            "translateZ": 6.536993168992922e-13
+        },
+        "name": "JNT_IndexFinger_03_LF",
+        "parent": "JNT_IndexFinger_02_LF",
+        "radius": 1.0
+    },
+    "JNT_IndexFinger_04_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.723082825972797,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000033,
+            "scaleY": 1.0000000000000016,
+            "scaleZ": 1.0000000000000022,
+            "translateX": 2.0703706741328816,
+            "translateY": 1.6697754290362354e-13,
+            "translateZ": 3.126388037344441e-13
+        },
+        "name": "JNT_IndexFinger_04_LF",
+        "parent": "JNT_IndexFinger_03_LF",
+        "radius": 1.0
+    },
+    "JNT_MiddleFingerBase_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000002,
+            "scaleY": 0.9999999999999997,
+            "scaleZ": 0.9999999999999998,
+            "translateX": 0.9340218901642032,
+            "translateY": 2.5224267119483557e-13,
+            "translateZ": 0.061486374586678494
+        },
+        "name": "JNT_MiddleFingerBase_01_LF",
+        "parent": "JNT_Hand_01_LF",
+        "radius": 1.0
+    },
+    "JNT_MiddleFinger_01_LF": {
+        "attributes": {
+            "jointOrientX": -14.967298466176196,
+            "jointOrientY": -3.67221121597361,
+            "jointOrientZ": 12.853713737681067,
+            "rotateX": -2.7731902245628524,
+            "rotateY": 18.776988952023746,
+            "rotateZ": -5.716826724930971,
+            "scaleX": 0.9999999999999996,
+            "scaleY": 1.0000000000000007,
+            "scaleZ": 0.9999999999999996,
+            "translateX": 8.47201349126398,
+            "translateY": -0.09018098839676725,
+            "translateZ": -0.48922016077051467
+        },
+        "name": "JNT_MiddleFinger_01_LF",
+        "parent": "JNT_MiddleFingerBase_01_LF",
+        "radius": 1.0
+    },
+    "JNT_MiddleFinger_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 15.377497261240354,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000004,
+            "scaleY": 0.9999999999999996,
+            "scaleZ": 1.0000000000000016,
+            "translateX": 3.2871615886687238,
+            "translateY": 6.394884621840902e-14,
+            "translateZ": 0.08226303010988545
+        },
+        "name": "JNT_MiddleFinger_02_LF",
+        "parent": "JNT_MiddleFinger_01_LF",
+        "radius": 1.0
+    },
+    "JNT_MiddleFinger_03_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.723082825971884,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000022,
+            "scaleY": 1.0000000000000016,
+            "scaleZ": 1.0000000000000033,
+            "translateX": 2.5000374317166543,
+            "translateY": 9.237055564881302e-14,
+            "translateZ": -5.684341886080801e-13
+        },
+        "name": "JNT_MiddleFinger_03_LF",
+        "parent": "JNT_MiddleFinger_02_LF",
+        "radius": 1.0
+    },
+    "JNT_MiddleFinger_04_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.723082825972536,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000029,
+            "scaleY": 1.0000000000000009,
+            "scaleZ": 1.000000000000002,
+            "translateX": 2.222526788711466,
+            "translateY": 1.0658141036401503e-14,
+            "translateZ": -5.968558980384842e-13
+        },
+        "name": "JNT_MiddleFinger_04_LF",
+        "parent": "JNT_MiddleFinger_03_LF",
+        "radius": 1.0
+    },
+    "JNT_PinkyFingerBase_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000002,
+            "scaleY": 0.9999999999999997,
+            "scaleZ": 0.9999999999999998,
+            "translateX": 0.9340218901638053,
+            "translateY": 1.000000000000231,
+            "translateZ": 0.0614863745861669
+        },
+        "name": "JNT_PinkyFingerBase_01_LF",
+        "parent": "JNT_Hand_01_LF",
+        "radius": 1.0
+    },
+    "JNT_PinkyFinger_01_LF": {
+        "attributes": {
+            "jointOrientX": -14.967298466176196,
+            "jointOrientY": -3.67221121597361,
+            "jointOrientZ": 12.853713737681067,
+            "rotateX": -4.445717156609832,
+            "rotateY": 35.670911740029744,
+            "rotateZ": -1.338831148346433,
+            "scaleX": 1.0000000000000004,
+            "scaleY": 0.9999999999999994,
+            "scaleZ": 1.000000000000001,
+            "translateX": 6.666720806024543,
+            "translateY": 2.5190185725298555,
+            "translateZ": -1.9153786273830065
+        },
+        "name": "JNT_PinkyFinger_01_LF",
+        "parent": "JNT_PinkyFingerBase_01_LF",
+        "radius": 1.0
+    },
+    "JNT_PinkyFinger_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 10.866147380851482,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000013,
+            "scaleY": 0.9999999999999993,
+            "scaleZ": 1.0000000000000016,
+            "translateX": 3.193398475646898,
+            "translateY": -3.552713678800501e-14,
+            "translateZ": 0.0
+        },
+        "name": "JNT_PinkyFinger_02_LF",
+        "parent": "JNT_PinkyFinger_01_LF",
+        "radius": 1.0
+    },
+    "JNT_PinkyFinger_03_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 10.952186872389063,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000007,
+            "scaleY": 0.9999999999999992,
+            "scaleZ": 0.9999999999999999,
+            "translateX": 1.6273167133331086,
+            "translateY": 2.842170943040401e-14,
+            "translateZ": 0.0
+        },
+        "name": "JNT_PinkyFinger_03_LF",
+        "parent": "JNT_PinkyFinger_02_LF",
+        "radius": 1.0
+    },
+    "JNT_PinkyFinger_04_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.72308282597276,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000018,
+            "scaleY": 1.0000000000000013,
+            "scaleZ": 1.0000000000000024,
+            "translateX": 1.677540063858089,
+            "translateY": -2.842170943040401e-14,
+            "translateZ": -1.1368683772161603e-13
+        },
+        "name": "JNT_PinkyFinger_04_LF",
+        "parent": "JNT_PinkyFinger_03_LF",
+        "radius": 1.0
+    },
+    "JNT_RingFingerBase_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000002,
+            "scaleY": 0.9999999999999997,
+            "scaleZ": 0.9999999999999998,
+            "translateX": 0.9340218901636916,
+            "translateY": 0.5000000000001243,
+            "translateZ": 0.06148637458633743
+        },
+        "name": "JNT_RingFingerBase_01_LF",
+        "parent": "JNT_Hand_01_LF",
+        "radius": 1.0
+    },
+    "JNT_RingFinger_01_LF": {
+        "attributes": {
+            "jointOrientX": -14.967298466176196,
+            "jointOrientY": -3.67221121597361,
+            "jointOrientZ": 12.853713737681067,
+            "rotateX": -8.430321462807512,
+            "rotateY": 18.883992449106568,
+            "rotateZ": 0.9157324611090009,
+            "scaleX": 0.9999999999999994,
+            "scaleY": 1.0000000000000016,
+            "scaleZ": 1.0000000000000016,
+            "translateX": 7.64759536634682,
+            "translateY": 1.3378120724386626,
+            "translateZ": -1.2039555115706264
+        },
+        "name": "JNT_RingFinger_01_LF",
+        "parent": "JNT_RingFingerBase_01_LF",
+        "radius": 1.0
+    },
+    "JNT_RingFinger_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 17.205475493264146,
+            "rotateZ": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0000000000000004,
+            "scaleZ": 1.0000000000000013,
+            "translateX": 3.5309011936184476,
+            "translateY": 1.9184653865522705e-13,
+            "translateZ": -5.684341886080801e-13
+        },
+        "name": "JNT_RingFinger_02_LF",
+        "parent": "JNT_RingFinger_01_LF",
+        "radius": 1.0
+    },
+    "JNT_RingFinger_03_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 13.887433911894536,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000002,
+            "scaleY": 0.9999999999999991,
+            "scaleZ": 1.0000000000000013,
+            "translateX": 2.4353592395780987,
+            "translateY": 5.684341886080802e-14,
+            "translateZ": 0.0
+        },
+        "name": "JNT_RingFinger_03_LF",
+        "parent": "JNT_RingFinger_02_LF",
+        "radius": 1.0
+    },
+    "JNT_RingFinger_04_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 9.723082825972986,
+            "rotateZ": 0.0,
+            "scaleX": 1.000000000000002,
+            "scaleY": 1.0000000000000009,
+            "scaleZ": 1.000000000000003,
+            "translateX": 2.392285346984746,
+            "translateY": 1.4921397450962104e-13,
+            "translateZ": 9.947598300641403e-13
+        },
+        "name": "JNT_RingFinger_04_LF",
+        "parent": "JNT_RingFinger_03_LF",
+        "radius": 1.0
+    },
+    "JNT_ThumbFingerBase_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": -55.269905618523005,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 0.9340218901634036,
+            "translateY": -1.0,
+            "translateZ": 0.06148637458681754
+        },
+        "name": "JNT_ThumbFingerBase_01_LF",
+        "parent": "JNT_Hand_01_LF",
+        "radius": 1.0
+    },
+    "JNT_ThumbFinger_01_LF": {
+        "attributes": {
+            "jointOrientX": -14.967298466176018,
+            "jointOrientY": -3.672211215973681,
+            "jointOrientZ": 68.12361935620383,
+            "rotateX": 83.70699057506326,
+            "rotateY": 19.378619733701132,
+            "rotateZ": -57.352409793717655,
+            "scaleX": 1.0000000000000004,
+            "scaleY": 1.0000000000000002,
+            "scaleZ": 1.0000000000000004,
+            "translateX": 1.528844302721101,
+            "translateY": 0.07028778182846906,
+            "translateZ": -0.26880540479436377
+        },
+        "name": "JNT_ThumbFinger_01_LF",
+        "parent": "JNT_ThumbFingerBase_01_LF",
+        "radius": 1.0
+    },
+    "JNT_ThumbFinger_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 16.466490025130394,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000013,
+            "scaleY": 1.0000000000000009,
+            "scaleZ": 1.0000000000000004,
+            "translateX": 3.4909613132479365,
+            "translateY": -2.842170943040401e-14,
+            "translateZ": 0.2865337431432451
+        },
+        "name": "JNT_ThumbFinger_02_LF",
+        "parent": "JNT_ThumbFinger_01_LF",
+        "radius": 1.0
+    },
+    "JNT_ThumbFinger_03_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 17.960163253005568,
+            "rotateZ": 0.0,
+            "scaleX": 0.9999999999999997,
+            "scaleY": 1.0000000000000002,
+            "scaleZ": 1.0000000000000002,
+            "translateX": 2.712374210357609,
+            "translateY": -2.8421709430404007e-13,
+            "translateZ": 2.0605739337042905e-13
+        },
+        "name": "JNT_ThumbFinger_03_LF",
+        "parent": "JNT_ThumbFinger_02_LF",
+        "radius": 1.0
+    },
+    "JNT_ThumbFinger_04_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 15.094209314658501,
+            "rotateZ": 0.0,
+            "scaleX": 1.0000000000000004,
+            "scaleY": 1.0000000000000007,
+            "scaleZ": 1.0000000000000004,
+            "translateX": 2.3456563949581053,
+            "translateY": -3.694822225952521e-13,
+            "translateZ": 1.4210854715202004e-13
+        },
+        "name": "JNT_ThumbFinger_04_LF",
+        "parent": "JNT_ThumbFinger_03_LF",
+        "radius": 1.0
+    }
+}

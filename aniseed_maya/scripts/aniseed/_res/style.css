@@ -1,0 +1,12 @@
+QToolTip {
+    border: 2px solid green;
+    border-radius: 4px;
+    padding: 2px;
+    background-image: url(images/welcome.png);
+}
+
+QMenuBar {
+    min-height: 30px;
+    border: 1px solid black;
+    background-color: rgb(50, 50 ,50);
+}

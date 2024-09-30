@@ -1,0 +1,97 @@
+{
+    "JNT_Foot_01_LF": {
+        "attributes": {
+            "jointOrientX": 3.7172732839604845e-14,
+            "jointOrientY": -2.3854160110976368e-15,
+            "jointOrientZ": 1.590277340731758e-15,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": -55.60257597276141,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 48.19200134277316,
+            "translateY": 1.4832579608992091e-13,
+            "translateZ": -9.592326932761353e-13
+        },
+        "name": "JNT_Foot_01_LF",
+        "parent": "JNT_LowerLeg_01_LF",
+        "radius": 1.0
+    },
+    "JNT_LowerLeg_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 11.302302102565447,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 42.24000167846744,
+            "translateY": 3.552713678800501e-14,
+            "translateZ": -8.757439218243235e-13
+        },
+        "name": "JNT_LowerLeg_01_LF",
+        "parent": "JNT_UpperLeg_01_LF",
+        "radius": 1.0
+    },
+    "JNT_Toe_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": -35.74367662029369,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 8.678757667541518,
+            "translateY": -8.881784197001252e-15,
+            "translateZ": -2.1316282072803006e-14
+        },
+        "name": "JNT_Toe_01_LF",
+        "parent": "JNT_Foot_01_LF",
+        "radius": 1.0
+    },
+    "JNT_Toe_02_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 4.963024616241455,
+            "translateY": 7.993606094938482e-17,
+            "translateZ": -3.2628066999655864e-15
+        },
+        "name": "JNT_Toe_02_LF",
+        "parent": "JNT_Toe_01_LF",
+        "radius": 1.0
+    },
+    "JNT_UpperLeg_01_LF": {
+        "attributes": {
+            "jointOrientX": 2.5444437451708147e-14,
+            "jointOrientY": -2.5444437451708134e-14,
+            "jointOrientZ": -2.5444437451708134e-14,
+            "rotateX": 179.8157887397435,
+            "rotateY": 3.9999999999999907,
+            "rotateZ": -175.96204618074654,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": -6.7796525955200195,
+            "translateY": 0.48594567179680603,
+            "translateZ": -9.71043872833252
+        },
+        "name": "JNT_UpperLeg_01_LF",
+        "parent": null,
+        "radius": 1.0
+    }
+}

@@ -1,0 +1,64 @@
+[
+  {
+    "type": "tool",
+    "name": "Save Shape To File",
+    "icon": "save.png",
+    "python": "import shapeshift;shapeshift.write()",
+    "tooltip": "Saves a shape to a shape file",
+    "children": []
+  },
+  {
+    "type": "tool",
+    "name": "Apply Shape From File",
+    "icon": "open.png",
+    "python": "import shapeshift;shapeshift.ui.user_flow.apply_file()",
+    "tooltip": "Applies a shape from a shape file",
+    "children": []
+  },
+  {
+    "type": "tool",
+    "name": "Apply Shape From Library",
+    "icon": "open.png",
+    "python": "import shapeshift;shapeshift.ui.user_flow.apply_from_library()",
+    "tooltip": "Applies a shape from the library",
+    "children": []
+  },
+  {
+    "type": "separator"
+  },
+  {
+    "type": "tool",
+    "name": "Mirror To Other Side",
+    "icon": "mirror.png",
+    "python": "import shapeshift;shapeshift.ui.user_flow.mirror_shapes_across()",
+    "tooltip": "Mirrors the selected shapes onto the opposing shapes",
+    "children": []
+  },
+  {
+    "type": "separator"
+  },
+  {
+    "type": "tool",
+    "name": "Combine Shapes",
+    "icon": "open.png",
+    "python": "import shapeshift;shapeshift.combine()",
+    "tooltip": "Combines all the shapes from the selected nodes into a new one",
+    "children": []
+  },
+  {
+    "type": "tool",
+    "name": "Rotate Shapes",
+    "icon": "open.png",
+    "python": "import shapeshift;shapeshift.ui.user_flow.rotate()",
+    "tooltip": "Rotates the selected shapes",
+    "children": []
+  },
+  {
+    "type": "tool",
+    "name": "Scale Shapes",
+    "icon": "open.png",
+    "python": "import shapeshift;shapeshift.ui.user_flow.scale()",
+    "tooltip": "Scales the selected shapes",
+    "children": []
+  }
+]

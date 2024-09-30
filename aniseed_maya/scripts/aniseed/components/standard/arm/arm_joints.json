@@ -1,0 +1,78 @@
+{
+    "JNT_Hand_01_LF": {
+        "attributes": {
+            "jointOrientX": 1.7694127483975248,
+            "jointOrientY": -0.8564951593618376,
+            "jointOrientZ": 3.847295641055272,
+            "rotateX": 12.127832325737124,
+            "rotateY": 10.35569428703201,
+            "rotateZ": -3.343784831972101,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 23.977872848511545,
+            "translateY": 4.867217739956686e-13,
+            "translateZ": 2.8990143619012088e-12
+        },
+        "name": "JNT_Hand_01_LF",
+        "parent": "JNT_LowerArm_01_LF",
+        "radius": 1.0
+    },
+    "JNT_LowerArm_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": -20.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 22.68157386779757,
+            "translateY": -2.4868995751603507e-14,
+            "translateZ": -2.9558577807620168e-12
+        },
+        "name": "JNT_LowerArm_01_LF",
+        "parent": "JNT_UpperArm_01_LF",
+        "radius": 1.0
+    },
+    "JNT_Shoulder_01_LF": {
+        "attributes": {
+            "jointOrientX": 90.0,
+            "jointOrientY": -0.0,
+            "jointOrientZ": -2.5444437451708134e-14,
+            "rotateX": -90.0,
+            "rotateY": 0.0,
+            "rotateZ": -89.99999999999999,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 14.923700332641573,
+            "translateY": 2.788517590496622,
+            "translateZ": -4.228313447243187
+        },
+        "name": "JNT_Shoulder_01_LF",
+        "parent": null,
+        "radius": 1.0
+    },
+    "JNT_UpperArm_01_LF": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 7.633916981441842,
+            "rotateY": 51.50000000000002,
+            "rotateZ": -6.386505823065076e-16,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 8.963045120239443,
+            "translateY": 0.7643991112708873,
+            "translateZ": -1.3551493883086891
+        },
+        "name": "JNT_UpperArm_01_LF",
+        "parent": "JNT_Shoulder_01_LF",
+        "radius": 1.0
+    }
+}
