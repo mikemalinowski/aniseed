@@ -22,6 +22,12 @@ This approach makes aniseed incredibly flexible, as a component does not have to
 specifically drive joints, or could simply modify what has been been before it (a great
 example of this is the space switching mechanism).
 
+<span style="color:orangered">
+IMPORTANTE NOTE: Aniseed is currently in OPEN BETA. It is not yet ready for use in a 
+production environment. It is expected to reach Open Release late december 2024.
+</span>
+
+
 # Installing
 
 ### Using the Drag & Drop Installer
