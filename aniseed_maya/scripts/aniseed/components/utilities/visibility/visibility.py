@@ -1,3 +1,4 @@
+import os
 import maya.cmds as mc
 import aniseed
 
@@ -6,6 +7,11 @@ import aniseed
 class VisibilityComponent(aniseed.RigComponent):
 
     identifier = "Utility : Show/Hide"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
@@ -57,6 +63,11 @@ class VisibilityComponent(aniseed.RigComponent):
 class ObjectTypeVisibility(aniseed.RigComponent):
 
     identifier = "Utility : Type Driven Show/Hide"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

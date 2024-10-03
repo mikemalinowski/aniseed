@@ -14,6 +14,11 @@ class ArmComponent(aniseed.RigComponent):
 
     identifier = "Standard : Arm"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(ArmComponent, self).__init__(*args, **kwargs)
@@ -108,6 +113,66 @@ class ArmComponent(aniseed.RigComponent):
 
         self.declare_output("Upvector")
         self.declare_output("Ik Hand")
+
+    # ----------------------------------------------------------------------------------
+    def option_widget(self, option_name: str):
+
+        if option_name == "Location":
+            return aniseed.widgets.everywhere.LocationSelector(self.config)
+
+    # ----------------------------------------------------------------------------------
+    def requirement_widget(self, requirement_name):
+
+        object_list = [
+            "Parent",
+            "Shoulder",
+            "Hand",
+        ]
+
+        if requirement_name in object_list:
+            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+
+        if requirement_name == "Upper Twist Joints":
+            return aniseed.widgets.everywhere.ObjectList()
+
+        if requirement_name == "Lower Twist Joints":
+            return aniseed.widgets.everywhere.ObjectList()
+
+    # ----------------------------------------------------------------------------------
+    def user_functions(self) -> typing.Dict[str, callable]:
+        return {
+            "Create Joints": self.build_skeleton,
+            "Create Guide": self.create_guide,
+            "Remove Guide": self.delete_guide,
+            "Align Ik Orients": self.align_guide_ik,
+        }
+
+    # ----------------------------------------------------------------------------------
+    def is_valid(self):
+
+        if self.get_guide():
+            print("You must remove the guide before building")
+            return False
+
+        arm_joints = bony.hierarchy.get_between(
+            self.requirement("Shoulder").get(),
+            self.requirement("Hand").get(),
+        )[1:]
+
+        facing_direction = bony.direction.get_chain_facing_direction(
+            arm_joints[0],
+            arm_joints[-1],
+        )
+
+        facing = bony.direction.Facing
+
+        if facing_direction != facing.PositiveX and facing_direction != facing.NegativeX:
+            print("Validation Warning : Chain is not failing Up/Down X")
+            print(f"    Tested Chain : {arm_joints}")
+            print(facing_direction)
+            return False
+
+        return True
 
     # ----------------------------------------------------------------------------------
     def run(self):
@@ -564,59 +629,6 @@ class ArmComponent(aniseed.RigComponent):
                 shapeshift.rotate_shape(twist, *shape_y_flip)
 
     # ----------------------------------------------------------------------------------
-    def is_valid(self):
-
-        arm_joints = bony.hierarchy.get_between(
-            self.requirement("Shoulder").get(),
-            self.requirement("Hand").get(),
-        )[1:]
-
-        facing_direction = bony.direction.get_chain_facing_direction(
-            arm_joints[0],
-            arm_joints[-1],
-        )
-
-        facing = bony.direction.Facing
-
-        if facing_direction != facing.PositiveX and facing_direction != facing.NegativeX:
-            print("Validation Warning : Chain is not failing Up/Down X")
-            print(f"    Tested Chain : {arm_joints}")
-            print(facing_direction)
-            return False
-
-        return True
-
-    # ----------------------------------------------------------------------------------
-    def option_widget(self, option_name: str):
-
-        if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
-
-    # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
-
-        object_list = [
-            "Parent",
-            "Shoulder",
-            "Hand",
-        ]
-
-        if requirement_name in object_list:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
-
-        if requirement_name == "Upper Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
-
-        if requirement_name == "Lower Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
-
-    # ----------------------------------------------------------------------------------
-    def user_functions(self) -> typing.Dict[str, callable]:
-        return {
-            "Create Joints": self.build_skeleton,
-        }
-
-    # ----------------------------------------------------------------------------------
     def build_skeleton(self, upper_twist_count=None, lower_twist_count=None):
 
         try:
@@ -635,7 +647,7 @@ class ArmComponent(aniseed.RigComponent):
         if lower_twist_count is None:
             lower_twist_count = qute.utilities.request.text(
                 title="Upper Twist Count",
-                label="How many twist joints do you want on the upper arm?"
+                label="How many twist joints do you want on the lower arm?"
             )
             lower_twist_count = int(lower_twist_count)
 
@@ -643,7 +655,7 @@ class ArmComponent(aniseed.RigComponent):
             root_parent=parent,
             filepath=os.path.join(
                 os.path.dirname(__file__),
-                "arm_joints.json",
+                "arm2.json",
             ),
             apply_names=False,
 
@@ -652,7 +664,7 @@ class ArmComponent(aniseed.RigComponent):
         location = self.option("Location").get()
 
         shoulder = mc.rename(
-            joint_map["JNT_Shoulder_01_LF"],
+            joint_map["shoulder"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="Shoulder",
@@ -662,7 +674,7 @@ class ArmComponent(aniseed.RigComponent):
 
 
         upper_arm = mc.rename(
-            joint_map["JNT_UpperArm_01_LF"],
+            joint_map["upperarm"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="UpperArm",
@@ -672,7 +684,7 @@ class ArmComponent(aniseed.RigComponent):
 
 
         lower_arm = mc.rename(
-            joint_map["JNT_LowerArm_01_LF"],
+            joint_map["lowerarm"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="LowerArm",
@@ -681,7 +693,7 @@ class ArmComponent(aniseed.RigComponent):
         )
 
         hand = mc.rename(
-            joint_map["JNT_Hand_01_LF"],
+            joint_map["hand"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="Hand",
@@ -754,3 +766,158 @@ class ArmComponent(aniseed.RigComponent):
                 transforms=all_joints,
                 across="YZ"
             )
+
+        self.create_guide()
+
+    # ----------------------------------------------------------------------------------
+    def create_guide(self):
+
+
+        shoulder = self.requirement("Shoulder").get()
+        hand = self.requirement("Hand").get()
+
+        guide_org = mc.createNode("transform")
+
+        mc.addAttr(
+            guide_org,
+            shortName="guideRig",
+            at="message",
+        )
+
+        mc.connectAttr(
+            f"{shoulder}.message",
+            f"{guide_org}.guideRig",
+        )
+
+        all_joints = bony.hierarchy.get_between(
+            shoulder,
+            hand,
+        )
+
+        arm_joints = all_joints[1:]
+
+
+        all_controls = list()
+
+        for joint in all_joints:
+            guide_control = aniseed.utils.guide.create(
+                joint,
+                parent=guide_org,
+            )
+
+            all_controls.append(guide_control)
+
+        for idx in range(len(all_joints)):
+
+            # -- Skip the shoulder
+            if not idx:
+                continue
+
+            if idx == len(all_joints) - 1:
+                continue
+
+            joint = all_joints[idx]
+            control = all_controls[idx]
+            next_control = all_controls[idx + 1]
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+
+                if child in all_joints:
+                    continue
+
+                aniseed.utils.guide.tween(
+                    child,
+                    from_this=control,
+                    to_this=next_control,
+                    parent=control,
+                )
+
+    # ----------------------------------------------------------------------------------
+    def get_guide(self):
+
+        connections = mc.listConnections(
+            f"{self.requirement('Shoulder').get()}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        for connection in connections or list():
+            if "guideRig" in connection:
+                return connection.split(".")[0]
+
+    # ----------------------------------------------------------------------------------
+    def delete_guide(self):
+
+        guide_root = self.get_guide()
+
+        if not guide_root:
+            return
+
+        transforms = dict()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Shoulder").get(),
+            self.requirement("Hand").get(),
+        )
+
+        for joint in all_chain:
+            transforms[joint] = mc.xform(
+                joint,
+                query=True,
+                matrix=True,
+            )
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+                transforms[child] = mc.xform(
+                    child,
+                    query=True,
+                    matrix=True,
+                )
+
+        connections = mc.listConnections(
+            f"{all_chain[0]}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        for connection in connections:
+            if "guideRig" in connection:
+                mc.delete(connection.split(".")[0])
+
+        for joint, matrix in transforms.items():
+            mc.xform(
+                joint,
+                matrix=matrix,
+            )
+
+    # ----------------------------------------------------------------------------------
+    def align_guide_ik(self):
+
+        guide_root = self.get_guide()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Shoulder").get(),
+            self.requirement("Hand").get(),
+        )
+
+        if guide_root:
+            self.delete_guide()
+
+            mc.select(
+                [
+                    all_chain[1],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()
+
+            self.create_guide()
+
+        else:
+            mc.select(
+                [
+                    all_chain[1],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()

@@ -6,7 +6,8 @@ from . import math
 from . import orients
 from . import pins
 from . import skin
+from . import transform
 from . import writer
 from . import ui
 
-__version__ = "0.1.3"
+__version__ = "0.1.5"

@@ -43,7 +43,7 @@ def write_joints_to_file(joints=None, filepath=None):
 
 
 # --------------------------------------------------------------------------------------
-def load_joints_from_file(root_parent=None, filepath=None, apply_names=True, invert=False):
+def load_joints_from_file(root_parent=None, filepath=None, apply_names=True, invert=False, localise_root=False):
 
     if not filepath:
         filepath = qute.utilities.request.filepath(
@@ -64,6 +64,7 @@ def load_joints_from_file(root_parent=None, filepath=None, apply_names=True, inv
         dataset=all_joint_data,
         apply_names=apply_names,
         invert=invert,
+        localise_root=localise_root,
     )
 
 
@@ -101,12 +102,14 @@ def create_dataset_from_nodes(nodes):
             name=node,
             parent=parent,
             attributes=dict(),
-            type=mc.nodeType(node)
+            type=mc.nodeType(node),
+            root_transform_data=dict(),
         )
 
         if node_type == "joint":
 
             item_data["radius"] = mc.getAttr(f"{node}.radius")
+            item_data["root_transform_data"] = _get_root_transform_data(node)
 
             for type_ in ["translate", "rotate", "scale", "jointOrient"]:
                 for axis in ["X", "Y", "Z"]:
@@ -115,6 +118,9 @@ def create_dataset_from_nodes(nodes):
                     )
 
         if node_type == "transform":
+
+            item_data["root_transform_data"] = _get_root_transform_data(node)
+
             for type_ in ["translate", "rotate", "scale"]:
                 for axis in ["X", "Y", "Z"]:
                     item_data["attributes"][type_ + axis] = mc.getAttr(
@@ -167,9 +173,75 @@ def create_dataset_from_nodes(nodes):
 
     return all_node_data
 
+# --------------------------------------------------------------------------------------
+def _get_root_transform_data(node):
+
+    try:
+        parent = mc.listRelatives(node, parent=True)[0]
+
+        parent_translation = mc.xform(
+            parent,
+            query=True,
+            translation=True,
+            worldSpace=True,
+        )
+
+    except IndexError:
+        parent_translation = [0, 0, 0]
+
+    node_ws_translation = mc.xform(
+        node,
+            query=True,
+            translation=True,
+            worldSpace=True,
+    )
+
+    relative_translation = [
+        node_ws_translation[0] - parent_translation[0],
+        node_ws_translation[1] - parent_translation[1],
+        node_ws_translation[2] - parent_translation[2],
+    ]
+
+    return dict(
+        relative_translation=relative_translation,
+        ws_orientation=mc.xform(node, query=True, ws=True, rotation=True),
+    )
 
 # --------------------------------------------------------------------------------------
-def create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_names=True, invert=False):
+def _apply_root_transform_data(node, data):
+
+    print("applying root transform data")
+    try:
+        parent = mc.listRelatives(node, parent=True)[0]
+
+        parent_translation = mc.xform(
+            parent,
+            query=True,
+            translation=True,
+            worldSpace=True,
+        )
+
+    except IndexError:
+        parent_translation = [0, 0, 0]
+
+    mc.xform(
+        node,
+        translation=[
+            parent_translation[0] + data["relative_translation"][0],
+            parent_translation[1] + data["relative_translation"][1],
+            parent_translation[2] + data["relative_translation"][2],
+        ],
+        worldSpace=True,
+    )
+
+    mc.xform(
+        node,
+        rotation=data["ws_orientation"],
+        worldSpace=True,
+    )
+
+# --------------------------------------------------------------------------------------
+def create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_names=True, invert=False, localise_root=False):
     """
     Creates a joint hierarchy based on the given data. If the data
     is a dictionary it is parsed as is otherwise it is assumed to be
@@ -216,6 +288,8 @@ def create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_name
         # -- Set the joint attributes
         generated_item_map[item_data["name"]] = created_item
 
+    root_nodes = []
+
     # -- Now set up the parenting
     for identifier, item in generated_item_map.items():
 
@@ -232,10 +306,25 @@ def create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_name
                 item,
                 root_parent,
             )
+            root_nodes.append(identifier)
 
         for name, value in dataset[identifier]["attributes"].items():
             if mc.objExists(item + "." + name):
                 mc.setAttr(item + "." + name, value)
+
+    if not localise_root:
+        print("setting special")
+        for identifier in root_nodes:
+
+            # -- If there is no root transform data, do nothing
+            if "root_transform_data" not in dataset[identifier]:
+                print("no root transform data")
+                continue
+
+            root_data = dataset[identifier]["root_transform_data"]
+            node = generated_item_map[identifier]
+
+            _apply_root_transform_data(node, root_data)
 
     # -- Always do constraints last
     for item_data in dataset.values():

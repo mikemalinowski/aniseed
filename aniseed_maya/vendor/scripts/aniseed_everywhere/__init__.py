@@ -22,4 +22,4 @@ from . import widgets
 from . import app
 from . import resources
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"

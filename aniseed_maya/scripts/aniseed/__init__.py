@@ -45,4 +45,4 @@ from . import environment
 if not environment.initialize_environment():
     print("Failed to initialize environment")
 
-__version__ = "0.1.12"
+__version__ = "0.1.14"

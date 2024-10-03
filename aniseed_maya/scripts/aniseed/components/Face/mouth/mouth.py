@@ -1,3 +1,4 @@
+import os
 import bony
 import typing
 import shapeshift
@@ -10,6 +11,11 @@ import maya.cmds as mc
 class MouthComponent(aniseed.RigComponent):
 
     identifier = "Face : Mouth"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

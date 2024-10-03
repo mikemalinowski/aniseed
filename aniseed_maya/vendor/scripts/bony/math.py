@@ -35,3 +35,26 @@ def distance_between(node_a, node_b):
 
     delta = point_b - point_a
     return delta.length()
+
+
+# --------------------------------------------------------------------------------------
+def get_factor_between(node, from_this, to_this):
+    total_distance = distance_between(
+        from_this,
+        to_this,
+    )
+
+    delta = distance_between(
+        node,
+        to_this,
+    )
+
+    distance_factor = max(
+        0.0,
+        min(
+            1.0,
+            delta / total_distance,
+        ),
+    )
+
+    return distance_factor

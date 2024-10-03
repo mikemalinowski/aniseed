@@ -4,19 +4,31 @@
             "jointOrientX": 0.0,
             "jointOrientY": 0.0,
             "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
+            "rotateX": -2.7876721284253234e-10,
+            "rotateY": 1.9019710817466753e-11,
             "rotateZ": 52.022122942902776,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 42.00000000000003,
-            "translateY": 0.0,
-            "translateZ": -5.5067062021407764e-14
+            "translateX": 42.000000000000014,
+            "translateY": -3.552713678800501e-15,
+            "translateZ": -5.861977570020827e-14
         },
         "name": "ankle",
         "parent": "lower",
         "radius": 1.422540822666062,
+        "root_transform_data": {
+            "relative_translation": [
+                -1.48876466710135e-11,
+                -35.78008579478415,
+                -21.995123562232774
+            ],
+            "ws_orientation": [
+                89.99999999981904,
+                -20.441796558416623,
+                -89.9999999998565
+            ]
+        },
         "type": "joint"
     },
     "foot": {
@@ -24,19 +36,31 @@
             "jointOrientX": 179.99999999999974,
             "jointOrientY": -1.6896786578674055e-14,
             "jointOrientZ": -3.1805546814635176e-15,
-            "rotateX": 179.9999999997634,
-            "rotateY": 0.0,
-            "rotateZ": -67.73023519727852,
+            "rotateX": 179.9999999996646,
+            "rotateY": -1.00972405782303e-10,
+            "rotateZ": -67.73023519727853,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 22.000000000000007,
-            "translateY": -9.423017921506016e-15,
+            "translateX": 22.000000000000004,
+            "translateY": -1.0644263248593688e-14,
             "translateZ": -2.6645352591003757e-14
         },
         "name": "foot",
         "parent": "ankle",
         "radius": 0.9337644710419017,
+        "root_transform_data": {
+            "relative_translation": [
+                5.1663562317116885e-11,
+                -20.61460414538252,
+                7.683625181460774
+            ],
+            "ws_orientation": [
+                89.99999999434097,
+                -88.17203175569516,
+                -89.99999999459882
+            ]
+        },
         "type": "joint"
     },
     "lower": {
@@ -44,19 +68,31 @@
             "jointOrientX": 0.0,
             "jointOrientY": 0.0,
             "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": -52.16958654499407,
+            "rotateX": -3.832518390070452e-11,
+            "rotateY": -1.354717210815069e-10,
+            "rotateZ": -52.169586544994075,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 41.99999999999997,
+            "translateX": 41.999999999999964,
             "translateY": -7.105427357601002e-15,
-            "translateZ": -3.552713678800501e-15
+            "translateZ": -5.329070518200751e-15
         },
         "name": "lower",
         "parent": "upper",
         "radius": 2.0,
+        "root_transform_data": {
+            "relative_translation": [
+                9.883116547371174e-11,
+                -39.31726975885299,
+                14.769979644860086
+            ],
+            "ws_orientation": [
+                89.99999999980093,
+                31.58032638448616,
+                -90.00000000002393
+            ]
+        },
         "type": "joint"
     },
     "toe": {
@@ -64,19 +100,31 @@
             "jointOrientX": 0.0,
             "jointOrientY": 0.0,
             "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": 0.0,
+            "rotateX": -2.6058781466899573e-10,
+            "rotateY": -1.401542138830062e-10,
+            "rotateZ": 1.709548173158517e-14,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 9.386113106810116,
+            "translateX": 9.386113106810118,
             "translateY": -8.43769498715119e-15,
-            "translateZ": 1.7763568394002505e-14
+            "translateZ": 1.5987211554602254e-14
         },
         "name": "toe",
         "parent": "foot",
         "radius": 0.9337644710419017,
+        "root_transform_data": {
+            "relative_translation": [
+                2.8210322966515378e-11,
+                -0.29940435937190113,
+                9.38133659365348
+            ],
+            "ws_orientation": [
+                89.99999999434117,
+                -88.17203175569517,
+                -89.99999999459901
+            ]
+        },
         "type": "joint"
     },
     "upper": {
@@ -84,7 +132,7 @@
             "jointOrientX": 90.00000000000001,
             "jointOrientY": 89.99999999999997,
             "jointOrientZ": 0.0,
-            "rotateX": 89.99999999981885,
+            "rotateX": 89.99999999981887,
             "rotateY": -20.589260160507923,
             "rotateZ": -89.99999999985602,
             "scaleX": 1.0,
@@ -97,6 +145,18 @@
         "name": "upper",
         "parent": null,
         "radius": 2.0,
+        "root_transform_data": {
+            "relative_translation": [
+                9.700703262564764,
+                -6.6586548129397585,
+                -1.3788356026076756
+            ],
+            "ws_orientation": [
+                89.99999999981887,
+                -20.589260160507923,
+                -89.99999999985602
+            ]
+        },
         "type": "joint"
     }
 }

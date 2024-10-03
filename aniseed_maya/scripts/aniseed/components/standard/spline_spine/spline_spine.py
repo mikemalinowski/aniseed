@@ -1,9 +1,7 @@
-import typing
-from doctest import master
-
+import os
 import qute
-
 import bony
+import typing
 import aniseed
 import shapeshift
 
@@ -15,6 +13,11 @@ import maya.api.OpenMaya as om
 class SplineSpine(aniseed.RigComponent):
 
     identifier = "Standard : Spline Spine"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

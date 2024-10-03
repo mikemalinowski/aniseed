@@ -15,6 +15,38 @@ class LegComponent(aniseed.RigComponent):
 
     identifier = "Standard : Leg"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
+    _DEFAULT_GUIDE_MARKER_DATA = {
+        "Marker : Tip Roll": {
+            'node': None,
+             'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.0152, 0.0682, 0.9976, 0, -0.9946, 0.1033, 0.0081, 0, 3.9242, 2.3434, -0.22, 1],
+        },
+        "Marker : Heel Roll": {
+            'node': None,
+            'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.0152, -0.0682, -0.9976, 0, 0.9946, -0.1033, -0.0081, 0, -10.6328, 3.8549, -0.1011, 1],
+        },
+        "Marker : Inner Roll": {
+            'node': None,
+            'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.9946, 0.1033, 0.0081, 0, -0.0152, -0.0682, -0.9976, 0, 0.347, 3.0168, 4.1299, 1],
+        },
+        "Marker : Outer Roll": {
+            'node': None,
+            'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.0152, 0.0682, 0.9976, 0, 0.2093, 2.4004, -4.8938, 1],
+        },
+        "Marker : Ball Roll": {
+            'node': None,
+            'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1],
+        },
+        "Marker : Foot Control": {
+            'node': None,
+            'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1],
+        },
+    }
+    
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(LegComponent, self).__init__(*args, **kwargs)
@@ -33,7 +65,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         self.declare_requirement(
-            name="Toe Tip",
+            name="Toe",
             value="",
             validate=True,
             group="Required Joints",
@@ -53,53 +85,9 @@ class LegComponent(aniseed.RigComponent):
             group="Optional Twist Joints",
         )
 
-        self.declare_requirement(
-            name="Marker : Foot Control",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="Marker : Tip Roll",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="Marker : Heel Roll",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="Marker : Ball Roll",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="Marker : Inner Roll",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="Marker : Outer Roll",
-            value="",
-            validate=False,
-            group="Guide Objects",
-        )
-
-        self.declare_requirement(
-            name="_MarkerCreation",
-            value=None,
-            validate=False,
-            group="Guide Objects",
+        self.declare_option(
+            name="_MarkerData",
+            value=self._DEFAULT_GUIDE_MARKER_DATA.copy(),
         )
 
         self.declare_option(
@@ -144,16 +132,8 @@ class LegComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def requirement_widget(self, requirement_name):
 
-        if requirement_name in ["Parent", "Leg Root", "Toe Tip"]:
+        if requirement_name in ["Parent", "Leg Root", "Toe"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
-
-        if requirement_name == "_MarkerCreation":
-            return aniseed.widgets.everywhere.ButtonWidget(
-                button_name="Create Guide Markers",
-                func=functools.partial(
-                    self._create_markers,
-                )
-            )
 
         if requirement_name == "Upper Twist Joints":
             return aniseed.widgets.everywhere.ObjectList()
@@ -164,20 +144,48 @@ class LegComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name: str):
 
+        if option_name.startswith("_"):
+            return self.IGNORE_OPTION_FOR_UI
+
         if option_name == "Location":
             return aniseed.widgets.everywhere.LocationSelector(self.config)
 
     # ----------------------------------------------------------------------------------
     def user_functions(self):
-        return {
-            "Create Joints": self.build_skeleton,
-        }
+
+        menu = collections.OrderedDict()
+
+        # -- Only show the skeleton creation tools if we dont have a skeleton
+        leg_joint = self.requirement("Leg Root").get()
+
+        # -- If we dont have any joints we dont want to show any tools
+        # -- other than the joint creation tool
+        if not leg_joint or not mc.objExists(leg_joint):
+            menu["Create Joints"] = self.build_skeleton
+            return menu
+
+        # -- Depending on whether we have a guide or not, change what we show
+        # -- in the actions menu
+        if self.get_guide():
+            menu["Remove Guide"] = self.delete_guide
+
+        else:
+            menu["Create Guide"] = self.create_guide
+
+        # -- Providing we have joints or a guide, we show the align ik tool
+        menu["Align IK"] = self.align_guide_ik
+
+        return menu
 
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
 
+        if self.get_guide():
+            print("You must remove the guide before building")
+            return False
+
         leg_root = self.requirement("Leg Root").get()
-        toe_tip = self.requirement("Toe Tip").get()
+        toe_tip = self.requirement("Toe").get()
 
         all_joints = bony.hierarchy.get_between(
             leg_root,
@@ -212,7 +220,7 @@ class LegComponent(aniseed.RigComponent):
     def run(self):
 
         leg_root = self.requirement("Leg Root").get()
-        toe_tip = self.requirement("Toe Tip").get()
+        toe_tip = self.requirement("Toe").get()
         parent = self.requirement("Parent").get()
         directions = bony.direction.Facing
 
@@ -396,10 +404,17 @@ class LegComponent(aniseed.RigComponent):
             parent=parent,
             shape="core_paddle",
             config=self.config,
-            match_to=self.requirement("Marker : Foot Control").get(),
+            #match_to=self.requirement("Marker : Foot Control").get(),
             shape_scale=40.0,
             rotate_shape=[0, 90, 0] if shape_y_flip else [0, -90, 0],
         )
+
+        bony.transform.apply_matrix_relative_to(
+            aniseed.control.get_classification(ik_foot_ctl, "org"),
+            matrix=self.option("_MarkerData").get()["Marker : Foot Control"]["matrix"],
+            relative_to=toe_joint,
+        )
+
         ik_controls.append(ik_foot_ctl)
         self.output("Ik Foot").set(ik_foot_ctl)
 
@@ -418,6 +433,7 @@ class LegComponent(aniseed.RigComponent):
         pivot_tip, pivot_controls = self._ik_pivot(
             foot_control=ik_foot_ctl,
             foot_bone=foot_joint,
+            toe_bone=toe_joint,
         )
         ik_controls.extend(pivot_controls)
 
@@ -693,7 +709,7 @@ class LegComponent(aniseed.RigComponent):
                 shapeshift.rotate_shape(twist, *fk_shape_rotation)
 
     # ----------------------------------------------------------------------------------
-    def _ik_pivot(self, foot_control, foot_bone):
+    def _ik_pivot(self, foot_control, foot_bone, toe_bone):
 
         aniseed.utils.attribute.add_separator_attr(foot_control)
 
@@ -713,7 +729,8 @@ class LegComponent(aniseed.RigComponent):
 
         for pivot_label in pivot_order:
 
-            guide = self.requirement(pivot_label).get()
+            marker_transform = self.option("_MarkerData").get()[pivot_label]["matrix"]
+
             description = pivot_label.split(":")[-1].replace(" ", "")
 
             pivot_control = aniseed.control.create(
@@ -723,7 +740,12 @@ class LegComponent(aniseed.RigComponent):
                 shape="core_sphere",  # "core_symbol_rotator",
                 shape_scale=4,
                 config=self.config,
-                match_to=guide,
+            )
+
+            bony.transform.apply_matrix_relative_to(
+                aniseed.control.get_classification(pivot_control, "org"),
+                matrix=marker_transform,
+                relative_to=toe_bone,
             )
 
             parameter_pivot = mc.createNode("transform")
@@ -744,7 +766,7 @@ class LegComponent(aniseed.RigComponent):
             mc.xform(
                 parameter_pivot,
                 matrix=mc.xform(
-                    guide,
+                    pivot_control,
                     query=True,
                     matrix=True,
                     worldSpace=True,
@@ -784,14 +806,14 @@ class LegComponent(aniseed.RigComponent):
         if upper_twist_count is None:
             upper_twist_count = qute.utilities.request.text(
                 title="Upper Twist Count",
-                label="How many twist joints do you want on the upper arm?"
+                label="How many twist joints do you want on the upper leg?"
             )
             upper_twist_count = int(upper_twist_count)
 
         if lower_twist_count is None:
             lower_twist_count = qute.utilities.request.text(
                 title="Upper Twist Count",
-                label="How many twist joints do you want on the upper arm?"
+                label="How many twist joints do you want on the lower leg?"
             )
             lower_twist_count = int(lower_twist_count)
 
@@ -807,7 +829,7 @@ class LegComponent(aniseed.RigComponent):
         location = self.option("Location").get()
 
         upper_leg = mc.rename(
-            joint_map["JNT_UpperLeg_01_LF"],
+            joint_map["upperleg"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="UpperLeg",
@@ -816,7 +838,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         lower_leg = mc.rename(
-            joint_map["JNT_LowerLeg_01_LF"],
+            joint_map["lowerleg"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="LowerLeg",
@@ -825,7 +847,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         foot = mc.rename(
-            joint_map["JNT_Foot_01_LF"],
+            joint_map["foot"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="Foot",
@@ -834,7 +856,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         toe = mc.rename(
-            joint_map["JNT_Toe_01_LF"],
+            joint_map["toe"],
             self.config.generate_name(
                 classification=self.config.joint,
                 description="Toe",
@@ -842,19 +864,10 @@ class LegComponent(aniseed.RigComponent):
             ),
         )
 
-        toe_tip = mc.rename(
-            joint_map["JNT_Toe_02_LF"],
-            self.config.generate_name(
-                classification=self.config.joint,
-                description="ToeTip",
-                location=location
-            ),
-        )
-
-        all_joints = [upper_leg, lower_leg, foot, toe, toe_tip]
+        all_joints = [upper_leg, lower_leg, foot, toe]
 
         self.requirement("Leg Root").set(upper_leg)
-        self.requirement("Toe Tip").set(toe_tip)
+        self.requirement("Toe").set(toe)
 
         if upper_twist_count:
             parent = upper_leg
@@ -909,18 +922,90 @@ class LegComponent(aniseed.RigComponent):
 
             self.requirement("Lower Twist Joints").set(lower_twist_joints)
 
-        # -- Trigger the markers
-        all_joints.extend(self._create_markers())
-
         if self.option("Location").get() == self.config.right:
             bony.flip.global_mirror(
                 transforms=all_joints,
                 across="YZ"
             )
 
-    # ----------------------------------------------------------------------------------
-    def _create_markers(self):
+        self.create_guide()
 
+
+    # ----------------------------------------------------------------------------------
+    def get_guide(self):
+
+        connections = mc.listConnections(
+            f"{self.requirement('Leg Root').get()}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        for connection in connections or list():
+            if "guideRig" in connection:
+                return connection.split(".")[0]
+
+    # ----------------------------------------------------------------------------------
+    def create_guide(self):
+
+        leg_root = self.requirement("Leg Root").get()
+        toe = self.requirement("Toe").get()
+
+        guide_org = aniseed.control.basic_transform(
+            classification="gde",
+            description=f"LegManipulationGuide",
+            location=self.option("Location").get(),
+            config=self.config,
+        )
+
+        mc.addAttr(
+            guide_org,
+            shortName="guideRig",
+            at="message",
+        )
+
+        mc.connectAttr(
+            f"{leg_root}.message",
+            f"{guide_org}.guideRig",
+        )
+
+        all_joints = bony.hierarchy.get_between(
+            leg_root,
+            toe,
+        )
+
+        all_controls = list()
+
+        for joint in all_joints:
+            guide_control = aniseed.utils.guide.create(
+                joint,
+                parent=guide_org,
+            )
+
+            all_controls.append(guide_control)
+
+        for idx in range(len(all_joints)):
+
+            if idx == len(all_joints) - 1:
+                continue
+
+            joint = all_joints[idx]
+            control = all_controls[idx]
+            next_control = all_controls[idx + 1]
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+
+                if child in all_joints:
+                    continue
+
+                tween_control = aniseed.utils.guide.tween(
+                    child,
+                    from_this=control,
+                    to_this=next_control,
+                    parent=control,
+                )
+                all_controls.append(tween_control)
+
+        # -- Now create the guide markers
         marker_parent = mc.createNode("transform")
         marker_parent = mc.rename(
             marker_parent,
@@ -931,65 +1016,143 @@ class LegComponent(aniseed.RigComponent):
             )
         )
 
+        mc.parent(
+            marker_parent,
+            guide_org,
+        )
+
         mc.pointConstraint(
-            self.requirement("Toe Tip").get(),
+            self.requirement("Toe").get(),
             marker_parent,
             maintainOffset=False,
             skip=["y"],
         )
 
-        markers = {
-            "Marker : Tip Roll": dict(tz=1.5, ry=180, rz=90),
-            "Marker : Heel Roll": dict(tz=-2.5, rz=-90),
-            "Marker : Inner Roll": dict(tx=-1.5, rx=-90, rz=-90),
-            "Marker : Outer Roll": dict(tx=1.5, rx=90, rz=-90),
-            "Marker : Ball Roll": dict(rx=-180, ry=-180),
-            "Marker : Foot Control": dict(),
-        }
+        stored_marker_data = self.option("_MarkerData").get()
+        created_markers = dict()
 
-        created_markers = []
+        for marker_label in stored_marker_data:
 
-        for marker_label, attributes in markers.items():
-
-            marker = mc.createNode("transform")
-
-            marker = mc.rename(
-                marker,
-                self.config.generate_name(
-                    classification="gde",
+            marker = aniseed.control.basic_transform(
+                classification="gde",
                 description=marker_label.split(":")[-1].replace(" ", ""),
-                    location=self.option("Location").get(),
-                )
-            )
-            mc.parent(
-                marker,
-                marker_parent,
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=marker_parent,
             )
 
-            mc.xform(
-                marker,
-                matrix=mc.xform(
-                    marker_parent,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-                worldSpace=True,
-            )
+            all_controls.append(marker)
 
-            for attribute_name, attribute_value in attributes.items():
-                mc.setAttr(
-                    f"{marker}.{attribute_name}",
-                    attribute_value,
-                )
+            bony.transform.apply_matrix_relative_to(
+                marker,
+                matrix=stored_marker_data[marker_label]["matrix"],
+                relative_to=self.requirement("Toe").get(),
+            )
+            stored_marker_data[marker_label]["node"] = marker
 
             shapeshift.apply(
                 node=marker,
                 data="core_symbol_rotator",
             )
 
-            self.requirement(marker_label).set(marker)
+            created_markers[marker_label] = marker
 
-            created_markers.append(marker)
+        self.option("_MarkerData").set(stored_marker_data)
 
-        return created_markers
+    # ----------------------------------------------------------------------------------
+    def delete_guide(self):
+
+        guide_root = self.get_guide()
+
+        if not guide_root:
+            return
+
+        transforms = dict()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Leg Root").get(),
+            self.requirement("Toe").get(),
+        )
+
+        for joint in all_chain:
+
+            transforms[joint] = mc.xform(
+                joint,
+                query=True,
+                matrix=True,
+            )
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+                transforms[child] = mc.xform(
+                    child,
+                    query=True,
+                    matrix=True,
+                )
+
+        connections = mc.listConnections(
+            f"{all_chain[0]}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        # -- Store the marker data before it gets removed
+        marker_data = self.option("_MarkerData").get() or dict()
+        new_data = dict()
+
+        for label in marker_data:
+
+            new_data[label] = dict(
+                node=None,
+                matrix=bony.transform.get_matrix_relative_to(
+                    marker_data[label]["node"],
+                    relative_to=self.requirement("Toe").get()
+                ),
+            )
+
+        self.option("_MarkerData").set(new_data)
+
+        # -- Now we delete the guide rig
+        for connection in connections:
+            if "guideRig" in connection:
+                mc.delete(connection.split(".")[0])
+
+        # -- Ensure all the joints are transformed exactly how
+        # -- we want them
+        for joint, matrix in transforms.items():
+            mc.xform(
+                joint,
+                matrix=matrix,
+            )
+
+
+    # ----------------------------------------------------------------------------------
+    def align_guide_ik(self):
+
+        guide_root = self.get_guide()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Leg Root").get(),
+            self.requirement("Toe").get(),
+        )
+
+        if guide_root:
+            self.delete_guide()
+
+            mc.select(
+                [
+                    all_chain[0],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()
+
+            self.create_guide()
+
+        else:
+            mc.select(
+                [
+                    all_chain[0],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()

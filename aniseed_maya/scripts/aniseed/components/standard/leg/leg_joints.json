@@ -1,87 +1,107 @@
 {
-    "JNT_Foot_01_LF": {
+    "foot": {
         "attributes": {
             "jointOrientX": 3.7172732839604845e-14,
             "jointOrientY": -2.3854160110976368e-15,
             "jointOrientZ": 1.590277340731758e-15,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": -55.60257597276141,
+            "rotateX": 5.780287730320419e-15,
+            "rotateY": -4.1434181738758544e-15,
+            "rotateZ": -55.60257597276142,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 48.19200134277316,
+            "translateX": 48.19200134277317,
             "translateY": 1.4832579608992091e-13,
             "translateZ": -9.592326932761353e-13
         },
-        "name": "JNT_Foot_01_LF",
-        "parent": "JNT_LowerLeg_01_LF",
-        "radius": 1.0
+        "name": "foot",
+        "parent": "lowerleg",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                3.2662175022683346,
+                -47.692457992337914,
+                -6.1016610278521695
+            ],
+            "ws_orientation": [
+                -90.69967449068979,
+                -48.32638647131262,
+                -85.50020853843894
+            ]
+        },
+        "type": "joint"
     },
-    "JNT_LowerLeg_01_LF": {
+    "lowerleg": {
         "attributes": {
             "jointOrientX": 0.0,
             "jointOrientY": 0.0,
             "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": 11.302302102565447,
+            "rotateX": 1.0468032603113425e-14,
+            "rotateY": -2.340845186542292e-14,
+            "rotateZ": 11.302302102565443,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
             "translateX": 42.24000167846744,
-            "translateY": 3.552713678800501e-14,
-            "translateZ": -8.757439218243235e-13
+            "translateY": 3.4638958368304884e-14,
+            "translateZ": -8.775202786637237e-13
         },
-        "name": "JNT_LowerLeg_01_LF",
-        "parent": "JNT_UpperLeg_01_LF",
-        "radius": 1.0
+        "name": "lowerleg",
+        "parent": "upperleg",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                2.94651356803495,
+                -42.032506987580824,
+                2.967179793893233
+            ],
+            "ws_orientation": [
+                -90.46897181489678,
+                7.273826745277242,
+                -86.08221653337517
+            ]
+        },
+        "type": "joint"
     },
-    "JNT_Toe_01_LF": {
+    "toe": {
         "attributes": {
             "jointOrientX": 0.0,
             "jointOrientY": 0.0,
             "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": -35.74367662029369,
+            "rotateX": 1.3834285674541586e-13,
+            "rotateY": -2.1769311820625485e-15,
+            "rotateZ": -35.7436766202937,
             "scaleX": 1.0,
             "scaleY": 1.0,
             "scaleZ": 1.0,
-            "translateX": 8.678757667541518,
-            "translateY": -8.881784197001252e-15,
+            "translateX": 8.67875766754152,
+            "translateY": -9.325873406851315e-15,
             "translateZ": -2.1316282072803006e-14
         },
-        "name": "JNT_Toe_01_LF",
-        "parent": "JNT_Foot_01_LF",
-        "radius": 1.0
-    },
-    "JNT_Toe_02_LF": {
-        "attributes": {
-            "jointOrientX": 0.0,
-            "jointOrientY": 0.0,
-            "jointOrientZ": 0.0,
-            "rotateX": 0.0,
-            "rotateY": 0.0,
-            "rotateZ": 0.0,
-            "scaleX": 1.0,
-            "scaleY": 1.0,
-            "scaleZ": 1.0,
-            "translateX": 4.963024616241455,
-            "translateY": 7.993606094938482e-17,
-            "translateZ": -3.2628066999655864e-15
+        "name": "toe",
+        "parent": "foot",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                0.4527185056075069,
+                -5.7526017058351195,
+                6.482549978258101
+            ],
+            "ws_orientation": [
+                -94.49528951852508,
+                -84.0540241113821,
+                -81.55163475928119
+            ]
         },
-        "name": "JNT_Toe_02_LF",
-        "parent": "JNT_Toe_01_LF",
-        "radius": 1.0
+        "type": "joint"
     },
-    "JNT_UpperLeg_01_LF": {
+    "upperleg": {
         "attributes": {
             "jointOrientX": 2.5444437451708147e-14,
             "jointOrientY": -2.5444437451708134e-14,
             "jointOrientZ": -2.5444437451708134e-14,
-            "rotateX": 179.8157887397435,
-            "rotateY": 3.9999999999999907,
+            "rotateX": -180.18421126025652,
+            "rotateY": 4.0000000000000036,
             "rotateZ": -175.96204618074654,
             "scaleX": 1.0,
             "scaleY": 1.0,
@@ -90,8 +110,21 @@
             "translateY": 0.48594567179680603,
             "translateZ": -9.71043872833252
         },
-        "name": "JNT_UpperLeg_01_LF",
+        "name": "upperleg",
         "parent": null,
-        "radius": 1.0
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                9.71043872833252,
+                -6.7796525955200195,
+                -0.4859456717968082
+            ],
+            "ws_orientation": [
+                -90.46634966704076,
+                -4.028101309100866,
+                -85.99007821588687
+            ]
+        },
+        "type": "joint"
     }
 }

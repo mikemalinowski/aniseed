@@ -38,4 +38,4 @@ from . import resources
 # -- Expose the demo app
 from .demo import launch_demo
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"

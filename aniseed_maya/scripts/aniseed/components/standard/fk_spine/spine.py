@@ -13,6 +13,11 @@ class FKSpineComponent(aniseed.RigComponent):
 
     identifier = "Standard : FK Spine"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(FKSpineComponent, self).__init__(*args, **kwargs)

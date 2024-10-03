@@ -9,6 +9,11 @@ class HeadComponent(aniseed.RigComponent):
 
     identifier = "Standard : Head"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(HeadComponent, self).__init__(*args, **kwargs)

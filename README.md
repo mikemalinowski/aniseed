@@ -469,7 +469,6 @@ pass
 ### Road To Release
 These items are considered "critical to do before general release"
 
-* Simple Ik Component
 * Documentation for each component
 * Updated video guides
 * Rig Example Characters
@@ -489,6 +488,11 @@ These items are considered "critical to do before general release"
 
 
 ### DONE LIST:
+* Done : Manipulation Guide for Tri Leg
+* Done : Manipulation Guide for Leg
+* Done : Manipulation Guide for Arm
+* Done : Bony writer to orient in worldspace
+* Done : Simple Ik Component
 * Done : Allow for components to be locked/clamped at specific versions
 * Done : Expose version info to the ui
 * Done : Eye Component

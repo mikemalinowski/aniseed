@@ -1,5 +1,5 @@
+import os
 import typing
-
 import aniseed
 
 import maya.cmds as mc
@@ -9,6 +9,10 @@ import maya.cmds as mc
 class PosingComponent(aniseed.RigComponent):
 
     identifier = "Utility : Apply Pose"
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

@@ -1,3 +1,4 @@
+import os
 import typing
 import shapeshift
 
@@ -15,6 +16,11 @@ class EyesComponent(aniseed.RigComponent):
     """
 
     identifier = "Face : Eyes"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

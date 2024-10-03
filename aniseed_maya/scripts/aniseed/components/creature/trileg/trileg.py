@@ -17,6 +17,11 @@ class TriLegComponent(aniseed.RigComponent):
 
     identifier = "Creature : Tri Leg"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
     # -- These are indices to get the various joints
     INDEX_UPPER_LEG = 0
     INDEX_LOWER_LEG = 1
@@ -40,7 +45,16 @@ class TriLegComponent(aniseed.RigComponent):
         "Marker : Outer Roll",
         "Marker : Foot Control"
     ]
-
+    
+    _DEFAULT_GUIDE_MARKER_DATA = {
+        "Marker : Tip Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, 0.0175, 0.0006, 0.9999, 0.0, -0.9993, -0.0319, 0.0175, 0.0, 3.9326, -2.6052, -0.22, 1.0]},
+        "Marker : Heel Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, -0.0, 0.0, -1.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, -10.6578, -3.0708, -0.1011, 1.0]},
+        "Marker : Inner Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, -0.9995, -0.0319, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.3375, -2.7199, 4.1299, 1.0]},
+        "Marker : Outer Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, 0.9995, 0.0319, 0.0, 0.0, -0.0, -0.0, 1.0, 0.0, 0.3375, -2.7237, -4.1299, 1.0]},
+        "Marker : Ball Roll": {"node": None, "matrix": [0.0, 0.0, -1.0, 0.0, -0.0319, 0.9995, -0.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, 0.281, -2.7217, -0.1902, 1.0]},
+        "Marker : Foot Control": {"node": None, "matrix": [0.0, 0.0, -1.0, 0.0, -0.0319, 0.9995, -0.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, 0.281, -2.7217, -0.1902, 1.0]},
+    }
+    
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(TriLegComponent, self).__init__(*args, **kwargs)
@@ -52,13 +66,13 @@ class TriLegComponent(aniseed.RigComponent):
         )
 
         self.declare_requirement(
-            name="Start Joint",
+            name="Leg Root",
             value="",
             group="Joint Requirements"
         )
 
         self.declare_requirement(
-            name="End Joint",
+            name="Toe",
             value="",
             group="Joint Requirements"
         )
@@ -70,18 +84,10 @@ class TriLegComponent(aniseed.RigComponent):
             validate=False
         )
 
-        self.declare_requirement(
-            name="_MarkerCreation",
-            value="",
-            validate=False,
+        self.declare_option(
+            name="_MarkerData",
+            value=self._DEFAULT_GUIDE_MARKER_DATA.copy(),
         )
-
-        for pivot_requirement in self.PIVOT_ORDER:
-            self.declare_requirement(
-                name=pivot_requirement,
-                value="",
-                group="Guide Objects",
-            )
 
         self.declare_option(
             name="Descriptive Prefix",
@@ -105,12 +111,6 @@ class TriLegComponent(aniseed.RigComponent):
         self.declare_option(
             name="Upvector Distance Multiplier",
             value=0.5,
-            group="Behaviour",
-        )
-
-        self.declare_option(
-            name="Twist Count",
-            value=3,
             group="Behaviour",
         )
 
@@ -142,16 +142,74 @@ class TriLegComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def user_functions(self) -> typing.Dict[str, callable]:
-        return {
-            "Create Joints": self.create_skeleton,
-        }
+        menu = collections.OrderedDict()
+
+        # -- Only show the skeleton creation tools if we dont have a skeleton
+        leg_joint = self.requirement("Leg Root").get()
+
+        # -- If we dont have any joints we dont want to show any tools
+        # -- other than the joint creation tool
+        if not leg_joint or not mc.objExists(leg_joint):
+            menu["Create Joints"] = self.create_skeleton
+            return menu
+
+        # -- Depending on whether we have a guide or not, change what we show
+        # -- in the actions menu
+        if self.get_guide():
+            menu["Remove Guide"] = self.delete_guide
+
+        else:
+            menu["Create Guide"] = self.create_guide
+
+        # -- Providing we have joints or a guide, we show the align ik tool
+        menu["Align IK"] = self.align_guide_ik
+
+        return menu
+
+    # ----------------------------------------------------------------------------------
+    def is_valid(self) -> bool:
+
+        if self.get_guide():
+            print("You must remove the guide before building")
+            return False
+
+        leg_root = self.requirement("Leg Root").get()
+        toe_tip = self.requirement("Toe").get()
+
+        all_joints = bony.hierarchy.get_between(
+            leg_root,
+            toe_tip,
+        )
+
+        if len(all_joints) < 5:
+            print(
+                (
+                    f"Expected at least 5 joints "
+                    "(upper leg, lower leg, anke, foot, toe). "
+                    f"But got {len(all_joints)} joints"
+                )
+            )
+            return False
+
+        facing_dir = bony.direction.get_chain_facing_direction(
+            leg_root,
+            all_joints[2],
+        )
+
+        directions = bony.direction.Facing
+
+        if facing_dir != directions.NegativeX and facing_dir != directions.PositiveX:
+            print("The leg must be aligned to the X axis")
+            return False
+
+        return True
 
     # ----------------------------------------------------------------------------------
     def run(self):
 
         parent = self.requirement("Parent").get()
-        root_joint = self.requirement("Start Joint").get()
-        tip_joint = self.requirement("End Joint").get()
+        root_joint = self.requirement("Leg Root").get()
+        tip_joint = self.requirement("Toe").get()
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -294,7 +352,13 @@ class TriLegComponent(aniseed.RigComponent):
             shape_scale=reference_scale,
             rotate_shape=[0, 90, 0] if shape_y_flip else [0, -90, 0],
             config=self.config,
-            match_to=self.requirement("Marker : Foot Control").get()
+            # match_to=self.requirement("Marker : Foot Control").get()
+        )
+
+        bony.transform.apply_matrix_relative_to(
+            aniseed.control.get_classification(foot_control, "org"),
+            matrix=self.option("_MarkerData").get()["Marker : Foot Control"]["matrix"],
+            relative_to=tip_joint,
         )
 
         ik_controls.append(foot_control)
@@ -313,6 +377,8 @@ class TriLegComponent(aniseed.RigComponent):
 
         foot_pivot_tip, pivot_controls = self._ik_pivot(
             foot_control=foot_control,
+            foot_bone=joint_chain[-2],
+            toe_bone=joint_chain[-1],
         )
 
         # -- Add the heel control
@@ -735,26 +801,43 @@ class TriLegComponent(aniseed.RigComponent):
 
 
     # ----------------------------------------------------------------------------------
-    def _ik_pivot(self, foot_control):
+    def _ik_pivot(self, foot_control, foot_bone, toe_bone):
 
         aniseed.utils.attribute.add_separator_attr(foot_control)
+
+        # ----------------------------------------------------------------------
+        # -- Now create the start pivot
+        pivot_order = [
+            'Marker : Ball Roll',
+            'Marker : Heel Roll',
+            'Marker : Tip Roll',
+            'Marker : Inner Roll',
+            'Marker : Outer Roll',
+        ]
 
         controls = list()
 
         last_parent = foot_control
 
-        for pivot_label in self.PIVOT_ORDER:
+        for pivot_label in pivot_order:
 
-            guide = self.requirement(pivot_label).get()
+            marker_transform = self.option("_MarkerData").get()[pivot_label]["matrix"]
+
             description = pivot_label.split(":")[-1].replace(" ", "")
 
             pivot_control = aniseed.control.create(
             description=description,
                 location=self.option("Location").get(),
                 parent=last_parent,
-                shape="core_symbol_rotator",
+                shape="core_sphere",  # "core_symbol_rotator",
+                shape_scale=4,
                 config=self.config,
-                match_to=guide,
+            )
+
+            bony.transform.apply_matrix_relative_to(
+                aniseed.control.get_classification(pivot_control, "org"),
+                matrix=marker_transform,
+                relative_to=toe_bone,
             )
 
             parameter_pivot = mc.createNode("transform")
@@ -775,7 +858,7 @@ class TriLegComponent(aniseed.RigComponent):
             mc.xform(
                 parameter_pivot,
                 matrix=mc.xform(
-                    guide,
+                    pivot_control,
                     query=True,
                     matrix=True,
                     worldSpace=True,
@@ -802,6 +885,7 @@ class TriLegComponent(aniseed.RigComponent):
 
         return last_parent, controls
 
+
     # ----------------------------------------------------------------------------------
     def _create_markers(self):
 
@@ -816,7 +900,7 @@ class TriLegComponent(aniseed.RigComponent):
         )
 
         mc.pointConstraint(
-            self.requirement("Start Joint").get(),
+            self.requirement("Leg Root").get(),
             marker_parent,
             maintainOffset=False,
             skip=["y"],
@@ -878,6 +962,70 @@ class TriLegComponent(aniseed.RigComponent):
             created_markers.append(marker)
 
         return created_markers
+
+    # ----------------------------------------------------------------------------------
+    def setup_twists(self, skeletal_chain, nk_chain, root_index, parent, vis_driver=None):
+
+        all_twist_joints = self.requirement("Twist Joints").get()
+
+        twists_joints_for_segment = []
+
+        for child in  mc.listRelatives(skeletal_chain[root_index], children=True, type="joint") or list():
+            if child in all_twist_joints:
+                twists_joints_for_segment.append(child)
+
+        if not twists_joints_for_segment:
+            return
+
+        twist_component = self.rig.component_library.get("Augment : Twister")(
+            "",
+            stack=self.rig,
+        )
+
+        twist_component.requirement("Joints").set(twists_joints_for_segment)
+        twist_component.requirement("Parent").set(parent)
+        twist_component.requirement("Root").set(nk_chain[root_index])
+        twist_component.requirement("Tip").set(nk_chain[root_index+1])
+
+        twist_component.option("Constrain Root").set(False)
+        twist_component.option("Constrain Tip").set(True)
+        twist_component.option("Descriptive Prefix").set(f"{self.LABELS[root_index]}Twist")
+        twist_component.option("Location").set(self.option("Location").get())
+
+        twist_component.run()
+        if vis_driver:
+            for twist in twist_component.builder.all_controls():
+                mc.connectAttr(
+                    vis_driver,
+                    f"{twist}.visibility",
+                )
+
+    # ----------------------------------------------------------------------------------
+    def apply_name_to_mech_nodes(self, nodes, name):
+        renamed_nodes = []
+
+        for node in nodes:
+            renamed_nodes.append(
+                mc.rename(
+                    node,
+                    self.config.generate_name(
+                        classification="mech",
+                        description=name,
+                        location=self.option("Location").get(),
+                    )
+                )
+            )
+
+        return renamed_nodes
+
+    # ----------------------------------------------------------------------------------
+    @classmethod
+    def set_joints_to_invisible(cls, joints):
+        for joint in joints:
+            mc.setAttr(
+                f"{joint}.drawStyle",
+                2,
+            )
 
     # ----------------------------------------------------------------------------------
     def create_skeleton(self, twist_count=None):
@@ -962,10 +1110,10 @@ class TriLegComponent(aniseed.RigComponent):
             ),
         )
 
-        self.requirement("Start Joint").set(joint_map["upper"])
-        self.requirement("End Joint").set(joint_map["toe"])
+        self.requirement("Leg Root").set(joint_map["upper"])
+        self.requirement("Toe").set(joint_map["toe"])
 
-        all_joints = [n for n in joint_map.values()]
+        all_joints = []
 
         twist_labels = [
             "upper",
@@ -974,6 +1122,9 @@ class TriLegComponent(aniseed.RigComponent):
             "foot",
             "toe",
         ]
+
+        for label in twist_labels:
+            all_joints.append(joint_map[label])
 
         if twist_count > 0:
 
@@ -1018,66 +1169,231 @@ class TriLegComponent(aniseed.RigComponent):
                 across="YZ"
             )
 
+        # -- After we have build the joints, immediately create the guide
+        self.create_guide()
+
     # ----------------------------------------------------------------------------------
-    def setup_twists(self, skeletal_chain, nk_chain, root_index, parent, vis_driver=None):
+    def get_guide(self):
 
-        all_twist_joints = self.requirement("Twist Joints").get()
-
-        twists_joints_for_segment = []
-
-        for child in  mc.listRelatives(skeletal_chain[root_index], children=True, type="joint") or list():
-            if child in all_twist_joints:
-                twists_joints_for_segment.append(child)
-
-        if not twists_joints_for_segment:
-            return
-
-        twist_component = self.rig.component_library.get("Augment : Twister")(
-            "",
-            stack=self.rig,
+        connections = mc.listConnections(
+            f"{self.requirement('Leg Root').get()}.message",
+            destination=True,
+            plugs=True,
         )
 
-        twist_component.requirement("Joints").set(twists_joints_for_segment)
-        twist_component.requirement("Parent").set(parent)
-        twist_component.requirement("Root").set(nk_chain[root_index])
-        twist_component.requirement("Tip").set(nk_chain[root_index+1])
-
-        twist_component.option("Constrain Root").set(False)
-        twist_component.option("Constrain Tip").set(True)
-        twist_component.option("Descriptive Prefix").set(f"{self.LABELS[root_index]}Twist")
-        twist_component.option("Location").set(self.option("Location").get())
-
-        twist_component.run()
-        if vis_driver:
-            for twist in twist_component.builder.all_controls():
-                mc.connectAttr(
-                    vis_driver,
-                    f"{twist}.visibility",
-                )
+        for connection in connections or list():
+            if "guideRig" in connection:
+                return connection.split(".")[0]
 
     # ----------------------------------------------------------------------------------
-    def apply_name_to_mech_nodes(self, nodes, name):
-        renamed_nodes = []
+    def create_guide(self):
 
-        for node in nodes:
-            renamed_nodes.append(
-                mc.rename(
-                    node,
-                    self.config.generate_name(
-                        classification="mech",
-                        description=name,
-                        location=self.option("Location").get(),
-                    )
-                )
+        leg_root = self.requirement("Leg Root").get()
+        toe = self.requirement("Toe").get()
+
+        guide_org = aniseed.control.basic_transform(
+            classification="gde",
+            description=f"LegManipulationGuide",
+            location=self.option("Location").get(),
+            config=self.config,
+        )
+
+        mc.addAttr(
+            guide_org,
+            shortName="guideRig",
+            at="message",
+        )
+
+        mc.connectAttr(
+            f"{leg_root}.message",
+            f"{guide_org}.guideRig",
+        )
+
+        all_joints = bony.hierarchy.get_between(
+            leg_root,
+            toe,
+        )
+
+        all_controls = list()
+
+        for joint in all_joints:
+            guide_control = aniseed.utils.guide.create(
+                joint,
+                parent=guide_org,
             )
 
-        return renamed_nodes
+            all_controls.append(guide_control)
+
+        for idx in range(len(all_joints)):
+
+            if idx == len(all_joints) - 1:
+                continue
+
+            joint = all_joints[idx]
+            control = all_controls[idx]
+            next_control = all_controls[idx + 1]
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+
+                if child in all_joints:
+                    continue
+
+                tween_control = aniseed.utils.guide.tween(
+                    child,
+                    from_this=control,
+                    to_this=next_control,
+                    parent=control,
+                )
+                all_controls.append(tween_control)
+
+        # -- Now create the guide markers
+        marker_parent = mc.createNode("transform")
+        marker_parent = mc.rename(
+            marker_parent,
+            self.config.generate_name(
+                classification="gde",
+            description="foot_markers",
+                location=self.option("Location").get(),
+            )
+        )
+
+        mc.parent(
+            marker_parent,
+            guide_org,
+        )
+
+        mc.pointConstraint(
+            self.requirement("Toe").get(),
+            marker_parent,
+            maintainOffset=False,
+            skip=["y"],
+        )
+
+        stored_marker_data = self.option("_MarkerData").get()
+        created_markers = dict()
+
+        for marker_label in stored_marker_data:
+
+            marker = aniseed.control.basic_transform(
+                classification="gde",
+                description=marker_label.split(":")[-1].replace(" ", ""),
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=marker_parent,
+            )
+
+            all_controls.append(marker)
+
+            bony.transform.apply_matrix_relative_to(
+                marker,
+                matrix=stored_marker_data[marker_label]["matrix"],
+                relative_to=self.requirement("Toe").get(),
+            )
+            stored_marker_data[marker_label]["node"] = marker
+
+            shapeshift.apply(
+                node=marker,
+                data="core_symbol_rotator",
+            )
+
+            created_markers[marker_label] = marker
+
+        self.option("_MarkerData").set(stored_marker_data)
 
     # ----------------------------------------------------------------------------------
-    @classmethod
-    def set_joints_to_invisible(cls, joints):
-        for joint in joints:
-            mc.setAttr(
-                f"{joint}.drawStyle",
-                2,
+    def delete_guide(self):
+
+        guide_root = self.get_guide()
+
+        if not guide_root:
+            return
+
+        transforms = dict()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Leg Root").get(),
+            self.requirement("Toe").get(),
+        )
+
+        for joint in all_chain:
+
+            transforms[joint] = mc.xform(
+                joint,
+                query=True,
+                matrix=True,
             )
+
+            for child in mc.listRelatives(joint, children=True, type="joint") or list():
+                transforms[child] = mc.xform(
+                    child,
+                    query=True,
+                    matrix=True,
+                )
+
+        connections = mc.listConnections(
+            f"{all_chain[0]}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        # -- Store the marker data before it gets removed
+        marker_data = self.option("_MarkerData").get() or dict()
+        new_data = dict()
+
+        for label in marker_data:
+
+            new_data[label] = dict(
+                node=None,
+                matrix=bony.transform.get_matrix_relative_to(
+                    marker_data[label]["node"],
+                    relative_to=self.requirement("Toe").get()
+                ),
+            )
+
+        self.option("_MarkerData").set(new_data)
+
+        # -- Now we delete the guide rig
+        for connection in connections:
+            if "guideRig" in connection:
+                mc.delete(connection.split(".")[0])
+
+        # -- Ensure all the joints are transformed exactly how
+        # -- we want them
+        for joint, matrix in transforms.items():
+            mc.xform(
+                joint,
+                matrix=matrix,
+            )
+
+
+    # ----------------------------------------------------------------------------------
+    def align_guide_ik(self):
+
+        guide_root = self.get_guide()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Leg Root").get(),
+            self.requirement("Toe").get(),
+        )
+
+        if guide_root:
+            self.delete_guide()
+
+            mc.select(
+                [
+                    all_chain[0],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()
+
+            self.create_guide()
+
+        else:
+            mc.select(
+                [
+                    all_chain[0],
+                    all_chain[-1],
+                ]
+            )
+            bony.ik.clean_ik_plane_with_ui()

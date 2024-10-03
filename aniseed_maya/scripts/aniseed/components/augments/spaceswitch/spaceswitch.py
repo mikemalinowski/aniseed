@@ -1,3 +1,4 @@
+import os
 import uuid
 import qute
 import collections
@@ -10,6 +11,11 @@ import maya.cmds as mc
 class SpaceSwitchComponent(aniseed.RigComponent):
 
     identifier = "Augment : Space Switch"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):

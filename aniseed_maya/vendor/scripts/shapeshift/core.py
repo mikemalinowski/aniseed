@@ -7,7 +7,7 @@ import maya.api.OpenMaya as om
 
 from . import library
 from . import mutils
-
+from . import colors
 
 
 # --------------------------------------------------------------------------------------
@@ -141,7 +141,7 @@ def offset(node: str, offset_by: float, x=1, y=1, z=1):
 
 # --------------------------------------------------------------------------------------
 # noinspection PyTypeChecker,PyUnresolvedReferences
-def apply(node: str, data: typing.Dict or str, clear: bool = True) -> typing.List[str]:
+def apply(node: str, data: typing.Dict or str, clear: bool = True, color=None, scale_by=1) -> typing.List[str]:
     """
     Applies the given shape data to the given node.
 
@@ -191,6 +191,17 @@ def apply(node: str, data: typing.Dict or str, clear: bool = True) -> typing.Lis
         mc.delete(transform)
 
         shape_list.append(curve)
+
+    scale(
+        node,
+        scale_by,
+    )
+
+    if color:
+        colors.apply(
+            node,
+            *color
+        )
 
     mc.select(node)
 

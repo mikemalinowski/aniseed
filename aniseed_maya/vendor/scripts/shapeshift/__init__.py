@@ -15,4 +15,4 @@ from . import ui
 from . import constants
 from . import mirror
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"

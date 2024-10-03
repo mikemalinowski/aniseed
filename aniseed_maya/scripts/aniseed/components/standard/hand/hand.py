@@ -10,6 +10,11 @@ class HandComponent(aniseed.RigComponent):
 
     identifier = "Standard : Hand"
 
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(HandComponent, self).__init__(*args, **kwargs)

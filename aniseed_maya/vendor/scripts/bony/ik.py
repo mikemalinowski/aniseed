@@ -4,10 +4,12 @@ import maya.cmds as mc
 from . import pins
 from . import orients
 from . import hierarchy
-
+from . import math
+from . import transform
 from . import constants as c
 
 
+# --------------------------------------------------------------------------------------
 def clean_ik_plane_with_ui():
 
     pre_selection = mc.ls(sl=True)
@@ -97,7 +99,13 @@ def get_inverted_aim_dir(aim_label):
 
 
 # --------------------------------------------------------------------------------------
-def align_bones_for_ik(root, tip, primary_axis, polevector_axis, retain_child_transforms=True):
+def align_bones_for_ik(
+        root,
+        tip,
+        primary_axis,
+        polevector_axis,
+        retain_child_transforms=True,
+):
     try:
         joint_parent = mc.listRelatives(root, parent=True)[0]
     except (TypeError, IndexError):
@@ -112,8 +120,9 @@ def align_bones_for_ik(root, tip, primary_axis, polevector_axis, retain_child_tr
 
     # -- Store any child transforms
     child_transforms = dict()
+    twist_factors = dict()
 
-    for joint in actual_chain:
+    for idx, joint in enumerate(actual_chain):
         for child in mc.listRelatives(joint, children=True) or list():
             if child in actual_chain:
                 continue
@@ -124,6 +133,13 @@ def align_bones_for_ik(root, tip, primary_axis, polevector_axis, retain_child_tr
                 matrix=True,
                 worldSpace=True,
             )
+
+            if "Twist" in child and idx < len(actual_chain):
+                twist_factors[child] = math.get_factor_between(
+                    child,
+                    joint,
+                    actual_chain[idx + 1],
+                )
 
     replicated_joints = hierarchy.replicate_chain(root, tip, parent=None)
     orients.move_joint_orients_to_rotations(replicated_joints)
@@ -193,27 +209,43 @@ def align_bones_for_ik(root, tip, primary_axis, polevector_axis, retain_child_tr
             to_this=actual_chain[idx],
         )
 
-    for joint, matrix in child_transforms.items():
-
-        if "Twist" in joint:
-
-
-            for axis in c.AXIS:
-
-                mc.setAttr(f"{joint}.r{axis.lower()}", 0)
-                mc.setAttr(f"{joint}.jointOrient{axis.upper()}", 0)
-                if axis.lower() == primary_axis[-1].lower():
-                    print(f"skipping translate {axis}")
-                    continue
-
-                mc.setAttr(f"{joint}.t{axis.lower()}", 0)
-
-
-        elif retain_child_transforms:
+    if retain_child_transforms:
+        for child, matrix in child_transforms.items():
             mc.xform(
-                joint,
-                matrix=matrix,
+                child,
+                matrix=child_transforms[child],
                 worldSpace=True,
             )
 
+    # -- Deal with twist joints
+    for idx, joint in enumerate(actual_chain):
+
+        for child in mc.listRelatives(joint, children=True) or list():
+
+            if child in actual_chain:
+                continue
+
+            # -- Skip anything that is not a twist
+            if "twist" not in child.lower():
+                continue
+
+            # -- If we dont have an additional joint to aim down, skip it
+            if idx >= len(actual_chain):
+                print("skipping")
+                continue
+
+            # -- Position the node
+            transform.position_between(
+                child,
+                actual_chain[idx],
+                actual_chain[idx + 1],
+                twist_factors[child],
+            )
+
+            for axis in c.AXIS:
+                mc.setAttr(f"{child}.r{axis.lower()}", 0)
+                mc.setAttr(f"{child}.jointOrient{axis.upper()}", 0)
+
+
     mc.delete(replicated_joints)
+
