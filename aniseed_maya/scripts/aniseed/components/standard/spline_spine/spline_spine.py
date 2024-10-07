@@ -686,7 +686,7 @@ class SplineSpine(aniseed.RigComponent):
             for b in replicated_chain
         ]
 
-        if self.option("Lock End Orientations To Controls").get():
+        if self.option("Lock End Orientations To Controls").get() and not guide_mode:
             drivers[0] = root_control
             drivers[-1] = tip_control
 
