@@ -1,5 +1,3 @@
-from PySide6.QtWidgets import QTextEdit
-
 import qute
 import aniseed
 

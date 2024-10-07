@@ -59,6 +59,7 @@ class StoreControlShapes(aniseed.RigComponent):
         )
 
         shape_data = list()
+        read = list()
 
         for node in nodes:
 
@@ -73,6 +74,11 @@ class StoreControlShapes(aniseed.RigComponent):
                 continue
 
             shape_data.append(shapeshift.read(node))
+            read.append(node)
+
+        for existing_data in self.option("Shape Data").get() or list():
+            if existing_data["node"] not in read:
+                shape_data.append(existing_data)
 
         self.option("Shape Data").set(
             shape_data,

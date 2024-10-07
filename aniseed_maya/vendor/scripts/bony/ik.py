@@ -145,10 +145,15 @@ def align_bones_for_ik(
     orients.move_joint_orients_to_rotations(replicated_joints)
 
     for idx, joint in enumerate(replicated_joints):
-        mc.parent(
-            joint,
-            world=True,
-        )
+        try:
+            mc.parent(
+                joint,
+                world=True,
+            )
+
+        except RuntimeError:
+            pass
+
         orients.move_joint_orients_to_rotations([joint])
 
     for idx, joint in enumerate(replicated_joints[:-1]):

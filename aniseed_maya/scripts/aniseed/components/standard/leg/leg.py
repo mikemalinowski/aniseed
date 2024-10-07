@@ -562,7 +562,7 @@ class LegComponent(aniseed.RigComponent):
 
         fk_parent = self.requirement("Parent").get()
 
-        for joint in all_joints[:-1]:
+        for joint in all_joints:
 
             fk_control = aniseed.control.create(
             description=f"{prefix}{self.config.extract_description(joint)}FK",
@@ -608,7 +608,7 @@ class LegComponent(aniseed.RigComponent):
             )
 
         # -- We need to constrain our nk between the ik and the fk
-        for ik_node, fk_node, nk_node, skl_node in zip(ik_bindings, fk_controls, nk_joints, all_joints[:-1]):
+        for ik_node, fk_node, nk_node, skl_node in zip(ik_bindings, fk_controls, nk_joints, all_joints):
 
             # -- Create the constraint between the nk and the ik
             mc.parentConstraint(

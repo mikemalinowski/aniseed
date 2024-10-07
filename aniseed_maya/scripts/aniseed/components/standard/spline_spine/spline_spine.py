@@ -215,7 +215,7 @@ class SplineSpine(aniseed.RigComponent):
             )
 
             mc.xform(
-                control,
+                org,
                 rotation=[0, 0, 0],
                 worldSpace=True,
             )
@@ -260,7 +260,7 @@ class SplineSpine(aniseed.RigComponent):
                 degree=degree,
                 knot=guide_data["knots"],
             )
-
+            print("building from daaaaaaaaaaaaaaaaaaaaata")
         else:
             degree = 1
 
@@ -293,6 +293,7 @@ class SplineSpine(aniseed.RigComponent):
             )
 
             if parent:
+                print("paaaaaaaaaaaaaaaaaaarenting")
                 mc.parent(
                     quad_curve,
                     parent,
@@ -375,16 +376,22 @@ class SplineSpine(aniseed.RigComponent):
             joints_to_drive,
             parent=parent
         )
+        try:
+            mc.parent(
+                curve,
+                parent,
+            )
 
-        mc.parent(
-            curve,
-            parent,
-        )
+        except RuntimeError:
+            pass
+
+        xfo = mc.xform(curve, q=True, matrix=True, worldSpace=True)
 
         mc.setAttr(
             f"{curve}.inheritsTransform",
             False,
         )
+        mc.xform(curve, matrix=xfo, worldSpace=True)
 
         chain_length = bony.hierarchy.chain_length(
             root_joint,
@@ -440,6 +447,12 @@ class SplineSpine(aniseed.RigComponent):
         )
         self.run_optional_control_orient(secondary_root_control, guide_mode)
 
+        self.add_secondary_vis_controls(
+            root_control,
+            secondary_root_control,
+            guide_mode,
+        )
+
         mc.xform(
             aniseed.control.get_classification(secondary_root_control, "org"),
             translation=mc.xform(
@@ -481,6 +494,12 @@ class SplineSpine(aniseed.RigComponent):
             classification_override="gde" if guide_mode else None,
         )
         self.run_optional_control_orient(secondary_tip_control, guide_mode)
+
+        self.add_secondary_vis_controls(
+            tip_control,
+            secondary_tip_control,
+            guide_mode,
+        )
 
         mc.xform(
             aniseed.control.get_classification(secondary_tip_control, "org"),
@@ -570,6 +589,8 @@ class SplineSpine(aniseed.RigComponent):
             parentCurve=False,
             priority=1,
         )
+        print(f"ikh : {ikh}")
+        print(f"Parent : {parent}")
 
         mc.parent(
             ikh,
@@ -730,6 +751,32 @@ class SplineSpine(aniseed.RigComponent):
             self.output("Tip Control").set(
                 tip_control,
             )
+
+    # ----------------------------------------------------------------------------------
+    def add_secondary_vis_controls(self, primary, secondary, guide_mode):
+
+        if guide_mode:
+            return
+
+        aniseed.utils.attribute.add_separator_attr(primary)
+
+        mc.addAttr(
+            primary,
+            shortName="SecondaryControlVisibility",
+            at="bool",
+            dv=False,
+            k=True,
+        )
+
+        org = aniseed.control.get_classification(
+            secondary,
+            "org",
+        )
+
+        mc.connectAttr(
+            f"{primary}.SecondaryControlVisibility",
+            f"{org}.visibility",
+        )
 
     # ----------------------------------------------------------------------------------
     def create_guide(self):

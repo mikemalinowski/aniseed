@@ -124,6 +124,21 @@
   },
   {
     "type": "menu",
+    "name": "Transforms",
+    "icon": "transforms.png",
+    "children": [
+      {
+        "type": "tool",
+        "name": "Create Locator At Selected",
+        "icon": "skinning.png",
+        "python": "import bony;bony.transform.locator_at_center()",
+        "tooltip": "Creates a locator at the bounding center of the selected",
+        "children": []
+      }
+    ]
+  },
+  {
+    "type": "menu",
     "name": "Skinning",
     "icon": "skinning.png",
     "children": [

@@ -27,7 +27,7 @@ def create(root, target, second_joint, third_joint, host=None):
         second_joint,
         third_joint,
     )
-
+    print("Facing Direction: ", facing_direction)
     if not host:
         host = mc.createNode("network")
 
@@ -237,12 +237,12 @@ def create(root, target, second_joint, third_joint, host=None):
     if facing_direction == bony.direction.Facing.NegativeX:
         upper_attr = multiply(
             upper_attr,
-            -1,
+            1, #-1,
         )
 
         lower_attr = multiply(
             lower_attr,
-            -1,
+            1, #-1,
         )
 
     mc.connectAttr(

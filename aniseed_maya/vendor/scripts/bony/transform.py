@@ -127,3 +127,24 @@ def apply_matrix_relative_to(node, matrix, relative_to):
     )
 
     mc.delete(parent_buffer)
+
+
+# --------------------------------------------------------------------------------------
+def locator_at_center():
+
+    # -- If nothing selected, do nothing
+    if not mc.ls(sl=True):
+        return
+
+    # -- Create a temporary cluster, snap position, remove temporary cluster/constraint
+    temp_cluster = mc.cluster()
+    locator = mc.spaceLocator()
+    temp_constraint = mc.pointConstraint(
+        temp_cluster[1],
+        locator,
+        mo=False
+    )
+    mc.delete(temp_cluster, temp_constraint)
+
+
+

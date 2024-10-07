@@ -127,6 +127,8 @@ class StickyPatchComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
+        self.output("Pin").set(control)
+
     # ----------------------------------------------------------------------------------
     def requirement_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:

@@ -59,6 +59,12 @@ class SimpleFkComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
+        self.declare_option(
+            name="Flat Hierarchy",
+            value=False,
+            group="Behaviour",
+        )
+
         self.declare_output("Root Control")
         self.declare_output("Tip Control")
 
@@ -157,6 +163,7 @@ class SimpleFkComponent(aniseed.RigComponent):
                 maintainOffset=False,
             )
 
-            parent = control
+            if not self.option("Flat Hierarchy").get():
+                parent = control
 
         return True
