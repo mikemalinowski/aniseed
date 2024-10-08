@@ -41,6 +41,12 @@ class HandComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name='Descriptive Prefix',
+            value="Base",
+            group="Naming",
+        )
+
+        self.declare_option(
             name="Location",
             value="lf",
             group="Naming",
@@ -152,7 +158,7 @@ class HandComponent(aniseed.RigComponent):
                 hand_shape_rotation = [0, 90, 0]
 
             hand = aniseed.control.create(
-            description=f"{self.option('Descriptive Prefix')}Hand",
+            description=f"{self.option('Descriptive Prefix').get()}Hand",
                 location=location,
                 parent=self.requirement("Parent").get(),
                 shape="core_arrow_handle",
@@ -255,17 +261,16 @@ class HandComponent(aniseed.RigComponent):
                     rotate_shape=shape_rotation,
                 )
 
-                # -- Connect the finger visibility
-                for shape in mc.listRelatives(finger_control, shapes=True) or list():
-                    mc.connectAttr(
-                        finger_visibility_attr,
-                        f"{shape}.visibility",
-                        force=True
-                    )
-
                 finger_offset = aniseed.control.get_classification(
                     finger_control,
                     "off",
+                )
+
+                # -- Connect the finger visibility
+                mc.connectAttr(
+                    finger_visibility_attr,
+                    f"{finger_offset}.visibility",
+                    force=True
                 )
 
                 mc.parentConstraint(

@@ -37,7 +37,7 @@ class LegComponent(aniseed.RigComponent):
             'node': None,
             'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.0152, 0.0682, 0.9976, 0, 0.2093, 2.4004, -4.8938, 1],
         },
-        "Marker : Ball Roll": {
+        "Marker : Ball Twist": {
             'node': None,
             'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1],
         },
@@ -716,7 +716,7 @@ class LegComponent(aniseed.RigComponent):
         # ----------------------------------------------------------------------
         # -- Now create the start pivot
         pivot_order = [
-            'Marker : Ball Roll',
+            'Marker : Ball Twist',
             'Marker : Heel Roll',
             'Marker : Tip Roll',
             'Marker : Inner Roll',

@@ -38,7 +38,7 @@ class TriLegComponent(aniseed.RigComponent):
     ]
 
     PIVOT_ORDER = [
-        "Marker : Ball Roll",
+        "Marker : Ball Twist",
         "Marker : Heel Roll",
         "Marker : Tip Roll",
         "Marker : Inner Roll",
@@ -51,7 +51,7 @@ class TriLegComponent(aniseed.RigComponent):
         "Marker : Heel Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, -0.0, 0.0, -1.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, -10.6578, -3.0708, -0.1011, 1.0]},
         "Marker : Inner Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, -0.9995, -0.0319, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.3375, -2.7199, 4.1299, 1.0]},
         "Marker : Outer Roll": {"node": None, "matrix": [0.0319, -0.9995, 0.0, 0.0, 0.9995, 0.0319, 0.0, 0.0, -0.0, -0.0, 1.0, 0.0, 0.3375, -2.7237, -4.1299, 1.0]},
-        "Marker : Ball Roll": {"node": None, "matrix": [0.0, 0.0, -1.0, 0.0, -0.0319, 0.9995, -0.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, 0.281, -2.7217, -0.1902, 1.0]},
+        "Marker : Ball Twist": {"node": None, "matrix": [0.0, 0.0, -1.0, 0.0, -0.0319, 0.9995, -0.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, 0.281, -2.7217, -0.1902, 1.0]},
         "Marker : Foot Control": {"node": None, "matrix": [0.0, 0.0, -1.0, 0.0, -0.0319, 0.9995, -0.0, 0.0, 0.9995, 0.0319, -0.0, 0.0, 0.281, -2.7217, -0.1902, 1.0]},
     }
     
@@ -808,7 +808,7 @@ class TriLegComponent(aniseed.RigComponent):
         # ----------------------------------------------------------------------
         # -- Now create the start pivot
         pivot_order = [
-            'Marker : Ball Roll',
+            'Marker : Ball Twist',
             'Marker : Heel Roll',
             'Marker : Tip Roll',
             'Marker : Inner Roll',
@@ -911,7 +911,7 @@ class TriLegComponent(aniseed.RigComponent):
             "Marker : Heel Roll": dict(tz=-2.5, rz=-90),
             "Marker : Inner Roll": dict(tx=-1.5, rx=-90, rz=-90),
             "Marker : Outer Roll": dict(tx=1.5, rx=90, rz=-90),
-            "Marker : Ball Roll": dict(rx=-180, ry=-180),
+            "Marker : Ball Twist": dict(rx=-180, ry=-180),
             "Marker : Foot Control": dict(),
         }
 
