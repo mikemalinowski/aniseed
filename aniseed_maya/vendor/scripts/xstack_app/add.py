@@ -85,7 +85,7 @@ class AddComponentWidget(qute.QDialog):
         self.setWindowModality(qute.Qt.WindowModal)
 
         # -- Set our window branding
-        self.setWindowTitle("Add Component")
+        self.setWindowTitle(f"Add {self.app_config.component_label}")
 
         self.setWindowIcon(
             qute.QIcon(
@@ -189,18 +189,20 @@ class AddComponentWidget(qute.QDialog):
 
         # -- If that is not valid, do nothing
         if not component_type:
+            print("no component type found")
             return
 
         # -- Ask the user to provide a label for the component
         label = qute.utilities.request.text(
-            title="Add Component",
-            label="Please give a label for your component",
+            title=f"Add {self.app_config.component_label}",
+            label=f"Please give a label for your {self.app_config.component_label}",
             text=self.active_component.suggested_label(),
             parent=self,
         )
 
         # -- If the user cancelled, do nothing more
         if not label:
+            print("no label provided")
             return
 
         # -- We need to extract any option and requirement data that the user
@@ -226,6 +228,8 @@ class AddComponentWidget(qute.QDialog):
             options=user_set_options,
             requirements=user_set_requirements,
         )
+        print(f"added component to {self.stack}")
+        self.component_added.emit()
 
         # -- Close this window as the process is complete
         self.window().close()
