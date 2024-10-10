@@ -48,6 +48,9 @@ class ComponentEditor(qute.QWidget):
             "Outputs"
         )
 
+        for i in range(3):
+            self.tab_widget.setTabVisible(i, False)
+
     # ----------------------------------------------------------------------------------
     def set_component(self, component: xstack.Component):
         """
