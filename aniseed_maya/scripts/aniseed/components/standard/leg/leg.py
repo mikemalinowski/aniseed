@@ -596,15 +596,27 @@ class LegComponent(aniseed.RigComponent):
             )
 
         for ik_control in ik_controls:
+
+            ik_off = aniseed.control.get_classification(
+                ik_control,
+                "off",
+            )
+
             mc.connectAttr(
                 f"{config_control}.show_ik",
-                f"{ik_control}.visibility",
+                f"{ik_off}.visibility",
             )
 
         for fk_control in fk_controls:
+
+            fk_off = aniseed.control.get_classification(
+                fk_control,
+                "off",
+            )
+
             mc.connectAttr(
                 f"{config_control}.show_fk",
-                f"{fk_control}.visibility",
+                f"{fk_off}.visibility",
             )
 
         # -- We need to constrain our nk between the ik and the fk

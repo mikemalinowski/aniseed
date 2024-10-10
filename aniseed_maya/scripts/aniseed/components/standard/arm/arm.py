@@ -514,12 +514,12 @@ class ArmComponent(aniseed.RigComponent):
         # -- Hook up the vis options for the ik controls
         mc.connectAttr(
             f"{config_control}.{proxies['show_ik']}",
-            f"{ik_hand}.visibility",
+            f"{aniseed.control.get_classification(ik_hand, 'off')}.visibility",
         )
 
         mc.connectAttr(
             f"{config_control}.{proxies['show_ik']}",
-            f"{upvector}.visibility",
+            f"{aniseed.control.get_classification(upvector, 'off')}.visibility",
         )
 
         # -- We need to constrain our nk between the ik and the fk
@@ -565,9 +565,14 @@ class ArmComponent(aniseed.RigComponent):
                 f"{cns}.{fk_driven}",
             )
 
+            fk_offset = aniseed.control.get_classification(
+                fk_node,
+                "off",
+            )
+
             mc.connectAttr(
                 f"{config_control}.{proxies['show_fk']}",
-                f"{fk_node}.visibility",
+                f"{fk_offset}.visibility",
             )
 
             mc.parentConstraint(

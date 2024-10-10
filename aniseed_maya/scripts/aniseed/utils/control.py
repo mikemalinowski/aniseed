@@ -77,6 +77,12 @@ def create(
 
         next_parent = mutils.get_name(nodes[classification])
 
+    mc.setAttr(
+        f"{mutils.get_name(nodes[config.control])}.visibility",
+        lock=True,
+        k=False,
+    )
+    
     # -- Apply the shape to the control
     shapeshift.apply(
         mutils.get_name(nodes[config.control]),
