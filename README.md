@@ -1,4 +1,11 @@
-# Aniseed
+# Aniseed (BETA RELEASE)
+
+<span style="color:orangered">
+IMPORTANTE NOTE: Aniseed is currently in OPEN BETA. It is not yet ready for use in a 
+production environment. It is expected to reach Open Release late december 2024.
+</span>
+
+
 Aniseed is an application embedded (Maya) rigging tool. 
 
 ![Rig Image](aniseed_maya/documentation/images/aniseed_rig.png)
@@ -21,11 +28,6 @@ proceed to execute each component in the order it is presented within the stack.
 This approach makes aniseed incredibly flexible, as a component does not have to 
 specifically drive joints, or could simply modify what has been been before it (a great
 example of this is the space switching mechanism).
-
-<span style="color:orangered">
-IMPORTANTE NOTE: Aniseed is currently in OPEN BETA. It is not yet ready for use in a 
-production environment. It is expected to reach Open Release late december 2024.
-</span>
 
 
 # Installing
