@@ -17,7 +17,11 @@ def get_between(start, end):
 
 
 # --------------------------------------------------------------------------------------
-def copy_joint_values(from_this, to_this):
+def copy_joint_values(
+    from_this,
+    to_this,
+    link=False,
+):
 
     # -- Attributes to copy
     vector_attrs = [
@@ -31,16 +35,25 @@ def copy_joint_values(from_this, to_this):
     # -- Set the specific attributes
     for vector_attr in vector_attrs:
         for axis in ['X', 'Y', 'Z']:
-            mc.setAttr(
-                f"{to_this}.{vector_attr + axis}",
-                mc.getAttr(
+
+            if link:
+                mc.connectAttr(
                     f"{from_this}.{vector_attr + axis}",
-                ),
-            )
+                    f"{to_this}.{vector_attr + axis}",
+                    force=True,
+                )
+
+            else:
+                mc.setAttr(
+                    f"{to_this}.{vector_attr + axis}",
+                    mc.getAttr(
+                        f"{from_this}.{vector_attr + axis}",
+                    ),
+                )
 
 
 # --------------------------------------------------------------------------------------
-def replicate(joint, parent):
+def replicate(joint, parent, link=False, copy_local_name=False):
     """
     Replicates an individual joint and makes it a child of the parent
 
@@ -66,7 +79,14 @@ def replicate(joint, parent):
     copy_joint_values(
         from_this=joint,
         to_this=new_joint,
+        link=link,
     )
+
+    if copy_local_name:
+        new_joint = mc.rename(
+            new_joint,
+            joint.split(":")[-1],
+        )
 
     return new_joint
 
@@ -123,6 +143,59 @@ def reverse_chain(joints):
 
     return joints
 
+
+
+def replicate_all_chain(joint_root, parent=None, link=False, copy_local_name=False):
+
+    all_joints = mc.listRelatives(
+        joint_root,
+        ad=True,
+        type="joint",
+    )
+
+    all_joints.insert(0, joint_root)
+
+    created_joints = dict()
+    new_root_joint = None
+
+    for joint in all_joints:
+
+        replicated = replicate(
+            joint,
+            parent=None,
+            link=link,
+            copy_local_name=copy_local_name,
+        )
+
+        created_joints[joint] = replicated
+
+        if not new_root_joint:
+            new_root_joint = replicated
+
+    # -- Now setup the hierarchy
+    for original_joint, new_joint in created_joints.items():
+
+        if original_joint == joint_root:
+
+            if parent:
+                mc.parent(
+                    new_joint,
+                    parent,
+                )
+
+            # else:
+            #     mc.parent(
+            #         new_joint,
+            #         world=True,
+            #     )
+
+        else:
+            mc.parent(
+                new_joint,
+                created_joints[mc.listRelatives(original_joint, parent=True)[0]],
+            )
+
+    return new_root_joint
 
 
 # ------------------------------------------------------------------------------
