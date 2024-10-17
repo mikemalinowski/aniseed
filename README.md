@@ -5,8 +5,10 @@ IMPORTANTE NOTE: Aniseed is currently in OPEN BETA. It is not yet ready for use 
 production environment. It is expected to reach Open Release late december 2024.
 </span>
 
-
 Aniseed is an application embedded (Maya) rigging tool. 
+
+You can view a quick introduction video here:
+https://youtu.be/rNy7F64nDiw
 
 ![Rig Image](aniseed_maya/documentation/images/aniseed_rig.png)
 
@@ -79,6 +81,9 @@ you will see when there is no rig present within the scene.
 
 The menu at the top allows you to create new rigs, switch between rigs in the scene
 as well as exposing various bone mand shape manipulation tools. 
+
+You can view a walkthrough of building your first rig in aniseed here:
+https://youtu.be/oC2FzNgI_9o
 
 ## Creating a new Rig
 
