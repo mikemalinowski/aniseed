@@ -1040,11 +1040,22 @@ class LegComponent(aniseed.RigComponent):
             skip=["y"],
         )
 
+        default_marker_data = self._DEFAULT_GUIDE_MARKER_DATA
         stored_marker_data = self.option("_MarkerData").get()
+        data_to_store = dict()
+
         created_markers = dict()
 
-        for marker_label in stored_marker_data:
+        for marker_label in default_marker_data:
 
+            marker_data = stored_marker_data.get(
+                marker_label,
+                default_marker_data[marker_label]
+            )
+
+            if "node" not in marker_data:
+                marker_data = default_marker_data[marker_label]
+                
             marker = aniseed.control.basic_transform(
                 classification="gde",
                 description=marker_label.split(":")[-1].replace(" ", ""),
@@ -1057,19 +1068,19 @@ class LegComponent(aniseed.RigComponent):
 
             bony.transform.apply_matrix_relative_to(
                 marker,
-                matrix=stored_marker_data[marker_label]["matrix"],
+                matrix=marker_data["matrix"],
                 relative_to=self.requirement("Toe").get(),
             )
-            stored_marker_data[marker_label]["node"] = marker
+            marker_data["node"] = marker
 
             shapeshift.apply(
                 node=marker,
                 data="core_symbol_rotator",
             )
 
-            created_markers[marker_label] = marker
+            data_to_store[marker_label] = marker_data
 
-        self.option("_MarkerData").set(stored_marker_data)
+        self.option("_MarkerData").set(data_to_store)
 
     # ----------------------------------------------------------------------------------
     def delete_guide(self):
@@ -1108,15 +1119,18 @@ class LegComponent(aniseed.RigComponent):
         )
 
         # -- Store the marker data before it gets removed
-        marker_data = self.option("_MarkerData").get() or dict()
+        marker_data = dict()#self.option("_MarkerData").get() or dict()
         new_data = dict()
 
-        for label in marker_data:
+        for label in self._DEFAULT_GUIDE_MARKER_DATA:
+            print(self.option("_MarkerData").get())
+            existing_data = self.option("_MarkerData").get()[label]
+            print(existing_data)
 
             new_data[label] = dict(
                 node=None,
                 matrix=bony.transform.get_matrix_relative_to(
-                    marker_data[label]["node"],
+                    existing_data["node"],
                     relative_to=self.requirement("Toe").get()
                 ),
             )
