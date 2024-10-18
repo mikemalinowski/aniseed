@@ -1076,7 +1076,9 @@ class LegComponent(aniseed.RigComponent):
             shapeshift.apply(
                 node=marker,
                 data="core_symbol_rotator",
+                color=[0, 255, 0],
             )
+            print("color")
 
             data_to_store[marker_label] = marker_data
 
