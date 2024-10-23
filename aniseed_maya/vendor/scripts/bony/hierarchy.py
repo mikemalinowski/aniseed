@@ -4,6 +4,27 @@ from . import math
 
 
 # --------------------------------------------------------------------------------------
+def get_parent(node):
+    """
+    In maya, when getting the parent you're either given a list
+    if there are parents or None if there is not. This means you're
+    having to constantly deal with two different data types.
+
+    This function will return the immediate parent if there is one
+    and None if there is not. This avoids having to wrap every
+    listRelatives call in an IndexException catch
+    """
+    try:
+        return mc.listRelatives(
+            node,
+            parent=True,
+        )[0]
+
+    except IndexError:
+        return None
+
+
+# --------------------------------------------------------------------------------------
 def get_between(start, end):
 
     joints = []
