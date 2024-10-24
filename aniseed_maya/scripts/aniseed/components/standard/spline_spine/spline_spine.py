@@ -148,15 +148,15 @@ class SplineSpine(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def user_functions(self) -> typing.Dict[str, callable]:
 
-        if self.has_guide():
+        if self._has_guide():
             return {
-                "Remove Manipulation Guide": self.remove_guide,
+                "Remove Guide": self.user_func_remove_guide,
             }
 
         else:
             return {
-                "Create Joints": self.build_skeleton,
-                "Create Manipulation Guide": self.create_guide,
+                "Create Joints": self.user_func_build_skeleton,
+                "Create Guide": self.user_func_create_guide,
             }
 
     # ----------------------------------------------------------------------------------
@@ -171,12 +171,7 @@ class SplineSpine(aniseed.RigComponent):
 
         if not tip_joint:
             print("No tip joint specified")
-            return
-
-        all_joints = bony.hierarchy.get_between(
-            root_joint,
-            tip_joint,
-        )
+            return False
 
         facing_dir = bony.direction.get_chain_facing_direction(
             root_joint,
@@ -192,7 +187,7 @@ class SplineSpine(aniseed.RigComponent):
             )
             return False
 
-        if self.has_guide():
+        if self._has_guide():
             print(f"You must remove the guide for {root_joint} before building")
             return False
 
@@ -200,139 +195,32 @@ class SplineSpine(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def run(self):
-        self.create_spline_setup(
+        self._create_spline_setup(
             guide_mode=False,
         )
 
     # ----------------------------------------------------------------------------------
-    def run_optional_control_orient(self, control, guide_mode=False):
-
-        if self.option("Orient Controls To World").get() or guide_mode:
-
-            org = aniseed.control.get_classification(
-                control,
-                "zro",
-            )
-
-            mc.xform(
-                org,
-                rotation=[0, 0, 0],
-                worldSpace=True,
-            )
-
-    # ----------------------------------------------------------------------------------
-    def fit_curve_to_joints(self, joints):
-        pass
-
-    # ----------------------------------------------------------------------------------
-    def create_curve_clusters(self, curve):
-        curve_shape = mc.listRelatives(
-            curve,
-            shapes=True,
-        )[0]
-
-        clusters = []
-
-        for idx in range(4):
-            mc.select(f"{curve_shape}.cv[{idx}]")
-            cluster_transform = mc.rename(
-                mc.cluster()[1],
-                self.config.generate_name(
-                    classification="cls",
-                    description=self.option("Descriptive Prefix").get(),
-                    location=self.option("Location").get(),
-                ),
-            )
-
-            clusters.append(cluster_transform)
-
-        return clusters
-
-    # ----------------------------------------------------------------------------------
-    def create_quad_curve(self, nodes, parent=None):
-
-        guide_data = self.option("_GuideCurvePoints").get()
-        if guide_data:
-            degree = 3
-
-            quad_curve = mc.curve(
-                p=guide_data["positions"],
-                degree=degree,
-                knot=guide_data["knots"],
-            )
-            print("building from daaaaaaaaaaaaaaaaaaaaata")
-        else:
-            degree = 1
-
-            points = [
-                mc.xform(node, q=True, translation=True, worldSpace=True)
-                for node in nodes
-            ]
-
-            knots = [
-                i
-                for i in range(len(points) + degree - 1)
-            ]
-
-            linear_curve = mc.curve(
-                p=points,
-                degree=degree,
-                knot=knots
-            )
-
-            quad_curve = mc.rebuildCurve(
-                replaceOriginal=True,
-                rebuildType=0,  # Uniform
-                endKnots=1,
-                keepRange=False,
-                keepEndPoints=True,
-                keepTangents=False,
-                spans=1,
-                degree=3,
-                tolerance=0.01,
-            )
-
-            if parent:
-                print("paaaaaaaaaaaaaaaaaaarenting")
-                mc.parent(
-                    quad_curve,
-                    parent,
-                )
-
-        quad_curve = mc.rename(
-            quad_curve,
-            self.config.generate_name(
-                classification="crv",
-                description=self.option("Descriptive Prefix").get(),
-                location=self.option("Location").get(),
-            ),
-        )
-
-        mc.addAttr(
-            quad_curve,
-            shortName="GuideCurve",
-            at="message",
-        )
-
-        mc.setAttr(
-            f"{quad_curve}.visibility",
-            False,
-        )
-
-        return quad_curve
-
-    # ----------------------------------------------------------------------------------
-    def create_spline_setup(self, guide_mode=False):
+    # noinspection DuplicatedCode
+    def _create_spline_setup(self, guide_mode=False):
 
         if guide_mode:
             parent = mc.rename(
                 mc.createNode("transform"),
                 "SplineGuideManipulator",
             )
+
             mc.addAttr(
                 parent,
                 shortName="GuideLink",
                 at="message",
+            )
+
+            mc.parent(
+                parent,
+                mc.listRelatives(
+                    self.requirement("Root Joint").get(),
+                    parent=True,
+                )[0]
             )
 
         else:
@@ -372,7 +260,7 @@ class SplineSpine(aniseed.RigComponent):
             )
 
         # -- Lets start by creating curve
-        curve = self.create_quad_curve(
+        curve = self._create_spine_curve(
             joints_to_drive,
             parent=parent
         )
@@ -385,13 +273,23 @@ class SplineSpine(aniseed.RigComponent):
         except RuntimeError:
             pass
 
-        xfo = mc.xform(curve, q=True, matrix=True, worldSpace=True)
+        xfo = mc.xform(
+            curve,
+            query=True,
+            matrix=True,
+            worldSpace=True,
+        )
 
         mc.setAttr(
             f"{curve}.inheritsTransform",
             False,
         )
-        mc.xform(curve, matrix=xfo, worldSpace=True)
+
+        mc.xform(
+            curve,
+            matrix=xfo,
+            worldSpace=True,
+        )
 
         chain_length = bony.hierarchy.chain_length(
             root_joint,
@@ -405,7 +303,7 @@ class SplineSpine(aniseed.RigComponent):
             shape_scale = chain_length
 
         # -- Create the clusters
-        cluster_transforms = self.create_curve_clusters(curve)
+        cluster_transforms = self._create_curve_clusters(curve)
 
         # -- Now create the controls
         master_control = aniseed.control.create(
@@ -419,7 +317,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(master_control, guide_mode)
+        self._align_control_to_world(master_control, guide_mode)
 
         root_control = aniseed.control.create(
             description=f"{prefix}Root",
@@ -432,7 +330,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(root_control, guide_mode)
+        self._align_control_to_world(root_control, guide_mode)
 
         secondary_root_control = aniseed.control.create(
             description=f"{prefix}SecondaryRoot",
@@ -445,18 +343,21 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(secondary_root_control, guide_mode)
+        self._align_control_to_world(secondary_root_control, guide_mode)
 
-        self.add_secondary_vis_controls(
+        self._add_secondary_vis_attribute(
             root_control,
             secondary_root_control,
             guide_mode,
         )
 
         mc.xform(
-            aniseed.control.get_classification(secondary_root_control, "org"),
+            aniseed.control.get_classification(
+                secondary_root_control,
+                "org",
+            ),
             translation=mc.xform(
-                f"{curve}.cv[1]", #cluster_transforms[1],
+                f"{curve}.cv[1]",  # cluster_transforms[1],
                 query=True,
                 translation=True,
                 worldSpace=True,
@@ -480,7 +381,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(tip_control, guide_mode)
+        self._align_control_to_world(tip_control, guide_mode)
 
         secondary_tip_control = aniseed.control.create(
             description=f"{prefix}SecondaryTip",
@@ -493,24 +394,49 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(secondary_tip_control, guide_mode)
+        self._align_control_to_world(secondary_tip_control, guide_mode)
 
-        self.add_secondary_vis_controls(
+        self._add_secondary_vis_attribute(
             tip_control,
             secondary_tip_control,
             guide_mode,
         )
 
         mc.xform(
-            aniseed.control.get_classification(secondary_tip_control, "org"),
+            aniseed.control.get_classification(
+                secondary_tip_control,
+                "org",
+            ),
             translation=mc.xform(
-                f"{curve}.cv[2]", #cluster_transforms[2],
+                f"{curve}.cv[2]",  # cluster_transforms[2],
                 query=True,
                 translation=True,
                 worldSpace=True,
             ),
             worldSpace=True,
         )
+
+        if guide_mode:
+
+            all_controls = [
+                master_control,
+                root_control,
+                secondary_root_control,
+                secondary_tip_control,
+                tip_control,
+            ]
+
+            for control in all_controls:
+                shapeshift.apply_colour(
+                    control,
+                    r=0,
+                    g=1,
+                    b=0,
+                )
+                shapeshift.scale(
+                    control,
+                    scale_by=0.2,
+                )
 
         cluster_parents = [
             root_control,
@@ -540,7 +466,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(root_upvector, guide_mode)
+        self._align_control_to_world(root_upvector, guide_mode)
 
         tip_upvector = aniseed.control.create(
             description=f"{prefix}TipUpvector",
@@ -551,7 +477,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             classification_override="gde" if guide_mode else None,
         )
-        self.run_optional_control_orient(tip_upvector, guide_mode)
+        self._align_control_to_world(tip_upvector, guide_mode)
 
         mc.setAttr(
             aniseed.control.get_classification(
@@ -577,7 +503,7 @@ class SplineSpine(aniseed.RigComponent):
             world=True,
             replacements={"JNT_": "MEC_"}
         )
-        self.set_joints_to_invisible(replicated_chain)
+        self._set_joints_to_invisible(replicated_chain)
 
         # -- Create the ik handle
         ikh, effector = mc.ikHandle(
@@ -589,8 +515,6 @@ class SplineSpine(aniseed.RigComponent):
             parentCurve=False,
             priority=1,
         )
-        print(f"ikh : {ikh}")
-        print(f"Parent : {parent}")
 
         mc.parent(
             ikh,
@@ -607,7 +531,6 @@ class SplineSpine(aniseed.RigComponent):
             True,
         )
 
-
         mc.setAttr(
             f"{ikh}.dWorldUpType",
             2,  # -- Object Up (Start/End)
@@ -619,8 +542,6 @@ class SplineSpine(aniseed.RigComponent):
         )
 
         # -- Get the index of the world up list.
-        up_axis = 0
-
         if self.option("Upvector Axis").get() == "X":
             up_axis = 6  # -- Positive X
 
@@ -679,7 +600,6 @@ class SplineSpine(aniseed.RigComponent):
         multiplier = bony.direction.get_multiplier_from_direction(direction)
 
         for joint in replicated_chain:
-
             mul_node = mc.createNode("floatMath")
 
             mc.connectAttr(
@@ -712,7 +632,6 @@ class SplineSpine(aniseed.RigComponent):
             drivers[-1] = tip_control
 
         for idx in range(len(drivers)):
-
             mc.parentConstraint(
                 drivers[idx],
                 joints_to_drive[idx],
@@ -753,7 +672,135 @@ class SplineSpine(aniseed.RigComponent):
             )
 
     # ----------------------------------------------------------------------------------
-    def add_secondary_vis_controls(self, primary, secondary, guide_mode):
+    def _align_control_to_world(self, control, guide_mode=False):
+        
+        # -- If we're in guide mode, we want to keep our controls
+        # -- orientated to the bones
+        if guide_mode:
+            return
+        
+        # -- If the user has not asked for world oriented controls, 
+        # -- we dont do it
+        if not self.option("Orient Controls To World").get():
+            return 
+    
+        org = aniseed.control.get_classification(
+            control,
+            "zro",
+        )
+
+        mc.xform(
+            org,
+            rotation=[0, 0, 0],
+            worldSpace=True,
+        )
+
+    # ----------------------------------------------------------------------------------
+    def _create_curve_clusters(self, curve):
+        curve_shape = mc.listRelatives(
+            curve,
+            shapes=True,
+        )[0]
+
+        clusters = []
+
+        for idx in range(4):
+            mc.select(f"{curve_shape}.cv[{idx}]")
+            cluster_transform = mc.rename(
+                mc.cluster()[1],
+                self.config.generate_name(
+                    classification="cls",
+                    description=self.option("Descriptive Prefix").get(),
+                    location=self.option("Location").get(),
+                ),
+            )
+
+            clusters.append(cluster_transform)
+
+        return clusters
+
+    # ----------------------------------------------------------------------------------
+    def _create_spine_curve(self, nodes, parent=None):
+        
+        # -- We store the curve points when a guide is removed in this option
+        # -- so re-extract that so we can build the curve exactly as it was
+        guide_data = self.option("_GuideCurvePoints").get()
+        
+        if guide_data:
+            degree = 3
+
+            quad_curve = mc.curve(
+                p=guide_data["positions"],
+                degree=degree,
+                knot=guide_data["knots"],
+            )
+            
+        else:
+            degree = 1
+
+            points = [
+                mc.xform(
+                    node, 
+                    query=True, 
+                    translation=True, 
+                    worldSpace=True,
+                )
+                for node in nodes
+            ]
+
+            knots = [
+                i
+                for i in range(len(points) + degree - 1)
+            ]
+
+            mc.curve(
+                p=points,
+                degree=degree,
+                knot=knots
+            )
+
+            quad_curve = mc.rebuildCurve(
+                replaceOriginal=True,
+                rebuildType=0,  # Uniform
+                endKnots=1,
+                keepRange=False,
+                keepEndPoints=True,
+                keepTangents=False,
+                spans=1,
+                degree=3,
+                tolerance=0.01,
+            )
+
+            if parent:
+                mc.parent(
+                    quad_curve,
+                    parent,
+                )
+
+        quad_curve = mc.rename(
+            quad_curve,
+            self.config.generate_name(
+                classification="crv",
+                description=self.option("Descriptive Prefix").get(),
+                location=self.option("Location").get(),
+            ),
+        )
+
+        mc.addAttr(
+            quad_curve,
+            shortName="GuideCurve",
+            at="message",
+        )
+
+        mc.setAttr(
+            f"{quad_curve}.visibility",
+            False,
+        )
+
+        return quad_curve
+
+    # ----------------------------------------------------------------------------------
+    def _add_secondary_vis_attribute(self, primary, secondary, guide_mode):
 
         if guide_mode:
             return
@@ -778,20 +825,15 @@ class SplineSpine(aniseed.RigComponent):
             f"{org}.visibility",
         )
 
-    # ----------------------------------------------------------------------------------
-    def create_guide(self):
-        self.create_spline_setup(
-            guide_mode=True,
-        )
 
     # ----------------------------------------------------------------------------------
-    def store_guide_curve_positions(self):
+    def _store_guide_curve_positions(self):
 
-        if not self.has_guide():
+        if not self._has_guide():
             print("No guide has been built")
             return
 
-        guide_curve = self.get_guide_curve()
+        guide_curve = self._get_guide_curve()
 
         if not guide_curve:
             print("Could not find the guide curve")
@@ -817,7 +859,7 @@ class SplineSpine(aniseed.RigComponent):
         self.option("_GuideCurvePoints").set(data)
 
     # ----------------------------------------------------------------------------------
-    def get_guide_curve(self):
+    def _get_guide_curve(self):
 
         connections = mc.listConnections(
             f"{self.requirement('Root Joint').get()}.message",
@@ -831,44 +873,7 @@ class SplineSpine(aniseed.RigComponent):
         return None
 
     # ----------------------------------------------------------------------------------
-    def remove_guide(self):
-
-        # -- Store the guide curve positions into the component so we can rebuild
-        # -- the exact same curve
-        self.store_guide_curve_positions()
-
-        transforms = dict()
-
-        all_chain = bony.hierarchy.get_between(
-            self.requirement("Root Joint").get(),
-            self.requirement('Tip Joint').get(),
-        )
-
-        for joint in all_chain:
-            transforms[joint] = mc.xform(
-                joint,
-                query=True,
-                matrix=True,
-            )
-
-        connections = mc.listConnections(
-            f"{self.requirement('Root Joint').get()}.message",
-            destination=True,
-            plugs=True,
-        )
-
-        for connection in connections:
-            if "GuideLink" in connection:
-                mc.delete(connection.split(".")[0])
-
-        for joint, matrix in transforms.items():
-            mc.xform(
-                joint,
-                matrix=matrix,
-            )
-
-    # ----------------------------------------------------------------------------------
-    def has_guide(self):
+    def _has_guide(self):
 
         if not self.requirement('Root Joint').get():
             return False
@@ -887,7 +892,16 @@ class SplineSpine(aniseed.RigComponent):
             return True
 
     # ----------------------------------------------------------------------------------
-    def build_skeleton(self, joint_count=None):
+    @classmethod
+    def _set_joints_to_invisible(cls, joints):
+        for joint in joints:
+            mc.setAttr(
+                f"{joint}.drawStyle",
+                2,
+            )
+
+    # ----------------------------------------------------------------------------------
+    def user_func_build_skeleton(self, joint_count=None):
 
         if not joint_count:
             joint_count = qute.utilities.request.text(
@@ -927,6 +941,7 @@ class SplineSpine(aniseed.RigComponent):
             worldSpace=True,
         )
 
+        joint = None
         parent = root_joint
 
         for idx in range(joint_count-1):
@@ -949,13 +964,47 @@ class SplineSpine(aniseed.RigComponent):
         mc.select(joint)
 
         # -- When we build the skeleton, automatically create the guide
-        self.create_guide()
+        self.user_func_create_guide()
 
     # ----------------------------------------------------------------------------------
-    @classmethod
-    def set_joints_to_invisible(cls, joints):
-        for joint in joints:
-            mc.setAttr(
-                f"{joint}.drawStyle",
-                2,
+    def user_func_create_guide(self):
+        self._create_spline_setup(
+            guide_mode=True,
+        )
+
+    # ----------------------------------------------------------------------------------
+    def user_func_remove_guide(self):
+
+        # -- Store the guide curve positions into the component so we can rebuild
+        # -- the exact same curve
+        self._store_guide_curve_positions()
+
+        transforms = dict()
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Root Joint").get(),
+            self.requirement('Tip Joint').get(),
+        )
+
+        for joint in all_chain:
+            transforms[joint] = mc.xform(
+                joint,
+                query=True,
+                matrix=True,
+            )
+
+        connections = mc.listConnections(
+            f"{self.requirement('Root Joint').get()}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        for connection in connections:
+            if "GuideLink" in connection:
+                mc.delete(connection.split(".")[0])
+
+        for joint, matrix in transforms.items():
+            mc.xform(
+                joint,
+                matrix=matrix,
             )
