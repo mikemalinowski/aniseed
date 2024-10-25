@@ -197,15 +197,24 @@ def basic_transform(classification, description, location, config, parent=None, 
             parent,
         )
 
-    mc.xform(
-        node,
-        matrix=mc.xform(
-            match_to,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
-    )
+    if match_to:
+        if isinstance(match_to, str):
+            mc.xform(
+                node,
+                matrix=mc.xform(
+                    match_to,
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
+
+        elif isinstance(match_to, (list, tuple)):
+            mc.xform(
+                node,
+                matrix=match_to,
+                worldSpace=True,
+            )
 
     return node
