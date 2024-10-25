@@ -21,32 +21,21 @@ class LegComponent(aniseed.RigComponent):
     )
 
     _DEFAULT_GUIDE_MARKER_DATA = {
-        "Marker : Tip Roll": {
-            'node': None,
-             'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.0152, 0.0682, 0.9976, 0, -0.9946, 0.1033, 0.0081, 0, 3.9242, 2.3434, -0.22, 1],
-        },
-        "Marker : Heel Roll": {
-            'node': None,
-            'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.0152, -0.0682, -0.9976, 0, 0.9946, -0.1033, -0.0081, 0, -10.6328, 3.8549, -0.1011, 1],
-        },
-        "Marker : Inner Roll": {
-            'node': None,
-            'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.9946, 0.1033, 0.0081, 0, -0.0152, -0.0682, -0.9976, 0, 0.347, 3.0168, 4.1299, 1],
-        },
-        "Marker : Outer Roll": {
-            'node': None,
-            'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.0152, 0.0682, 0.9976, 0, 0.2093, 2.4004, -4.8938, 1],
-        },
-        "Marker : Ball Twist": {
-            'node': None,
-            'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1],
-        },
-        "Marker : Foot Control": {
-            'node': None,
-            'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1],
-        },
+        "Marker : Tip Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.0152, 0.0682, 0.9976, 0, -0.9946, 0.1033, 0.0081, 0, 3.9242, 2.3434, -0.22, 1]},
+        "Marker : Heel Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.0152, -0.0682, -0.9976, 0, 0.9946, -0.1033, -0.0081, 0, -10.6328, 3.8549, -0.1011, 1]},
+        "Marker : Inner Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.9946, 0.1033, 0.0081, 0, -0.0152, -0.0682, -0.9976, 0, 0.347, 3.0168, 4.1299, 1]},
+        "Marker : Outer Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.0152, 0.0682, 0.9976, 0, 0.2093, 2.4004, -4.8938, 1]},
+        "Marker : Ball Twist": {'node': None, 'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1]},
+        "Marker : Foot Control": {'node': None,'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1]},
     }
-    
+
+    _LABELS = [
+        "Upper",
+        "Lower",
+        "Foot",
+        "Toe",
+    ]
+
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         super(LegComponent, self).__init__(*args, **kwargs)
@@ -161,26 +150,26 @@ class LegComponent(aniseed.RigComponent):
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
         if not leg_joint or not mc.objExists(leg_joint):
-            menu["Create Joints"] = self.build_skeleton
+            menu["Create Joints"] = self.user_func_create_skeleton
             return menu
 
         # -- Depending on whether we have a guide or not, change what we show
         # -- in the actions menu
-        if self.get_guide():
-            menu["Remove Guide"] = self.delete_guide
+        if self._get_guide():
+            menu["Remove Guide"] = self.user_func_delete_guide
 
         else:
-            menu["Create Guide"] = self.create_guide
+            menu["Create Guide"] = self.user_func_create_guide
 
         # -- Providing we have joints or a guide, we show the align ik tool
-        menu["Align IK"] = self.align_guide_ik
+        menu["Align IK"] = self.user_func_align_guide_ik
 
         return menu
 
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
 
-        if self.get_guide():
+        if self._get_guide():
             print("You must remove the guide before building")
             return False
 
@@ -238,21 +227,13 @@ class LegComponent(aniseed.RigComponent):
         prefix = self.option('Description Prefix').get()
         location = self.option("Location").get()
 
-        org = mc.rename(
-            mc.createNode("transform"),
-            self.config.generate_name(
-                classification=self.config.organisational,
-                description=prefix + "Leg",
-                location=location,
-            ),
+        org = aniseed.control.basic_transform(
+            classification=self.config.organisational,
+            description=prefix + "Leg",
+            location=location,
+            config=self.config,
+            parent=parent
         )
-
-        mc.parent(
-            org,
-            parent,
-        )
-
-        parent = org
 
         # -- This is the default rotation of our shapes based on X down the chain
         fk_shape_rotation = [0, 0, 0]
@@ -272,7 +253,7 @@ class LegComponent(aniseed.RigComponent):
         config_control = aniseed.control.create(
             description=f"{prefix}LegConfig",
             location=location,
-            parent=self.requirement("Parent").get(),
+            parent=org,
             shape="core_lollipop",
             config=self.config,
             match_to=leg_root,
@@ -298,7 +279,7 @@ class LegComponent(aniseed.RigComponent):
                 nk_joint,
                 self.config.generate_name(
                     classification="mech",
-                description=f"{prefix}LegNK",
+                    description=f"{prefix}LegNK",
                     location=location,
                 )
             )
@@ -329,7 +310,7 @@ class LegComponent(aniseed.RigComponent):
                 ik_joint,
                 self.config.generate_name(
                     classification="mech",
-                description=f"{prefix}LegIK",
+                    description=f"{prefix}LegIK",
                     location=location,
                 )
             )
@@ -404,15 +385,17 @@ class LegComponent(aniseed.RigComponent):
             parent=parent,
             shape="core_paddle",
             config=self.config,
-            #match_to=self.requirement("Marker : Foot Control").get(),
             shape_scale=40.0,
             rotate_shape=[0, 90, 0] if shape_y_flip else [0, -90, 0],
         )
 
-        bony.transform.apply_matrix_relative_to(
-            aniseed.control.get_classification(ik_foot_ctl, "org"),
-            matrix=self.option("_MarkerData").get()["Marker : Foot Control"]["matrix"],
-            relative_to=toe_joint,
+        mc.xform(
+            aniseed.control.get_classification(
+                ik_foot_ctl,
+                "org",
+            ),
+            matrix=self._get_marker_matrix("Marker : Foot Control"),
+            worldSpace=True,
         )
 
         ik_controls.append(ik_foot_ctl)
@@ -430,7 +413,7 @@ class LegComponent(aniseed.RigComponent):
                 worldSpace=True,
             )
 
-        pivot_tip, pivot_controls = self._ik_pivot(
+        pivot_tip, pivot_controls = self._setup_ik_pivot_behaviour(
             foot_control=ik_foot_ctl,
             foot_bone=foot_joint,
             toe_bone=toe_joint,
@@ -450,7 +433,11 @@ class LegComponent(aniseed.RigComponent):
         )
         ik_controls.append(heel_control)
 
-        heel_org = aniseed.control.get_classification(heel_control, "org")
+        heel_org = aniseed.control.get_classification(
+            heel_control,
+            "org",
+        )
+
         mc.xform(
             heel_org,
             rotation=mc.xform(
@@ -482,7 +469,11 @@ class LegComponent(aniseed.RigComponent):
         )
         ik_controls.append(toe_control)
 
-        toe_org = aniseed.control.get_classification(toe_control, "org")
+        toe_org = aniseed.control.get_classification(
+            toe_control,
+            "org",
+        )
+
         mc.xform(
             toe_org,
             rotation=mc.xform(
@@ -551,7 +542,6 @@ class LegComponent(aniseed.RigComponent):
         ik_bindings = [
             ik_joints[0],
             ik_joints[1],
-            # ik_joints[2],
             heel_control,
             toe_control,
         ]
@@ -562,10 +552,10 @@ class LegComponent(aniseed.RigComponent):
 
         fk_parent = self.requirement("Parent").get()
 
-        for joint in all_joints:
+        for idx, joint in enumerate(all_joints):
 
             fk_control = aniseed.control.create(
-            description=f"{prefix}{self.config.extract_description(joint)}FK",
+                description=f"{prefix}{self._LABELS[idx]}FK",
                 location=location,
                 parent=fk_parent,
                 shape="core_paddle",
@@ -721,7 +711,7 @@ class LegComponent(aniseed.RigComponent):
                 shapeshift.rotate_shape(twist, *fk_shape_rotation)
 
     # ----------------------------------------------------------------------------------
-    def _ik_pivot(self, foot_control, foot_bone, toe_bone):
+    def _setup_ik_pivot_behaviour(self, foot_control, foot_bone, toe_bone):
 
         aniseed.utils.attribute.add_separator_attr(foot_control)
 
@@ -741,49 +731,34 @@ class LegComponent(aniseed.RigComponent):
 
         for pivot_label in pivot_order:
 
-            marker_transform = self.option("_MarkerData").get()[pivot_label]["matrix"]
-
+            marker_transform = self._get_marker_matrix(pivot_label)
             description = pivot_label.split(":")[-1].replace(" ", "")
 
             pivot_control = aniseed.control.create(
-            description=description,
+                description=description,
                 location=self.option("Location").get(),
                 parent=last_parent,
                 shape="core_sphere",  # "core_symbol_rotator",
                 shape_scale=4,
                 config=self.config,
             )
-
-            bony.transform.apply_matrix_relative_to(
-                aniseed.control.get_classification(pivot_control, "org"),
-                matrix=marker_transform,
-                relative_to=toe_bone,
-            )
-
-            parameter_pivot = mc.createNode("transform")
-            parameter_pivot = mc.rename(
-                parameter_pivot,
-                self.config.generate_name(
-                    classification="piv",
-                    location=self.option("Location").get(),
-                description=description,
-                ),
-            )
-
-            mc.parent(
-                parameter_pivot,
-                pivot_control,
-            )
-
+            print(marker_transform)
             mc.xform(
-                parameter_pivot,
-                matrix=mc.xform(
+                aniseed.control.get_classification(
                     pivot_control,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
+                    "org",
                 ),
+                matrix=marker_transform,
                 worldSpace=True,
+            )
+
+            parameter_pivot = aniseed.control.basic_transform(
+                classification="piv",
+                description=description,
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=pivot_control,
+                match_to=pivot_control,
             )
 
             # -- Add the parameter to the foot control
@@ -805,9 +780,26 @@ class LegComponent(aniseed.RigComponent):
 
         return last_parent, controls
 
+    # ----------------------------------------------------------------------------------
+    def _get_marker_matrix(self, marker_name):
+        marker_data = self.option("_MarkerData").get()
+        return marker_data[marker_name]["matrix"]
 
     # ----------------------------------------------------------------------------------
-    def build_skeleton(self, upper_twist_count=None, lower_twist_count=None):
+    def _get_guide(self):
+
+        connections = mc.listConnections(
+            f"{self.requirement('Leg Root').get()}.message",
+            destination=True,
+            plugs=True,
+        )
+
+        for connection in connections or list():
+            if "guideRig" in connection:
+                return connection.split(".")[0]
+
+    # ----------------------------------------------------------------------------------
+    def user_func_create_skeleton(self, upper_twist_count=None, lower_twist_count=None):
 
         try:
             parent = mc.ls(sl=True)[0]
@@ -940,24 +932,10 @@ class LegComponent(aniseed.RigComponent):
                 across="YZ"
             )
 
-        self.create_guide()
-
-
-    # ----------------------------------------------------------------------------------
-    def get_guide(self):
-
-        connections = mc.listConnections(
-            f"{self.requirement('Leg Root').get()}.message",
-            destination=True,
-            plugs=True,
-        )
-
-        for connection in connections or list():
-            if "guideRig" in connection:
-                return connection.split(".")[0]
+        self.user_func_create_guide()
 
     # ----------------------------------------------------------------------------------
-    def create_guide(self):
+    def user_func_create_guide(self):
 
         leg_root = self.requirement("Leg Root").get()
         toe = self.requirement("Toe").get()
@@ -967,6 +945,10 @@ class LegComponent(aniseed.RigComponent):
             description=f"LegManipulationGuide",
             location=self.option("Location").get(),
             config=self.config,
+            parent=mc.listRelatives(
+                self.requirement("Leg Root").get(),
+                parent=True,
+            )[0]
         )
 
         mc.addAttr(
@@ -1018,33 +1000,17 @@ class LegComponent(aniseed.RigComponent):
                 all_controls.append(tween_control)
 
         # -- Now create the guide markers
-        marker_parent = mc.createNode("transform")
-        marker_parent = mc.rename(
-            marker_parent,
-            self.config.generate_name(
-                classification="gde",
-            description="foot_markers",
-                location=self.option("Location").get(),
-            )
-        )
-
-        mc.parent(
-            marker_parent,
-            guide_org,
-        )
-
-        mc.pointConstraint(
-            self.requirement("Toe").get(),
-            marker_parent,
-            maintainOffset=False,
-            skip=["y"],
+        marker_parent = aniseed.control.basic_transform(
+            classification="gde",
+            description="marker_parent",
+            location=self.option("Location").get(),
+            config=self.config,
+            parent=guide_org
         )
 
         default_marker_data = self._DEFAULT_GUIDE_MARKER_DATA
         stored_marker_data = self.option("_MarkerData").get()
         data_to_store = dict()
-
-        created_markers = dict()
 
         for marker_label in default_marker_data:
 
@@ -1062,15 +1028,11 @@ class LegComponent(aniseed.RigComponent):
                 location=self.option("Location").get(),
                 config=self.config,
                 parent=marker_parent,
+                match_to=marker_data["matrix"],
             )
 
             all_controls.append(marker)
 
-            bony.transform.apply_matrix_relative_to(
-                marker,
-                matrix=marker_data["matrix"],
-                relative_to=self.requirement("Toe").get(),
-            )
             marker_data["node"] = marker
 
             shapeshift.apply(
@@ -1078,16 +1040,17 @@ class LegComponent(aniseed.RigComponent):
                 data="core_symbol_rotator",
                 color=[0, 255, 0],
             )
-            print("color")
 
             data_to_store[marker_label] = marker_data
 
         self.option("_MarkerData").set(data_to_store)
 
-    # ----------------------------------------------------------------------------------
-    def delete_guide(self):
+        return guide_org
 
-        guide_root = self.get_guide()
+    # ----------------------------------------------------------------------------------
+    def user_func_delete_guide(self):
+
+        guide_root = self._get_guide()
 
         if not guide_root:
             return
@@ -1121,19 +1084,19 @@ class LegComponent(aniseed.RigComponent):
         )
 
         # -- Store the marker data before it gets removed
-        marker_data = dict()#self.option("_MarkerData").get() or dict()
         new_data = dict()
 
         for label in self._DEFAULT_GUIDE_MARKER_DATA:
-            print(self.option("_MarkerData").get())
+
             existing_data = self.option("_MarkerData").get()[label]
-            print(existing_data)
 
             new_data[label] = dict(
                 node=None,
-                matrix=bony.transform.get_matrix_relative_to(
+                matrix=mc.xform(
                     existing_data["node"],
-                    relative_to=self.requirement("Toe").get()
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
                 ),
             )
 
@@ -1154,9 +1117,15 @@ class LegComponent(aniseed.RigComponent):
 
 
     # ----------------------------------------------------------------------------------
-    def align_guide_ik(self):
+    def user_func_align_guide_ik(self):
 
-        guide_root = self.get_guide()
+        # -- Before we re-align the ik chain, we need
+        # -- to check we have the guide built, and retain
+        # -- the global transforms of the guide objects.
+        guide_root = self._get_guide()
+        #
+        # if not guide_root:
+        #     self.user_func_create_guide()
 
         all_chain = bony.hierarchy.get_between(
             self.requirement("Leg Root").get(),
@@ -1164,7 +1133,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         if guide_root:
-            self.delete_guide()
+            self.user_func_delete_guide()
 
             mc.select(
                 [
@@ -1174,7 +1143,7 @@ class LegComponent(aniseed.RigComponent):
             )
             bony.ik.clean_ik_plane_with_ui()
 
-            self.create_guide()
+            self.user_func_create_guide()
 
         else:
             mc.select(
