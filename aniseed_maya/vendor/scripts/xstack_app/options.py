@@ -114,6 +114,9 @@ class OptionsWidget(qute.QWidget):
 
         for option in component.options():
 
+            if option.hidden():
+                continue
+
             if self._pre_expose_only and not option.should_pre_expose():
                 continue
 

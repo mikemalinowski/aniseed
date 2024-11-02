@@ -22,6 +22,7 @@ class _Attribute:
             should_inherit: bool = False,
             pre_expose: bool = False,
             component=None,
+            hidden: bool = False,
     ):
         super(_Attribute, self).__init__()
 
@@ -32,6 +33,7 @@ class _Attribute:
         self._should_inherit: bool = should_inherit
         self._component = component
         self._pre_expose: bool = pre_expose
+        self._hidden: bool = hidden
 
         # -- Declare our signals which allow events to tie into them
         self.value_changed = Signal()
@@ -82,6 +84,10 @@ class _Attribute:
         return self._pre_expose
 
     # ----------------------------------------------------------------------------------
+    def hidden(self):
+        return self._hidden
+
+    # ----------------------------------------------------------------------------------
     def should_inherit(self):
         """
         Sets the value of the option and emits a change event call
@@ -106,6 +112,11 @@ class _Attribute:
     def is_address(self):
         if address.is_address(self._value):
             return True
+
+    # ----------------------------------------------------------------------------------
+    def __repr__(self):
+        return f"{self.component().label()}.{self.name()}"
+
 
 # --------------------------------------------------------------------------------------
 class Option(_Attribute):

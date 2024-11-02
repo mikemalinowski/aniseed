@@ -328,7 +328,8 @@ class Component:
             description: str = "",
             group=None,
             should_inherit=False,
-            pre_expose=False
+            pre_expose=False,
+            hidden=False,
     ):
         """
         This will add an option to the component, which will allow a user to
@@ -361,6 +362,7 @@ class Component:
             should_inherit=should_inherit,
             pre_expose=pre_expose,
             component=self,
+            hidden=hidden,
         )
 
         self._options.append(option)
@@ -639,3 +641,7 @@ class Component:
         If no version is defined, then None will be returned.
         """
         return self._forced_version
+
+    # ----------------------------------------------------------------------------------
+    def __repr__(self):
+        return f"{self.label()} ({self.identifier}) ({self.uuid()})"
