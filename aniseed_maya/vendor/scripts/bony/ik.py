@@ -81,6 +81,7 @@ def clean_ik_plane_with_ui():
 
 # --------------------------------------------------------------------------------------
 def get_aim_dir(aim_label):
+    aim_label = aim_label.lower()
     aim_dir = [0, 0, 0]
 
     # for idx in range(values):
