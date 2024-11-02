@@ -7,6 +7,7 @@ from . import orients
 from . import pins
 from . import skin
 from . import transform
+from . import visibility
 from . import writer
 from . import ui
 
