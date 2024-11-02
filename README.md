@@ -336,6 +336,100 @@ Aniseed comes packaged with a rig configuration which is designed to be flexible
 however if you find that you need something more, you can always subclass the RigConfiguration
 component and implement your own. This is explained below.
 
+Everything you do through the UI can be scripted. Here is an example of building a
+rig with spine and legs
+
+```python
+import aniseed
+
+# -- Start by create a new rig
+rig = aniseed.MayaRig(label="ExampleRig")
+
+# -- Add a rig configuration to the rig
+rig.add_component(
+    component_type="Rig Configuration : Standard",
+    label="Configuration",
+)
+
+# -- The rig configuration has a custom function to 
+# -- allow for a basic rig structure to be made
+rig.config().create_component_structure()
+
+# -- Now add a spine component as a child of the global srt component. Note
+# -- that the global srt component is generated for us from the rig
+# -- configuration
+spine_component = rig.add_component(
+    component_type="Standard : Spline Spine",
+    label="Spine",
+    parent=rig.find("Global SRT"),
+)
+
+# -- Rather than build the skeleton manually, we will let the component
+# -- do this for us
+spine_component.user_func_build_skeleton(joint_count=6)
+
+# -- In this example, we're setting the parent attribute
+# -- to the address of the main control of the srt. We use the address
+# -- rather than a hard coded name to allow for naming flexibility
+spine_component.requirement("Parent").set(
+    rig.find("Global SRT").output("Main Control").address()
+)
+
+# -- Now we add the left leg component. Note that in this example we're
+# -- specifying the parent requirement at the time of adding it rather
+# -- that setting the attribute after the fact
+left_leg_component = rig.add_component(
+    component_type="Standard : Leg",
+    label="Leg LF",
+    parent=spine_component,
+    options={"Location": "lf"},
+    requirements={
+        "Parent": spine_component.output("Root Transform").address()
+    }
+)
+
+# -- Now we create the skeleton. By default this will also generate 
+# -- a guide for us. Both the option of creating a skeleton and a guide
+# -- is specific to any given component. 
+left_leg_component.user_func_create_skeleton(
+    parent=spine_component.requirement("Root Joint").get(),
+    upper_twist_count=3,
+    lower_twist_count=3,
+)
+
+# -- Now we do exactly the same for the right leg. Note that the leg component
+# -- will mirror itself if its build with the right side set. This is a logic
+# -- choice in the component itself rather than a framework choice. 
+right_leg_component = rig.add_component(
+    component_type="Standard : Leg",
+    label="Leg RT",
+    parent=spine_component,
+    options={"Location": "rt"},
+    requirements={
+        "Parent": spine_component.output("Root Transform").address()
+    }
+)
+
+right_leg_component.user_func_create_skeleton(
+    parent=spine_component.requirement("Root Joint").get(),
+    upper_twist_count=3,
+    lower_twist_count=3,
+)
+
+# -- Finally, because all the components we have added in this example use
+# -- guides, we need to remove them before we build the rig. 
+spine_component.user_func_remove_guide()
+left_leg_component.user_func_remove_guide()
+right_leg_component.user_func_remove_guide()
+
+# -- Finally, we build the control rig. 
+rig.build()
+
+# -- At any point we can put the rig back into an editable state by doing
+# -- the following
+editable_stack = rig.find("Make Rig Editable")
+rig.build(build_below=editable_stack)
+```
 
 ## Adding Components
 
