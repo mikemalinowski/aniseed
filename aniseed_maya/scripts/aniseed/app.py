@@ -9,7 +9,6 @@ from . import resources
 import maya.cmds as mc
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
-
 # --------------------------------------------------------------------------------------
 class MayaAppConfig(aniseed_everywhere.app.AppConfig):
     """
@@ -102,6 +101,7 @@ class MayaAppWidget(aniseed_everywhere.app.AppWidget):
         is shown
         """
         self._register_script_jobs()
+        print("on show event")
         self.switch_rig()
         
     # --------------------------------------------------------------------------
@@ -123,12 +123,14 @@ class DockableApp(MayaQWidgetDockableMixin, qute.QMainWindow):
     """
 
     OBJECT_NAME = "AniseedBuilderWindow"
+    #
+    # INSTANCE = None
 
     def __init__(self, *args, **kwargs):
         super(DockableApp, self).__init__(*args, **kwargs)
 
         # -- Set the window properties
-        self.setObjectName(self.OBJECT_NAME)
+        self.setObjectName(DockableApp.OBJECT_NAME)
         self.setWindowTitle('Aniseed')
         self.setWindowIcon(
             qute.QIcon(
@@ -153,28 +155,55 @@ class DockableApp(MayaQWidgetDockableMixin, qute.QMainWindow):
             **stlying_overrides
         )
 
-        self.setCentralWidget(
-            MayaAppWidget(
-                app_config=MayaAppConfig,
-                parent=self,
-            ),
+        self.app = MayaAppWidget(
+            app_config=MayaAppConfig,
+            parent=self,
         )
+        self.setCentralWidget(
+            self.app,
+        )
+        #
+        # DockableApp.INSTANCE = self
+
+    # ----------------------------------------------------------------------------------
+    @classmethod
+    def instance(cls):
+        import gc
+
+        for obj in gc.get_objects():
+            if isinstance(obj, DockableApp):
+                return obj
 
 
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
+def remove_worksspace_control(control):
+    if mc.workspaceControl(control, q=True, exists=True):
+
+        try:
+            mc.workspaceControl(control,e=True, close=True)
+        except: pass
+
+        try:
+            mc.deleteUI(control,control=True)
+        except: pass
+
+        return
+
+
+# --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 def launch(*args, **kwargs):
     """
     This function should be called to invoke the app ui in maya
     """
-    # -- Clear out any pre-existing window
-    if mc.window(DockableApp.OBJECT_NAME, exists=True):
-        mc.deleteUI(DockableApp.OBJECT_NAME)
-        try:
-            mc.deleteUI(f"{DockableApp.OBJECT_NAME}WorkspaceControl")
 
-        except:
-            pass
+    if DockableApp.instance():
+        DockableApp.instance().show()
+        return
+
+    remove_worksspace_control(
+        DockableApp.OBJECT_NAME + "WorkspaceControl"
+    )
 
     # -- Instance the tool
     window = DockableApp(
@@ -186,10 +215,11 @@ def launch(*args, **kwargs):
         dockable=True,
         area='right',
         floating=False,
+        # retain=False,
     )
 
     mc.workspaceControl(
-        f'{DockableApp.OBJECT_NAME}WorkspaceControl',
+        f'{window.objectName()}WorkspaceControl',
         e=True,
         ttc=["AttributeEditor", -1],
         wp="preferred",

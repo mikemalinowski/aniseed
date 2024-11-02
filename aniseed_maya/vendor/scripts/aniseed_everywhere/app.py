@@ -64,11 +64,14 @@ class AppWidget(xstack_app.AppWidget):
     def __init__(self, *args, **kwargs):
         super(AppWidget, self).__init__(*args, **kwargs)
 
+        self._host = ""
+
         # -- Find all the rigs in the scene
         rigs = self.all_rigs()
 
         # -- If we have any rigs, use the first one as the active rig by default
         if rigs:
+            print("window defintion")
             self.switch_rig(rigs[0])
 
     # ----------------------------------------------------------------------------------
@@ -149,6 +152,9 @@ class AppWidget(xstack_app.AppWidget):
             try:
                 rig_host = self.all_rigs()[0]
 
+                if app.objects.get_name(self._host) == app.objects.get_name(rig_host):
+                    return
+
             except IndexError:
                 self.set_active_stack(stack=None)
                 return
@@ -162,6 +168,7 @@ class AppWidget(xstack_app.AppWidget):
             stack=rig
         )
 
+        self._host = rig_host
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
