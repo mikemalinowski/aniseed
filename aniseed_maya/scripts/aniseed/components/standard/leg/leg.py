@@ -9,6 +9,136 @@ import aniseed
 import maya.cmds as mc
 
 
+# --------------------------------------------------------------------------------------
+def _default_marker_data():
+    return {
+      "Marker : Tip Roll": {
+        "node": None,
+        "matrix": [
+          1.6875389974302405e-14,
+          -1.0000000000000016,
+          0,
+          0,
+          -0.9999999999999998,
+          -5.799797358230175e-7,
+          3.2310891488651727e-15,
+          0,
+          -0.000007699790929509355,
+          -0.000004050106194082862,
+          -0.9999999999999989,
+          0,
+          15.923704629321065,
+          1.038765080664596e-13,
+          10.358663285232932,
+          1
+        ]
+      },
+      "Marker : Heel Roll": {
+        "node": None,
+        "matrix": [
+          1.68753899743024e-14,
+          -1.0000000000000013,
+          0,
+          0,
+          0.9999999999999996,
+          5.799797358230174e-7,
+          0,
+          0,
+          0.000007699790926278266,
+          0.000004050106194082862,
+          0.9999999999999989,
+          0,
+          15.923704629320945,
+          -1.87822923678576e-14,
+          -7.640707908493841,
+          1
+        ]
+      },
+      "Marker : Inner Roll": {
+        "node": None,
+        "matrix": [
+          1.6653345369377354e-14,
+          -1.0000000000000004,
+          0,
+          0,
+          -2.3529510997915047e-12,
+          -0.000004050106193962671,
+          -0.9999999999999984,
+          0,
+          0.9999999999999994,
+          5.799797356181654e-7,
+          0.00000769978857315843,
+          0,
+          12.034377989639726,
+          3.171960616813738e-16,
+          3.649898632868812,
+          1
+        ]
+      },
+      "Marker : Outer Roll": {
+        "node": None,
+        "matrix": [
+          0.000007699790939825735,
+          -0.9999999998563203,
+          0.0000071416516156724706,
+          0,
+          3.636271272678563e-15,
+          0.000011191757810861018,
+          0.9999999999703542,
+          0,
+          -1.0000000000296425,
+          -0.000008279825648476315,
+          -0.000007699700606637458,
+          0,
+          19.81905872289967,
+          1.7160536247871776e-13,
+          3.6498986328687675,
+          1
+        ]
+      },
+      "Marker : Ball Twist": {
+        "node": None,
+        "matrix": [
+          0.9999999999999994,
+          0,
+          0,
+          0,
+          5.799797189426905e-7,
+          1.0000000000000013,
+          0,
+          0,
+          0.000007699793275257417,
+          0.000004050101728348392,
+          0.9999999999999989,
+          0,
+          15.92370462932104,
+          7.549515128565887e-14,
+          4.057209118708634,
+          1
+        ]
+      },
+      "Marker : Foot Control": {
+        "node": None,
+        "matrix": [
+          0.9999999999999994,
+          0,
+          0,
+          0,
+          5.799797189426905e-7,
+          1.0000000000000013,
+          0,
+          0,
+          0.000007699793275257417,
+          0.000004050101728348392,
+          0.9999999999999989,
+          0,
+          15.92370462932104,
+          7.549515128565887e-14,
+          4.057209118708634,
+          1
+        ]
+      }
+    }
 
 # --------------------------------------------------------------------------------------
 class LegComponent(aniseed.RigComponent):
@@ -19,15 +149,6 @@ class LegComponent(aniseed.RigComponent):
         os.path.dirname(__file__),
         "icon.png",
     )
-
-    _DEFAULT_GUIDE_MARKER_DATA = {
-        "Marker : Tip Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.0152, 0.0682, 0.9976, 0, -0.9946, 0.1033, 0.0081, 0, 3.9242, 2.3434, -0.22, 1]},
-        "Marker : Heel Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.0152, -0.0682, -0.9976, 0, 0.9946, -0.1033, -0.0081, 0, -10.6328, 3.8549, -0.1011, 1]},
-        "Marker : Inner Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, -0.9946, 0.1033, 0.0081, 0, -0.0152, -0.0682, -0.9976, 0, 0.347, 3.0168, 4.1299, 1]},
-        "Marker : Outer Roll": {'node': None, 'matrix': [-0.1025, -0.9923, 0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.0152, 0.0682, 0.9976, 0, 0.2093, 2.4004, -4.8938, 1]},
-        "Marker : Ball Twist": {'node': None, 'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1]},
-        "Marker : Foot Control": {'node': None,'matrix': [-0.0152, -0.0682, -0.9976, 0, 0.1025, 0.9923, -0.0694, 0, 0.9946, -0.1033, -0.0081, 0, 0.281, 2.7217, -0.1902, 1]},
-    }
 
     _LABELS = [
         "Upper",
@@ -75,8 +196,15 @@ class LegComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
-            name="_MarkerData",
-            value=self._DEFAULT_GUIDE_MARKER_DATA.copy(),
+            name="GuideMarkers",
+            value=_default_marker_data(),
+            hidden=True,
+        )
+
+        self.declare_option(
+            name="Guides",
+            value=dict(),
+            hidden=True,
         )
 
         self.declare_option(
@@ -133,16 +261,13 @@ class LegComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name: str):
 
-        if option_name.startswith("_"):
-            return self.IGNORE_OPTION_FOR_UI
-
         if option_name == "Location":
             return aniseed.widgets.everywhere.LocationSelector(self.config)
 
     # ----------------------------------------------------------------------------------
     def user_functions(self):
 
-        menu = collections.OrderedDict()
+        menu = super(LegComponent, self).user_functions()
 
         # -- Only show the skeleton creation tools if we dont have a skeleton
         leg_joint = self.requirement("Leg Root").get()
@@ -150,19 +275,19 @@ class LegComponent(aniseed.RigComponent):
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
         if not leg_joint or not mc.objExists(leg_joint):
-            menu["Create Joints"] = self.user_func_create_skeleton
+            menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
             return menu
 
-        # -- Depending on whether we have a guide or not, change what we show
-        # -- in the actions menu
-        if self._get_guide():
-            menu["Remove Guide"] = self.user_func_delete_guide
+        guide_data = self.option("Guides").get()
+
+        if guide_data.get("guide_org") and mc.objExists(guide_data["guide_org"]):
+            # -- Depending on whether we have a guide or not, change what we show
+            # -- in the actions menu
+            # if self._get_guide():
+            menu["Remove Guide"] = functools.partial(self.user_func_remove_guide)
 
         else:
-            menu["Create Guide"] = self.user_func_create_guide
-
-        # -- Providing we have joints or a guide, we show the align ik tool
-        menu["Align IK"] = self.user_func_align_guide_ik
+            menu["Create Guide"] = functools.partial(self.user_func_build_guide)
 
         return menu
 
@@ -711,6 +836,183 @@ class LegComponent(aniseed.RigComponent):
                 shapeshift.rotate_shape(twist, *fk_shape_rotation)
 
     # ----------------------------------------------------------------------------------
+    def user_func_build_guide(self) -> str:
+
+        # -- Get the joint hierarchy
+        leg_root = self.requirement("Leg Root").get()
+        toe = self.requirement("Toe").get()
+
+        all_joints = bony.hierarchy.get_between(
+            leg_root,
+            toe,
+        )
+
+        guide_data = dict()
+
+        # -- Read the current joint axis orientation so we can always
+        # -- default to it
+        guide_data["facing_direction"] = bony.direction.direction_as_string(
+            bony.direction.get_chain_facing_direction(
+                all_joints[0],
+                all_joints[2],
+            ),
+        )
+
+        guide_data["upvector_direction"] = bony.direction.direction_as_string(
+            bony.direction.get_upvector_direction(
+                all_joints[0],
+                all_joints[2],
+            ),
+        )
+
+        guide_data["guide_org"] = aniseed.control.basic_transform(
+            classification="gde",
+            description=f"LegManipulationGuide",
+            location=self.option("Location").get(),
+            config=self.config,
+            parent=None,
+        )
+
+        last_guide = None
+        guide_data["guides"] = dict()
+
+        for idx, joint in enumerate(all_joints):
+
+            guide_control = aniseed.utils.guide.create(
+                joint,
+                parent=guide_data["guide_org"],
+                link_to=last_guide,
+            )
+            guide_data["guides"][joint] = guide_control
+
+            last_guide = guide_control
+
+        default_marker_data = _default_marker_data()
+        stored_marker_data = self.option("GuideMarkers").get()
+        data_to_store = dict()
+
+        for marker_label in default_marker_data:
+
+            marker_data = stored_marker_data.get(
+                marker_label,
+                default_marker_data[marker_label]
+            )
+
+            if "node" not in marker_data:
+                marker_data = default_marker_data[marker_label]
+
+            marker = aniseed.control.basic_transform(
+                classification="gde",
+                description=marker_label.split(":")[-1].replace(" ", ""),
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=guide_data["guide_org"],
+                match_to=marker_data["matrix"],
+            )
+            marker_data["node"] = marker
+
+            shapeshift.apply(
+                node=marker,
+                data="core_symbol_rotator",
+                color=[0, 255, 0],
+            )
+
+            data_to_store[marker_label] = marker_data
+
+        self.option("Guides").set(guide_data)
+        self.option("GuideMarkers").set(data_to_store)
+
+        bony.visibility.hide(all_joints)
+
+    # ----------------------------------------------------------------------------------
+    def user_func_remove_guide(self):
+        guide_data = self.option("Guides").get()
+
+        if not guide_data:
+            print("no guide data")
+            return
+
+        try:
+            guide_root = guide_data["guide_org"]
+
+        except KeyError:
+            self.option("Guides").set(dict())
+            return
+
+        all_chain = bony.hierarchy.get_between(
+            self.requirement("Leg Root").get(),
+            self.requirement("Toe").get(),
+        )
+
+        transforms = dict()
+
+        for joint, guide in zip(all_chain, guide_data["guides"]):
+
+            transforms[joint] = mc.xform(
+                guide,
+                query=True,
+                matrix=True,
+                worldSpace=True,
+            )
+
+        # -- Store the marker data before it gets removed
+        new_data = dict()
+
+        for label in _default_marker_data():
+            existing_data = self.option("GuideMarkers").get()[label]
+
+            new_data[label] = dict(
+                node=None,
+                matrix=mc.xform(
+                    existing_data["node"],
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+            )
+
+        self.option("GuideMarkers").set(new_data)
+
+        mc.delete(guide_data["guide_org"])
+        self.option("Guides").set(dict())
+
+        for joint, transform in transforms.items():
+            mc.xform(
+                joint,
+                matrix=transform,
+                worldSpace=True,
+            )
+
+        mc.select(
+            [
+                all_chain[0],
+                all_chain[-1],
+            ]
+        )
+
+        # -- Align the foot
+        bony.ik.align_bones_for_ik(
+            all_chain[0],
+            all_chain[2],
+            guide_data.get("facing_direction", "positive x"),
+            guide_data.get("upvector_direction", "positive y"),
+        )
+
+        mc.xform(
+            all_chain[-2],
+            matrix=transforms[all_chain[-2]],
+            worldSpace=True,
+        )
+
+        mc.xform(
+            all_chain[-1],
+            matrix=transforms[all_chain[-1]],
+            worldSpace=True,
+        )
+
+        bony.visibility.show(all_chain)
+
+    # ----------------------------------------------------------------------------------
     def _setup_ik_pivot_behaviour(self, foot_control, foot_bone, toe_bone):
 
         aniseed.utils.attribute.add_separator_attr(foot_control)
@@ -742,7 +1044,7 @@ class LegComponent(aniseed.RigComponent):
                 shape_scale=4,
                 config=self.config,
             )
-            print(marker_transform)
+
             mc.xform(
                 aniseed.control.get_classification(
                     pivot_control,
@@ -782,7 +1084,7 @@ class LegComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def _get_marker_matrix(self, marker_name):
-        marker_data = self.option("_MarkerData").get()
+        marker_data = self.option("GuideMarkers").get()
         return marker_data[marker_name]["matrix"]
 
     # ----------------------------------------------------------------------------------
@@ -799,13 +1101,14 @@ class LegComponent(aniseed.RigComponent):
                 return connection.split(".")[0]
 
     # ----------------------------------------------------------------------------------
-    def user_func_create_skeleton(self, upper_twist_count=None, lower_twist_count=None):
+    def user_func_create_skeleton(self, parent=None, upper_twist_count=None, lower_twist_count=None):
 
-        try:
-            parent = mc.ls(sl=True)[0]
+        if not parent:
+            try:
+                parent = mc.ls(sl=True)[0]
 
-        except:
-            parent = None
+            except:
+                parent = None
 
         if upper_twist_count is None:
             upper_twist_count = qute.utilities.request.text(
@@ -932,224 +1235,18 @@ class LegComponent(aniseed.RigComponent):
                 across="YZ"
             )
 
-        self.user_func_create_guide()
+        # -- Immediately enter guide mode
+        self.user_func_build_guide()
 
-    # ----------------------------------------------------------------------------------
-    def user_func_create_guide(self):
+        # -- Mirror the guide markers
+        if self.option("Location").get() == self.config.right:
+            guide_data = self.option("GuideMarkers").get()
+            markers = list()
 
-        leg_root = self.requirement("Leg Root").get()
-        toe = self.requirement("Toe").get()
+            for _, data in guide_data.items():
+                markers.append(data["node"])
 
-        guide_org = aniseed.control.basic_transform(
-            classification="gde",
-            description=f"LegManipulationGuide",
-            location=self.option("Location").get(),
-            config=self.config,
-            parent=mc.listRelatives(
-                self.requirement("Leg Root").get(),
-                parent=True,
-            )[0]
-        )
-
-        mc.addAttr(
-            guide_org,
-            shortName="guideRig",
-            at="message",
-        )
-
-        mc.connectAttr(
-            f"{leg_root}.message",
-            f"{guide_org}.guideRig",
-        )
-
-        all_joints = bony.hierarchy.get_between(
-            leg_root,
-            toe,
-        )
-
-        all_controls = list()
-
-        for joint in all_joints:
-            guide_control = aniseed.utils.guide.create(
-                joint,
-                parent=guide_org,
+            bony.flip.global_mirror(
+                transforms=markers,
+                across="YZ",
             )
-
-            all_controls.append(guide_control)
-
-        for idx in range(len(all_joints)):
-
-            if idx == len(all_joints) - 1:
-                continue
-
-            joint = all_joints[idx]
-            control = all_controls[idx]
-            next_control = all_controls[idx + 1]
-
-            for child in mc.listRelatives(joint, children=True, type="joint") or list():
-
-                if child in all_joints:
-                    continue
-
-                tween_control = aniseed.utils.guide.tween(
-                    child,
-                    from_this=control,
-                    to_this=next_control,
-                    parent=control,
-                )
-                all_controls.append(tween_control)
-
-        # -- Now create the guide markers
-        marker_parent = aniseed.control.basic_transform(
-            classification="gde",
-            description="marker_parent",
-            location=self.option("Location").get(),
-            config=self.config,
-            parent=guide_org
-        )
-
-        default_marker_data = self._DEFAULT_GUIDE_MARKER_DATA
-        stored_marker_data = self.option("_MarkerData").get()
-        data_to_store = dict()
-
-        for marker_label in default_marker_data:
-
-            marker_data = stored_marker_data.get(
-                marker_label,
-                default_marker_data[marker_label]
-            )
-
-            if "node" not in marker_data:
-                marker_data = default_marker_data[marker_label]
-                
-            marker = aniseed.control.basic_transform(
-                classification="gde",
-                description=marker_label.split(":")[-1].replace(" ", ""),
-                location=self.option("Location").get(),
-                config=self.config,
-                parent=marker_parent,
-                match_to=marker_data["matrix"],
-            )
-
-            all_controls.append(marker)
-
-            marker_data["node"] = marker
-
-            shapeshift.apply(
-                node=marker,
-                data="core_symbol_rotator",
-                color=[0, 255, 0],
-            )
-
-            data_to_store[marker_label] = marker_data
-
-        self.option("_MarkerData").set(data_to_store)
-
-        return guide_org
-
-    # ----------------------------------------------------------------------------------
-    def user_func_delete_guide(self):
-
-        guide_root = self._get_guide()
-
-        if not guide_root:
-            return
-
-        transforms = dict()
-
-        all_chain = bony.hierarchy.get_between(
-            self.requirement("Leg Root").get(),
-            self.requirement("Toe").get(),
-        )
-
-        for joint in all_chain:
-
-            transforms[joint] = mc.xform(
-                joint,
-                query=True,
-                matrix=True,
-            )
-
-            for child in mc.listRelatives(joint, children=True, type="joint") or list():
-                transforms[child] = mc.xform(
-                    child,
-                    query=True,
-                    matrix=True,
-                )
-
-        connections = mc.listConnections(
-            f"{all_chain[0]}.message",
-            destination=True,
-            plugs=True,
-        )
-
-        # -- Store the marker data before it gets removed
-        new_data = dict()
-
-        for label in self._DEFAULT_GUIDE_MARKER_DATA:
-
-            existing_data = self.option("_MarkerData").get()[label]
-
-            new_data[label] = dict(
-                node=None,
-                matrix=mc.xform(
-                    existing_data["node"],
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-            )
-
-        self.option("_MarkerData").set(new_data)
-
-        # -- Now we delete the guide rig
-        for connection in connections:
-            if "guideRig" in connection:
-                mc.delete(connection.split(".")[0])
-
-        # -- Ensure all the joints are transformed exactly how
-        # -- we want them
-        for joint, matrix in transforms.items():
-            mc.xform(
-                joint,
-                matrix=matrix,
-            )
-
-
-    # ----------------------------------------------------------------------------------
-    def user_func_align_guide_ik(self):
-
-        # -- Before we re-align the ik chain, we need
-        # -- to check we have the guide built, and retain
-        # -- the global transforms of the guide objects.
-        guide_root = self._get_guide()
-        #
-        # if not guide_root:
-        #     self.user_func_create_guide()
-
-        all_chain = bony.hierarchy.get_between(
-            self.requirement("Leg Root").get(),
-            self.requirement("Toe").get(),
-        )
-
-        if guide_root:
-            self.user_func_delete_guide()
-
-            mc.select(
-                [
-                    all_chain[0],
-                    all_chain[-1],
-                ]
-            )
-            bony.ik.clean_ik_plane_with_ui()
-
-            self.user_func_create_guide()
-
-        else:
-            mc.select(
-                [
-                    all_chain[0],
-                    all_chain[-1],
-                ]
-            )
-            bony.ik.clean_ik_plane_with_ui()
