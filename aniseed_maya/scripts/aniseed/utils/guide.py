@@ -4,7 +4,7 @@ import maya.cmds as mc
 
 
 # --------------------------------------------------------------------------------------
-def create(joint, parent=None, position_only=False, shape="core_cube", scale=3.0):
+def create(joint, parent=None, position_only=False, shape="core_cube", scale=3.0, link_to=None):
     """
     Creates a simple guide control object to transform a joint
     """
@@ -66,6 +66,12 @@ def create(joint, parent=None, position_only=False, shape="core_cube", scale=3.0
         mc.parent(
             guide_control,
             parent,
+        )
+
+    if link_to:
+        link(
+            guide_control,
+            link_to,
         )
 
     return guide_control
@@ -166,3 +172,87 @@ def tween(drive_this, from_this, to_this, parent=None, factor=None):
                 lock=True,
                 k=False,
             )
+
+
+# --------------------------------------------------------------------------------------
+def link(guide_a, guide_b):
+
+    mc.select(clear=True)
+    curve = mc.curve(
+        d=1,
+        p=[
+            [0, 0, 0],
+            [0, 0, 0],
+        ],
+    )
+
+    mc.setAttr(
+        f"{curve}.inheritsTransform",
+        False,
+    )
+
+    mc.parent(
+        curve,
+        guide_a,
+    )
+
+    curve_shape = mc.listRelatives(curve, shapes=True)[0]
+
+    # -- Make the curve unselectable
+    mc.setAttr(
+        f"{curve_shape}.template",
+        True
+    )
+
+    # -- Create the first cluster
+    mc.select("%s.cv[0]" % curve_shape)
+    cls_root_handle, cls_root_xfo = mc.cluster()
+
+    # -- Create the second cluster
+    mc.select("%s.cv[1]" % curve)
+    cls_target_handle, cls_target_xfo = mc.cluster()
+
+    # -- Hide the clusters, as we do not want them
+    # -- to be interactable
+    mc.setAttr(
+        f"{cls_root_xfo}.visibility",
+        False,
+    )
+
+    mc.setAttr(
+        f"{cls_target_xfo}.visibility",
+        False,
+    )
+
+    # -- Ensure they"re both children of the guide
+    mc.parent(
+        cls_root_xfo,
+        guide_a,
+    )
+
+    mc.parent(
+        cls_target_xfo,
+        guide_b,
+    )
+
+    mc.xform(
+        cls_root_xfo,
+        matrix=mc.xform(
+            guide_a,
+            query=True,
+            matrix=True,
+            worldSpace=True,
+        ),
+        worldSpace=True,
+    )
+
+    mc.xform(
+        cls_target_xfo,
+        matrix=mc.xform(
+            guide_b,
+            query=True,
+            matrix=True,
+            worldSpace=True,
+        ),
+        worldSpace=True,
+    )
