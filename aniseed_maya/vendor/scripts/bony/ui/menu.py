@@ -3,6 +3,7 @@ import qute
 import json
 import functools
 
+from .. import utils
 from .. import resources
 
 _MENU_JSON = os.path.join(
@@ -79,4 +80,5 @@ def _create_menu(tool_list, menu):
 # --------------------------------------------------------------------------------------
 def execute_string(execution_string):
     print(f"Running : {execution_string}")
-    exec(execution_string)
+    with utils.UndoChunk():
+        exec(execution_string)

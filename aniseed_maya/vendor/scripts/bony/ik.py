@@ -6,6 +6,7 @@ from . import orients
 from . import hierarchy
 from . import math
 from . import transform
+from . import utils
 from . import constants as c
 
 
@@ -100,6 +101,7 @@ def get_inverted_aim_dir(aim_label):
 
 
 # --------------------------------------------------------------------------------------
+@utils.undoable
 def align_bones_for_ik(
         root,
         tip,
