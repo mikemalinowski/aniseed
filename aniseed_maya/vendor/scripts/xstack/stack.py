@@ -151,6 +151,16 @@ class Stack:
         self.serialise()
 
     # ----------------------------------------------------------------------------------
+    def print_serialisation(self):
+        print(
+            json.dumps(
+                self.serialise(),
+                indent=4,
+                sort_keys=True,
+            )
+        )
+
+    # ----------------------------------------------------------------------------------
     # noinspection PyBroadException
     def build(
             self,
@@ -223,6 +233,7 @@ class Stack:
 
                 print("-" * 100)
                 print(f"About to Validate : {component_instance.label()} ")
+                component_instance.describe()
 
                 if not component_instance.is_valid():
                     component_instance.set_status(
@@ -637,6 +648,12 @@ class Stack:
             results.append(component)
 
         return results
+
+    # ----------------------------------------------------------------------------------
+    def find(self, label):
+        for component in self.components():
+            if component.label() == label:
+                return component
 
     # ----------------------------------------------------------------------------------
     def clear_components(self):
