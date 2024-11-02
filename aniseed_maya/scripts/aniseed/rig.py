@@ -1,3 +1,4 @@
+import os
 import bony
 import json
 import typing
@@ -17,6 +18,16 @@ class MayaRig(aniseed_everywhere.Rig):
 
     # ------------------------------------------------------------------------------------------------------------------
     def __init__(self, label="", host=None, component_paths: typing.List or None = None):
+
+        # -- Ensure we're adding our default path locations
+        component_paths = component_paths or []
+        component_paths.append(
+            os.path.join(
+                os.path.dirname(__file__),
+                "components",
+            ),
+        )
+
         super(MayaRig, self).__init__(
             label=label,
             host=host,

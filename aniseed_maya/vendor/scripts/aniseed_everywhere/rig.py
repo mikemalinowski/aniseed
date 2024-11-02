@@ -31,6 +31,16 @@ class Rig(xstack.Stack):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, label="", host=None, component_paths: typing.List or None = None):
+
+        # -- Ensure we're adding our default path locations
+        component_paths = component_paths or []
+        component_paths.append(
+            os.path.join(
+                os.path.dirname(__file__),
+                "components",
+            ),
+        )
+
         super(Rig, self).__init__(
             label=label,
             component_paths=component_paths,
