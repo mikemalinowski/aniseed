@@ -123,11 +123,6 @@ class OptionsWidget(qute.QWidget):
             # -- Get the option object
             option_widget = component.option_widget(option.name())
 
-            # -- If this option is flagged as not needing a ui implementation
-            # -- then we dont need to do anything
-            if option_widget == component.IGNORE_OPTION_FOR_UI:
-                continue
-
             # -- Get the raw value, as we want to see the address
             # -- if its an address
             option_value = option.get(resolved=False)
@@ -284,17 +279,14 @@ class RequirementsWidget(qute.QWidget):
 
         for requirement in component.requirements():
 
+            if requirement.hidden():
+                continue
+
             if self._pre_expose_only and not requirement.should_pre_expose():
                 continue
 
             # -- Get the requirement object
             requirement_widget = component.requirement_widget(requirement.name())
-
-
-            # -- If this requirement is flagged as not needing a ui implementation
-            # -- then we dont need to do anything
-            if requirement_widget == component.IGNORE_OPTION_FOR_UI:
-                continue
 
             # -- If we were not given a widget, then as qute to derive one
             # -- for us

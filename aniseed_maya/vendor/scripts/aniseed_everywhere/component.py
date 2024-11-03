@@ -46,11 +46,6 @@ class RigComponent(xstack.Component):
         if option_name == "foobar":
             return qute.QLineEdit()
         ```
-
-        If you do not want a specific option to be shown in the ui, you can do:
-
-        if option_name == "foobar":
-            return self.IGNORE_OPTION_FOR_UI
         """
         return None
 
@@ -69,11 +64,6 @@ class RigComponent(xstack.Component):
         if requirement_name == "foobar":
             return qute.QLineEdit()
         ```
-
-        If you do not want a specific requirement to be shown in the ui, you can do:
-
-        if requirement_name == "foobar":
-            return self.IGNORE_OPTION_FOR_UI
         """
         return None
 

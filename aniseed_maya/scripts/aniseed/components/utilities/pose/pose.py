@@ -40,6 +40,7 @@ class PosingComponent(aniseed.RigComponent):
         self.declare_option(
             "_PoseData",
             value=None,
+            hidden=True,
         )
 
     # ----------------------------------------------------------------------------------
@@ -49,9 +50,6 @@ class PosingComponent(aniseed.RigComponent):
                 button_name="Store Pose",
                 func=self._store
             )
-
-        if option_name == "_PoseData":
-            return self.IGNORE_OPTION_FOR_UI
 
     # ----------------------------------------------------------------------------------
     def requirement_widget(self, requirement_name: str) :

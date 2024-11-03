@@ -48,12 +48,6 @@ class Component:
     # -- icon = os.path.join(os.path.dirname(__file__), "my_icon_name.png")
     icon = ""
 
-    # -- Sometimes it can be useful for a widget to represent multiple options
-    # -- or requirements. In this case, if you return self.IGNORE_OPTION_FOR_UI from
-    # -- within the option_widget or requirement_widget then that option/requirement
-    # -- will not be shown in any ui
-    IGNORE_OPTION_FOR_UI = "__ignore_option_for_ui__"
-
     # ----------------------------------------------------------------------------------
     # This MUST be re-implemented
     def run(self) -> bool:
@@ -86,11 +80,6 @@ class Component:
         if option_name == "foobar":
             return qute.QLineEdit()
         ```
-
-        If you do not want a specific option to be shown in the ui, you can do:
-
-        if option_name == "foobar":
-            return self.IGNORE_OPTION_FOR_UI
         """
         return None
 
@@ -109,11 +98,6 @@ class Component:
         if requirement_name == "foobar":
             return qute.QLineEdit()
         ```
-
-        If you do not want a specific requirement to be shown in the ui, you can do:
-
-        if requirement_name == "foobar":
-            return self.IGNORE_OPTION_FOR_UI
         """
         return None
 

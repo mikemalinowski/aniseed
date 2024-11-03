@@ -26,6 +26,7 @@ class StoreControlShapes(aniseed.RigComponent):
         self.declare_option(
             name="Shape Data",
             value=list(),
+            hidden=True,
         )
 
         self.declare_option(
@@ -35,9 +36,6 @@ class StoreControlShapes(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name):
-        if option_name == "Shape Data":
-            return self.IGNORE_OPTION_FOR_UI
-
         if option_name == "_Clear Shapes":
             return aniseed.widgets.everywhere.ButtonWidget(
                 button_name="Clear Shape Data",
@@ -119,13 +117,6 @@ class ApplyControlShapes(aniseed.RigComponent):
             name="Apply Data",
             value=True,
         )
-
-    # ----------------------------------------------------------------------------------
-    def option_widget(self, option_name):
-        if option_name == "Shape Data":
-            return self.IGNORE_OPTION_FOR_UI
-
-        return None
 
     # ----------------------------------------------------------------------------------
     def run(self) -> bool:
