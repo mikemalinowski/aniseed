@@ -233,13 +233,11 @@ class Stack:
 
                 print("-" * 100)
                 print(f"About to Validate : {component_instance.label()} ")
-                component_instance.describe()
 
                 if not component_instance.is_valid():
                     component_instance.set_status(
                         Status.Invalid,
                     )
-
                     print(f"    {component_instance.label()} FAILED its is_valid test")
                     invalid_result = True
 
@@ -251,6 +249,9 @@ class Stack:
                         component_instance.set_status(
                             Status.Invalid,
                         )
+
+                if component_instance.status() == Status.Invalid:
+                    component_instance.describe()
 
             except:
                 print(f"{component_instance.label()} failed during validation check")
