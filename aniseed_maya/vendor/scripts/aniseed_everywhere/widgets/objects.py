@@ -55,7 +55,7 @@ class CustomLineEdit(qute.QLineEdit):
             parent = parent.parent()
 
             # -- The last parent is the rig, so dont add that
-            if not parent.parent():
+            if not parent or parent.parent():
                 break
 
             last_menu = submenu

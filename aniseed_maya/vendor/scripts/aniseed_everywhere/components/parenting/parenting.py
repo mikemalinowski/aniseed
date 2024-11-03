@@ -20,7 +20,7 @@ class ReParentComponent(ani.RigComponent):
 
         self.declare_requirement(
             name="New Parent",
-            validate=True,
+            validate=False,
             group="Required Nodes",
         )
 

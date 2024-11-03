@@ -125,7 +125,10 @@ def set_parent(object_, parent):
     """
     This should return the parent of the given object
     """
-    mc.parent(get_name(object_), parent)
+    if parent:
+        mc.parent(get_name(object_), parent)
+    else:
+        mc.parent(get_name(object_), world=True)
 
 
 # --------------------------------------------------------------------------------------
