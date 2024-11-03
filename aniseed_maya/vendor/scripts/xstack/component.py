@@ -249,6 +249,23 @@ class Component:
         self.changed.emit()
 
     # ----------------------------------------------------------------------------------
+    def documentation(self):
+        if not self.__doc__:
+            return ""
+
+        lines = []
+
+        for line in self.__doc__.split("\n"):
+            line = line.strip()
+
+            if not line:
+                line = "\n"
+
+            lines.append(line)
+
+        return " ".join(lines)
+
+    # ----------------------------------------------------------------------------------
     def suggested_label(self):
         return self.identifier
 

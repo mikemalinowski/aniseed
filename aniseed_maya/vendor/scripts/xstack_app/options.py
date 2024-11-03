@@ -94,6 +94,10 @@ class OptionsWidget(qute.QWidget):
         self.option_layout = qute.QVBoxLayout()
         self.option_layout.setContentsMargins(10, 10, 10, 10)
 
+        self.help_text = qute.QLabel()
+        self.help_text.setWordWrap(True)
+
+        self.layout().addWidget(self.help_text)
         self.layout().addLayout(self.option_layout)
 
     # ----------------------------------------------------------------------------------
@@ -108,7 +112,11 @@ class OptionsWidget(qute.QWidget):
 
         # -- If we do not have a component we dont need to populate anything
         if not component:
+            self.help_text.setText("")
             return
+
+        # -- Update the help text
+        self.help_text.setText(component.documentation())
 
         group_layouts = dict()
 
@@ -259,6 +267,10 @@ class RequirementsWidget(qute.QWidget):
         self.requirement_layout = qute.QVBoxLayout()
         self.requirement_layout.setContentsMargins(10, 10, 10, 10)
 
+        self.help_text = qute.QLabel()
+        self.help_text.setWordWrap(True)
+
+        self.layout().addWidget(self.help_text)
         self.layout().addLayout(self.requirement_layout)
 
     # ----------------------------------------------------------------------------------
@@ -273,7 +285,11 @@ class RequirementsWidget(qute.QWidget):
 
         # -- If we do not have a component we dont need to populate anything
         if not component:
+            self.help_text.setText("")
             return
+
+        # -- Update the help text
+        self.help_text.setText(component.documentation())
 
         group_layouts = dict()
 
@@ -474,6 +490,10 @@ class OutputsWidget(qute.QWidget):
         self.output_layout = qute.QVBoxLayout()
         self.output_layout.setContentsMargins(10, 10, 10, 10)
 
+        self.help_text = qute.QLabel()
+        self.help_text.setWordWrap(True)
+
+        self.layout().addWidget(self.help_text)
         self.layout().addLayout(self.output_layout)
 
     # ----------------------------------------------------------------------------------
@@ -494,7 +514,11 @@ class OutputsWidget(qute.QWidget):
 
         # -- If we do not have a component we dont need to populate anything
         if not component:
+            self.help_text.setText("")
             return
+
+        # -- Update the help text
+        self.help_text.setText(component.documentation())
 
         group_layouts = dict()
 

@@ -10,6 +10,10 @@ import maya.cmds as mc
 
 # --------------------------------------------------------------------------------------
 class FKSpineComponent(aniseed.RigComponent):
+    """
+    This component will create a rig where all controls are sequential except the
+    hip sway which can be manipulated without adjusting the children.
+    """
 
     identifier = "Standard : FK Spine"
 
