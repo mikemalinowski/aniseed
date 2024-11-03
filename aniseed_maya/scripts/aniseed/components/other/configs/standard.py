@@ -37,7 +37,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
         )
 
         self.rig.add_component(
-            component_type="Basics : Reparent",
+            component_type="Utility : Reparent",
             label="Parent Skeleton",
             requirements={
                 "Node To Re-Parent": global_joint,
