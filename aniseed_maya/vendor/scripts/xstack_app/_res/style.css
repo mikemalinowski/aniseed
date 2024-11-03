@@ -1,7 +1,8 @@
 QToolTip {
-    border: 2px solid green;
+    border: 2px solid antiquewhite;
     border-radius: 4px;
     padding: 2px;
+    color: antiquewhite;
     background-image: url(images/welcome.png);
 }
 
