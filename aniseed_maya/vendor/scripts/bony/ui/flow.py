@@ -1,8 +1,12 @@
+import os
 import qute
 import scribble
 import maya.cmds as mc
 
+from aniseed_everywhere.config import title
 from .. import flip
+from .. import skin
+
 
 MIRROR_PLANES = {
     "Z": 'XY',
@@ -10,6 +14,66 @@ MIRROR_PLANES = {
     "Y": 'XZ',
 }
 
+
+# --------------------------------------------------------------------------------------
+def save_skins():
+
+    last_folder_path = ""
+
+    save_paths = dict()
+
+    for mesh in mc.ls(sl=True):
+
+        save_path = qute.utilities.request.filepath(
+            title=f"Save Skin : {mesh}",
+            save=True,
+            path=os.path.join(
+                last_folder_path,
+                mesh + ".json",
+            ),
+            filter_="*.json (*.json)",
+        )
+        
+        if not save_path:
+            return
+        
+        save_paths[mesh] = save_path
+        last_folder_path = save_path
+    
+    for mesh, save_path in save_paths.items():
+        skin.save_skin_file(
+            mesh,
+            save_path,
+        )
+
+# --------------------------------------------------------------------------------------
+def load_skins():
+    last_folder_path = ""
+    load_paths = dict()
+
+    for mesh in mc.ls(sl=True):
+
+        load_path = qute.utilities.request.filepath(
+            title=f"Load Skin : {mesh}",
+            save=False,
+            path=os.path.join(
+                last_folder_path,
+                mesh + ".json",
+            ),
+            filter_="*.json (*.json)",
+        )
+
+        if not load_path:
+            return
+
+        load_paths[mesh] = load_path
+        last_folder_path = load_path
+
+    for mesh, save_path in load_paths.items():
+        skin.load_skin_file(
+            mesh,
+            save_path,
+        )
 
 # --------------------------------------------------------------------------------------
 def mirror_current():

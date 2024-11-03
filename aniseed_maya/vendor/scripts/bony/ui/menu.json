@@ -168,6 +168,25 @@
         "python": "import bony;bony.skin.copy_skin()",
         "tooltip": "The first selected item is expected to be the skinned mesh",
         "children": []
+      },
+      {
+        "type": "separator"
+      },
+      {
+        "type": "tool",
+        "name": "Save Skin",
+        "icon": "skinning.png",
+        "python": "import bony;bony.ui.flow.save_skins()",
+        "tooltip": "Saves the skin data for the selected objects",
+        "children": []
+      },
+      {
+        "type": "tool",
+        "name": "Load Skin",
+        "icon": "skinning.png",
+        "python": "import bony;bony.ui.flow.load_skins()",
+        "tooltip": "Loads the skin data for the selected objects",
+        "children": []
       }
     ]
   }

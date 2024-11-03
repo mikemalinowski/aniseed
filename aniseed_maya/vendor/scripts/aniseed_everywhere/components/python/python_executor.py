@@ -42,7 +42,6 @@ class CodeEditor(qute.QTextEdit):
         
     # ----------------------------------------------------------------------------------
     def set_value(self, value):
-        print(123)
         self.document().setPlainText(value)
         self.changed.emit()
 
