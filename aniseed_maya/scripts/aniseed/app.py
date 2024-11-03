@@ -101,7 +101,6 @@ class MayaAppWidget(aniseed_everywhere.app.AppWidget):
         is shown
         """
         self._register_script_jobs()
-        print("on show event")
         self.switch_rig()
         
     # --------------------------------------------------------------------------

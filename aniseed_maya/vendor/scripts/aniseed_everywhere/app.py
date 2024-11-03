@@ -71,7 +71,6 @@ class AppWidget(xstack_app.AppWidget):
 
         # -- If we have any rigs, use the first one as the active rig by default
         if rigs:
-            print("window defintion")
             self.switch_rig(rigs[0])
 
     # ----------------------------------------------------------------------------------
