@@ -516,26 +516,6 @@ class SplineSpine(aniseed.RigComponent):
             2,  # -- Object Up (Start/End)
         )
 
-        mc.setAttr(
-            f"{ikh}.dForwardAxis",
-            bony.direction.get_ik_solver_attribute_index(direction=chain_direction)
-        )
-
-        # -- Get the index of the world up list.
-        if self.option("Upvector Axis").get() == "X":
-            up_axis = 6  # -- Positive X
-
-        elif self.option("Upvector Axis").get() == "Y":
-            up_axis = 0  # -- Positive Y
-
-        else:
-            up_axis = 3  # -- Positive Z
-
-        mc.setAttr(
-            f"{ikh}.dWorldUpAxis",
-            up_axis
-        )
-
         mc.connectAttr(
             f"{root_upvector}.worldMatrix[0]",
             f"{ikh}.dWorldUpMatrix",
@@ -613,10 +593,15 @@ class SplineSpine(aniseed.RigComponent):
             drivers[-1] = tip_control
 
         for idx in range(len(drivers)):
-            mc.parentConstraint(
+            cns = mc.parentConstraint(
                 drivers[idx],
                 joints_to_drive[idx],
                 maintainOffset=True,
+            )[0]
+
+            mc.setAttr(
+                f"{cns}.interpType",
+                2,  # -- Shortest
             )
 
         # -- Set our outputs if we're not in guide mode
