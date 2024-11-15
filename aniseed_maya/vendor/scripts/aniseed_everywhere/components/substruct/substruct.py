@@ -1,11 +1,10 @@
 import os
-
-import aniseed_everywhere as ani
-from crosswalk import app
+import crosswalk
+import aniseed_everywhere
 
 
 # --------------------------------------------------------------------------------------
-class AddSubStructureComponent(ani.RigComponent):
+class AddSubStructureComponent(aniseed_everywhere.RigComponent):
 
     identifier = "Utility : Add Sub Structure"
     icon = os.path.join(
@@ -17,7 +16,7 @@ class AddSubStructureComponent(ani.RigComponent):
     def __init__(self, *args, **kwargs):
         super(AddSubStructureComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             description="Typically the root of the rig",
             validate=True,
@@ -33,19 +32,19 @@ class AddSubStructureComponent(ani.RigComponent):
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name):
         if option_name == "Sub Nodes":
-            return ani.widgets.TextList()
+            return aniseed_everywhere.widgets.TextList()
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name == "Parent":
-            return ani.widgets.ObjectSelector(component=self)
+            return aniseed_everywhere.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        parent = self.requirement("Parent").get()
+        parent = self.input("Parent").get()
 
-        existing_nodes = app.objects.get_children(parent)
+        existing_nodes = crosswalk.app.objects.get_children(parent)
 
         for sub_node in self.option("Sub Nodes").get():
 
@@ -59,7 +58,7 @@ class AddSubStructureComponent(ani.RigComponent):
             if resolved_name in existing_nodes:
                 continue
 
-            node = app.objects.create(
+            node = crosswalk.app.objects.create(
                 name=resolved_name,
                 parent=parent,
             )
@@ -68,7 +67,7 @@ class AddSubStructureComponent(ani.RigComponent):
 
 
 # --------------------------------------------------------------------------------------
-class DeleteChildren(ani.RigComponent):
+class DeleteChildren(aniseed_everywhere.RigComponent):
 
     identifier = "Utility : Delete Children"
     icon = os.path.join(
@@ -80,9 +79,10 @@ class DeleteChildren(ani.RigComponent):
     def __init__(self, *args, **kwargs):
         super(DeleteChildren, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Node",
-            value=""
+            value="",
+            ui=aniseed_everywhere.widgets.ObjectSelector(component=self)
         )
 
         self.declare_option(
@@ -91,23 +91,18 @@ class DeleteChildren(ani.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
-        if requirement_name == "Node":
-            return ani.widgets.ObjectSelector(component=self)
-
-    # ----------------------------------------------------------------------------------
     def run(self) -> bool:
 
-        node = self.requirement("Node").get()
+        node = self.input("Node").get()
 
-        if not app.objects.exists(node):
+        if not crosswalk.app.objects.exists(node):
             return True
 
-        for child in app.objects.get_children(node):
-            if app.objects.exists(child):
-                app.objects.delete(child)
+        for child in crosswalk.app.objects.get_children(node):
+            if crosswalk.app.objects.exists(child):
+                crosswalk.app.objects.delete(child)
 
         if self.option("Include Self").get():
-            app.objects.delete(node)
+            crosswalk.app.objects.delete(node)
 
         return True

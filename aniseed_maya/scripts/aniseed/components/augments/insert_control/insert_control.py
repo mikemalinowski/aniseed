@@ -11,7 +11,7 @@ class InsertControlComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(InsertControlComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             validate=True,
@@ -69,7 +69,7 @@ class InsertControlComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str) :
+    def input_widget(self, requirement_name: str) :
         if requirement_name == "Parent":
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -85,7 +85,7 @@ class InsertControlComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self) -> bool:
 
-        parent = self.requirement("Parent").get()
+        parent = self.input("Parent").get()
         children = mc.listRelatives(parent, children=True) or list()
         shapes = mc.listRelatives(parent, shapes=True) or list()
 

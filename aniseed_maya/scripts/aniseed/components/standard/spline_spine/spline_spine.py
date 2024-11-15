@@ -24,19 +24,19 @@ class SplineSpine(aniseed.RigComponent):
         super(SplineSpine, self).__init__(*args, **kwargs)
 
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Root Joint",
             value="",
             group="Joint Requirements",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Tip Joint",
             value="",
             group="Joint Requirements",
@@ -118,7 +118,7 @@ class SplineSpine(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
 
         object_requirements = [
             "Parent",
@@ -148,7 +148,7 @@ class SplineSpine(aniseed.RigComponent):
 
         menu = dict()
 
-        if not self.requirement("Root Joint").get():
+        if not self.input("Root Joint").get():
             menu["Create Joints"] = self.user_func_build_skeleton
 
             return menu
@@ -164,8 +164,8 @@ class SplineSpine(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
 
-        root_joint = self.requirement("Root Joint").get()
-        tip_joint = self.requirement("Tip Joint").get()
+        root_joint = self.input("Root Joint").get()
+        tip_joint = self.input("Tip Joint").get()
 
         if not root_joint:
             print("No root joint specified")
@@ -204,10 +204,10 @@ class SplineSpine(aniseed.RigComponent):
             self.option("GuideData").set(guide_data)
 
         else:
-            parent = self.requirement("Parent").get()
+            parent = self.input("Parent").get()
 
-        root_joint = self.requirement("Root Joint").get()
-        tip_joint = self.requirement("Tip Joint").get()
+        root_joint = self.input("Root Joint").get()
+        tip_joint = self.input("Tip Joint").get()
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -844,7 +844,7 @@ class SplineSpine(aniseed.RigComponent):
             match_to=parent,
             config=self.config
         )
-        self.requirement("Root Joint").set(root_joint)
+        self.input("Root Joint").set(root_joint)
 
         mc.xform(
             root_joint,
@@ -872,7 +872,7 @@ class SplineSpine(aniseed.RigComponent):
 
             parent = joint
 
-        self.requirement("Tip Joint").set(joint)
+        self.input("Tip Joint").set(joint)
         mc.select(joint)
 
         # -- When we build the skeleton, automatically create the guide
@@ -894,8 +894,8 @@ class SplineSpine(aniseed.RigComponent):
         transforms = dict()
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Root Joint").get(),
-            self.requirement('Tip Joint').get(),
+            self.input("Root Joint").get(),
+            self.input('Tip Joint').get(),
         )
 
         for joint in all_chain:

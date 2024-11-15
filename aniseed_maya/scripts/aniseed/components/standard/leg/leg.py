@@ -142,7 +142,9 @@ def _default_marker_data():
 
 # --------------------------------------------------------------------------------------
 class LegComponent(aniseed.RigComponent):
-
+    """
+    This is some documentation that the user will see. You should adjust the guides...
+    """
     identifier = "Standard : Leg"
 
     icon = os.path.join(
@@ -161,34 +163,34 @@ class LegComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(LegComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Leg Root",
             value="",
             validate=True,
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Toe",
             value="",
             validate=True,
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Upper Twist Joints",
             description="All upper twist joints",
             validate=False,
             group="Optional Twist Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Lower Twist Joints",
             description="All lower twist joints",
             validate=False,
@@ -247,7 +249,7 @@ class LegComponent(aniseed.RigComponent):
         self.declare_output("Upvector")
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
 
         if requirement_name in ["Parent", "Leg Root", "Toe"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
@@ -270,7 +272,7 @@ class LegComponent(aniseed.RigComponent):
         menu = super(LegComponent, self).user_functions()
 
         # -- Only show the skeleton creation tools if we dont have a skeleton
-        leg_joint = self.requirement("Leg Root").get()
+        leg_joint = self.input("Leg Root").get()
 
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
@@ -298,8 +300,8 @@ class LegComponent(aniseed.RigComponent):
             print("You must remove the guide before building")
             return False
 
-        leg_root = self.requirement("Leg Root").get()
-        toe_tip = self.requirement("Toe").get()
+        leg_root = self.input("Leg Root").get()
+        toe_tip = self.input("Toe").get()
 
         all_joints = bony.hierarchy.get_between(
             leg_root,
@@ -333,9 +335,9 @@ class LegComponent(aniseed.RigComponent):
     # noinspection DuplicatedCode
     def run(self):
 
-        leg_root = self.requirement("Leg Root").get()
-        toe_tip = self.requirement("Toe").get()
-        parent = self.requirement("Parent").get()
+        leg_root = self.input("Leg Root").get()
+        toe_tip = self.input("Toe").get()
+        parent = self.input("Parent").get()
         directions = bony.direction.Facing
 
         all_joints = bony.hierarchy.get_between(
@@ -675,7 +677,7 @@ class LegComponent(aniseed.RigComponent):
         # -- FK SETUP
         fk_controls = []
 
-        fk_parent = self.requirement("Parent").get()
+        fk_parent = self.input("Parent").get()
 
         for idx, joint in enumerate(all_joints):
 
@@ -789,8 +791,8 @@ class LegComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
-        upper_twist_joints = self.requirement("Upper Twist Joints").get()
-        lower_twist_joints = self.requirement("Lower Twist Joints").get()
+        upper_twist_joints = self.input("Upper Twist Joints").get()
+        lower_twist_joints = self.input("Lower Twist Joints").get()
 
         if upper_twist_joints:
             twist_component = self.rig.component_library.get("Augment : Twister")(
@@ -798,10 +800,10 @@ class LegComponent(aniseed.RigComponent):
                 stack=self.rig,
             )
 
-            twist_component.requirement("Joints").set(upper_twist_joints)
-            twist_component.requirement("Parent").set(parent)
-            twist_component.requirement("Root").set(nk_joints[0])
-            twist_component.requirement("Tip").set(nk_joints[1])
+            twist_component.input("Joints").set(upper_twist_joints)
+            twist_component.input("Parent").set(parent)
+            twist_component.input("Root").set(nk_joints[0])
+            twist_component.input("Tip").set(nk_joints[1])
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
@@ -820,10 +822,10 @@ class LegComponent(aniseed.RigComponent):
                 stack=self.rig,
             )
 
-            twist_component.requirement("Joints").set(lower_twist_joints)
-            twist_component.requirement("Parent").set(nk_joints[1])
-            twist_component.requirement("Root").set(nk_joints[1])
-            twist_component.requirement("Tip").set(nk_joints[2])
+            twist_component.input("Joints").set(lower_twist_joints)
+            twist_component.input("Parent").set(nk_joints[1])
+            twist_component.input("Root").set(nk_joints[1])
+            twist_component.input("Tip").set(nk_joints[2])
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
@@ -839,8 +841,8 @@ class LegComponent(aniseed.RigComponent):
     def user_func_build_guide(self) -> str:
 
         # -- Get the joint hierarchy
-        leg_root = self.requirement("Leg Root").get()
-        toe = self.requirement("Toe").get()
+        leg_root = self.input("Leg Root").get()
+        toe = self.input("Toe").get()
 
         all_joints = bony.hierarchy.get_between(
             leg_root,
@@ -940,8 +942,8 @@ class LegComponent(aniseed.RigComponent):
             return
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Leg Root").get(),
-            self.requirement("Toe").get(),
+            self.input("Leg Root").get(),
+            self.input("Toe").get(),
         )
 
         transforms = dict()
@@ -1091,7 +1093,7 @@ class LegComponent(aniseed.RigComponent):
     def _get_guide(self):
 
         connections = mc.listConnections(
-            f"{self.requirement('Leg Root').get()}.message",
+            f"{self.input('Leg Root').get()}.message",
             destination=True,
             plugs=True,
         )
@@ -1173,8 +1175,8 @@ class LegComponent(aniseed.RigComponent):
 
         all_joints = [upper_leg, lower_leg, foot, toe]
 
-        self.requirement("Leg Root").set(upper_leg)
-        self.requirement("Toe").set(toe)
+        self.input("Leg Root").set(upper_leg)
+        self.input("Toe").set(toe)
 
         if upper_twist_count:
             parent = upper_leg
@@ -1200,7 +1202,7 @@ class LegComponent(aniseed.RigComponent):
                     upper_increment * idx
                 )
                 all_joints.append(twist_joint)
-            self.requirement("Upper Twist Joints").set(upper_twist_joints)
+            self.input("Upper Twist Joints").set(upper_twist_joints)
 
         if lower_twist_count:
             parent = lower_leg
@@ -1227,7 +1229,7 @@ class LegComponent(aniseed.RigComponent):
                 )
                 all_joints.append(twist_joint)
 
-            self.requirement("Lower Twist Joints").set(lower_twist_joints)
+            self.input("Lower Twist Joints").set(lower_twist_joints)
 
         if self.option("Location").get() == self.config.right:
             bony.flip.global_mirror(

@@ -20,26 +20,26 @@ class TwisterComponent(aniseed.RigComponent):
 
         self.builder = None
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Joints",
             description="",
             validate=True,
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Root",
             validate=True,
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Tip",
             validate=True,
             group="Required Joints",
@@ -90,7 +90,7 @@ class TwisterComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.TextList()
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name == "Joints":
             return aniseed.widgets.everywhere.ObjectList()
 
@@ -103,7 +103,7 @@ class TwisterComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
 
-        joints = self.requirement("Joints To Drive").get()
+        joints = self.input("Joints To Drive").get()
 
         if not joints:
             print("No joints given to drive")
@@ -125,10 +125,10 @@ class TwisterComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        joints_to_drive = self.requirement("Joints").get()
-        root_driver = self.requirement("Root").get()
-        tip_driver = self.requirement("Tip").get()
-        parent = self.requirement("Parent").get()
+        joints_to_drive = self.input("Joints").get()
+        root_driver = self.input("Root").get()
+        tip_driver = self.input("Tip").get()
+        parent = self.input("Parent").get()
 
         twist_builder = aniseed.utils.mech.twist.TwistSetup(
             twist_count=len(joints_to_drive),

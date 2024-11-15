@@ -21,13 +21,13 @@ class SpaceSwitchComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(SpaceSwitchComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="To Be Driven",
             description="The root of the spine",
             validate=True,
             group="Required Entries",
         )
-        self.declare_requirement(
+        self.declare_input(
             name="Attribute Host",
             description="What node to place the spaceswitch attribute on",
             validate=True,
@@ -46,7 +46,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             return SpaceSwitchUi(self)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
         if requirement_name == "To Be Driven":
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -74,8 +74,8 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         """
 
         data = self.option("_Data").get()
-        node_to_drive = self.requirement("To Be Driven").get()
-        host = self.requirement("Attribute Host").get()
+        node_to_drive = self.input("To Be Driven").get()
+        host = self.input("Attribute Host").get()
 
         if not data:
             return

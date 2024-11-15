@@ -21,7 +21,7 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(BlendShapeConnectorComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="BlendShape Node",
             value="",
             description="The BlendShape Node",
@@ -33,7 +33,7 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
         if requirement_name == "BlendShape Node":
             return aniseed.widgets.everywhere.ObjectSelector()
 
@@ -143,7 +143,7 @@ class BlendShapeEditor(qute.QWidget):
     # ----------------------------------------------------------------------------------
     def add_connection_flow(self):
 
-        blendhsape_node = self.component.requirement("BlendShape Node").get()
+        blendhsape_node = self.component.input("BlendShape Node").get()
 
         default_driver = ""
         if mc.ls(sl=True):

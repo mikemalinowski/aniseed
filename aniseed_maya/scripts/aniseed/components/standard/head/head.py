@@ -18,21 +18,21 @@ class HeadComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(HeadComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Neck Joint",
             value="",
             validate=True,
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Head Joint",
             value="",
             validate=True,
@@ -74,7 +74,7 @@ class HeadComponent(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name in ["Parent", "Neck Joint", "Head Joint"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -99,8 +99,8 @@ class HeadComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
 
-        leg_root = self.requirement("Neck Joint").get()
-        toe_tip = self.requirement("Head Joint").get()
+        leg_root = self.input("Neck Joint").get()
+        toe_tip = self.input("Head Joint").get()
 
         if not leg_root or not toe_tip:
             return False
@@ -111,8 +111,8 @@ class HeadComponent(aniseed.RigComponent):
     # noinspection DuplicatedCode
     def run(self):
 
-        neck_joint = self.requirement("Neck Joint").get()
-        head_joint = self.requirement("Head Joint").get()
+        neck_joint = self.input("Neck Joint").get()
+        head_joint = self.input("Head Joint").get()
 
         prefix = self.option("Description Prefix").get()
         location = self.option("Location").get()
@@ -123,7 +123,7 @@ class HeadComponent(aniseed.RigComponent):
         neck_control = aniseed.control.create(
             description=f"{prefix}Neck",
             location=location,
-            parent=self.requirement("Parent").get(),
+            parent=self.input("Parent").get(),
             shape="core_circle",
             config=self.config,
             match_to=neck_joint,
@@ -229,5 +229,5 @@ class HeadComponent(aniseed.RigComponent):
             ),
         )
 
-        self.requirement("Neck Joint").set(neck)
-        self.requirement("Head Joint").set(head)
+        self.input("Neck Joint").set(neck)
+        self.input("Head Joint").set(head)

@@ -17,7 +17,7 @@ class VisibilityComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(VisibilityComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Nodes To Set Visibility",
             validate=True,
             group="Required Nodes",
@@ -36,14 +36,14 @@ class VisibilityComponent(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name == "Nodes To Set Visibility":
             return aniseed.widgets.everywhere.ObjectList()
 
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        for node in self.requirement("Nodes To Set Visibility").get() or list():
+        for node in self.input("Nodes To Set Visibility").get() or list():
 
             nodes_to_affect = []
 
@@ -73,7 +73,7 @@ class ObjectTypeVisibility(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(ObjectTypeVisibility, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Nodes To Search Under",
             validate=True,
             value=[],
@@ -99,7 +99,7 @@ class ObjectTypeVisibility(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name == "Nodes To Search Under":
             return aniseed.widgets.everywhere.ObjectList()
 
@@ -115,7 +115,7 @@ class ObjectTypeVisibility(aniseed.RigComponent):
 
         shapes_only = self.option("Shape Only").get()
 
-        for search_root in self.requirement("Nodes To Search Under").get() or list():
+        for search_root in self.input("Nodes To Search Under").get() or list():
             for node_type in self.option("Node Types to Hide").get() or list():
                 for child in mc.listRelatives(search_root, ad=True, type=node_type) or list():
 

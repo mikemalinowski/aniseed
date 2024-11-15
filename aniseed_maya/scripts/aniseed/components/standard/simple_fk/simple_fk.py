@@ -17,7 +17,7 @@ class SimpleFkComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(SimpleFkComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             group="Control Rig",
         )
@@ -25,7 +25,7 @@ class SimpleFkComponent(aniseed.RigComponent):
         # -- Requirements are things we must have given to us in order to
         # -- build. So for the simple fk we need to know the joints we want
         # -- to drive as well as the parent
-        self.declare_requirement(
+        self.declare_input(
             name="Joints To Drive",
             validate=True,
             group="Required Joints",
@@ -88,7 +88,7 @@ class SimpleFkComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.TextList()
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
 
         # -- Just as with the option_widget function, requirements can be given
         # -- custom widgets as well. In this case object-centric ones.
@@ -108,9 +108,9 @@ class SimpleFkComponent(aniseed.RigComponent):
         # -- We can use this function to test that we think the component
         # -- is valid before its built. In this case we're validating that
         # -- the joints have been set, but actually we could have just
-        # -- set validate=True in the self.declare_requirement() call and it
+        # -- set validate=True in the self.declare_input() call and it
         # -- would do that for us.
-        joints = self.requirement("Joints To Drive").get()
+        joints = self.input("Joints To Drive").get()
 
         if not joints:
             print("No joints given to drive")
@@ -123,8 +123,8 @@ class SimpleFkComponent(aniseed.RigComponent):
 
         # -- Here we're accessing the values of the requirements for this
         # -- component. In this case, getting the parent and the joints
-        parent = self.requirement("Parent").get()
-        joints_to_drive = self.requirement("Joints To Drive").get()
+        parent = self.input("Parent").get()
+        joints_to_drive = self.input("Joints To Drive").get()
 
         for joint_to_drive in joints_to_drive:
 

@@ -23,35 +23,35 @@ class ArmComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(ArmComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             description="The parent for the control hierarchy",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Shoulder",
             description="The root of the spine",
             validate=True,
             group="Required Joints"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Hand",
             description="The tip of the spine",
             validate=True,
             group="Required Joints"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Upper Twist Joints",
             description="All upper twist joints",
             validate=False,
             group="Twist Configuration",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Lower Twist Joints",
             description="All lower twist joints",
             validate=False,
@@ -121,7 +121,7 @@ class ArmComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.LocationSelector(self.config)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
 
         object_list = [
             "Parent",
@@ -155,8 +155,8 @@ class ArmComponent(aniseed.RigComponent):
             return False
 
         arm_joints = bony.hierarchy.get_between(
-            self.requirement("Shoulder").get(),
-            self.requirement("Hand").get(),
+            self.input("Shoulder").get(),
+            self.input("Hand").get(),
         )[1:]
 
         facing_direction = bony.direction.get_chain_facing_direction(
@@ -185,8 +185,8 @@ class ArmComponent(aniseed.RigComponent):
 
         # -- Our shoulder control is always FK, so lets build a simple
         # -- fk control for that
-        shoulder_joint = self.requirement('Shoulder').get()
-        hand_joint = self.requirement("Hand").get()
+        shoulder_joint = self.input('Shoulder').get()
+        hand_joint = self.input("Hand").get()
         arm_joints = bony.hierarchy.get_between(
             shoulder_joint,
             hand_joint,
@@ -208,7 +208,7 @@ class ArmComponent(aniseed.RigComponent):
         shoulder_control = aniseed.control.create(
             description=f"{prefix}Shoulder",
             location=location,
-            parent=self.requirement("Parent").get(),
+            parent=self.input("Parent").get(),
             shape="core_cube",
             config=self.config,
             match_to=shoulder_joint,
@@ -587,8 +587,8 @@ class ArmComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
-        upper_twist_joints = self.requirement("Upper Twist Joints").get()
-        lower_twist_joints = self.requirement("Lower Twist Joints").get()
+        upper_twist_joints = self.input("Upper Twist Joints").get()
+        lower_twist_joints = self.input("Lower Twist Joints").get()
 
         if upper_twist_joints:
             twist_component = self.rig.component_library.get("Augment : Twister")(
@@ -596,10 +596,10 @@ class ArmComponent(aniseed.RigComponent):
                 stack=self.rig,
             )
 
-            twist_component.requirement("Joints").set(upper_twist_joints)
-            twist_component.requirement("Parent").set(shoulder_control) # aniseed.control.get_classification(shoulder_control, "org"))
-            twist_component.requirement("Root").set(nk_joints[0])
-            twist_component.requirement("Tip").set(nk_joints[1])
+            twist_component.input("Joints").set(upper_twist_joints)
+            twist_component.input("Parent").set(shoulder_control) # aniseed.control.get_classification(shoulder_control, "org"))
+            twist_component.input("Root").set(nk_joints[0])
+            twist_component.input("Tip").set(nk_joints[1])
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
@@ -618,10 +618,10 @@ class ArmComponent(aniseed.RigComponent):
                 stack=self.rig,
             )
 
-            twist_component.requirement("Joints").set(lower_twist_joints)
-            twist_component.requirement("Parent").set(nk_joints[1])
-            twist_component.requirement("Root").set(nk_joints[1])
-            twist_component.requirement("Tip").set(nk_joints[2])
+            twist_component.input("Joints").set(lower_twist_joints)
+            twist_component.input("Parent").set(nk_joints[1])
+            twist_component.input("Root").set(nk_joints[1])
+            twist_component.input("Tip").set(nk_joints[2])
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
@@ -708,8 +708,8 @@ class ArmComponent(aniseed.RigComponent):
 
         all_joints = [shoulder, upper_arm, lower_arm, hand]
 
-        self.requirement("Shoulder").set(shoulder)
-        self.requirement("Hand").set(hand)
+        self.input("Shoulder").set(shoulder)
+        self.input("Hand").set(hand)
 
         if upper_twist_count:
             parent = upper_arm
@@ -737,7 +737,7 @@ class ArmComponent(aniseed.RigComponent):
 
                 all_joints.append(twist_joint)
 
-            self.requirement("Upper Twist Joints").set(upper_twist_joints)
+            self.input("Upper Twist Joints").set(upper_twist_joints)
 
         if lower_twist_count:
             parent = lower_arm
@@ -764,7 +764,7 @@ class ArmComponent(aniseed.RigComponent):
                 )
                 all_joints.append(twist_joint)
 
-            self.requirement("Lower Twist Joints").set(lower_twist_joints)
+            self.input("Lower Twist Joints").set(lower_twist_joints)
 
         if self.option("Location").get() == self.config.right:
             bony.flip.global_mirror(
@@ -778,8 +778,8 @@ class ArmComponent(aniseed.RigComponent):
     def create_guide(self):
 
 
-        shoulder = self.requirement("Shoulder").get()
-        hand = self.requirement("Hand").get()
+        shoulder = self.input("Shoulder").get()
+        hand = self.input("Hand").get()
 
         guide_org = mc.createNode("transform")
 
@@ -841,7 +841,7 @@ class ArmComponent(aniseed.RigComponent):
     def get_guide(self):
 
         connections = mc.listConnections(
-            f"{self.requirement('Shoulder').get()}.message",
+            f"{self.input('Shoulder').get()}.message",
             destination=True,
             plugs=True,
         )
@@ -861,8 +861,8 @@ class ArmComponent(aniseed.RigComponent):
         transforms = dict()
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Shoulder").get(),
-            self.requirement("Hand").get(),
+            self.input("Shoulder").get(),
+            self.input("Hand").get(),
         )
 
         for joint in all_chain:
@@ -901,8 +901,8 @@ class ArmComponent(aniseed.RigComponent):
         guide_root = self.get_guide()
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Shoulder").get(),
-            self.requirement("Hand").get(),
+            self.input("Shoulder").get(),
+            self.input("Hand").get(),
         )
 
         if guide_root:

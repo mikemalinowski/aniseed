@@ -1,6 +1,7 @@
-import xstack
 import typing
 import webbrowser
+
+from .vendor import xstack
 
 
 # --------------------------------------------------------------------------------------
@@ -51,7 +52,7 @@ class RigComponent(xstack.Component):
 
     # ----------------------------------------------------------------------------------
     # You may re-implement this
-    def requirement_widget(self, requirement_name: str) -> "PySide6.QWidget":
+    def input_widget(self, requirement_name: str) -> "PySide6.QWidget":
         """
         This allows you to return a specific (or custom) QWidget to represent the
         given requirement in any ui's.

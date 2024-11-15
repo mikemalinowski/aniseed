@@ -18,7 +18,7 @@ class PosingComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(PosingComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Node",
             value="",
             validate=True,
@@ -52,7 +52,7 @@ class PosingComponent(aniseed.RigComponent):
             )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str) :
+    def input_widget(self, requirement_name: str) :
         if requirement_name == "Node":
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -67,7 +67,7 @@ class PosingComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def is_valid(self) -> bool:
-        if not self.requirement("Node").get():
+        if not self.input("Node").get():
             print("No node given")
             return False
 
@@ -95,7 +95,7 @@ class PosingComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def _store(self):
-        # label = "PoseStore" + self.requirement('Label').get()
+        # label = "PoseStore" + self.input('Label').get()
 
         data = dict()
 
@@ -111,7 +111,7 @@ class PosingComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def _get_nodes(self):
-        nodes = [self.requirement("Node").get()]
+        nodes = [self.input("Node").get()]
 
         if self.option("Apply To Children").get():
 

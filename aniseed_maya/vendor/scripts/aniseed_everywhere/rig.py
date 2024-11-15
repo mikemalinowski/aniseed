@@ -1,11 +1,10 @@
 import os
 import json
 import typing
-import xstack
 import traceback
-
 from crosswalk import app
 
+from .vendor import xstack
 from . import config
 from . import component
 from . import constants

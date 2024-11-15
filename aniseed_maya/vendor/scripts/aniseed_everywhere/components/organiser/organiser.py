@@ -1,9 +1,9 @@
 import os
-import aniseed_everywhere as ani
+import aniseed_everywhere
 
 
 # --------------------------------------------------------------------------------------
-class OrganiserComponent(ani.RigComponent):
+class OrganiserComponent(aniseed_everywhere.RigComponent):
 
     identifier = "Stack : Organiser"
     icon = os.path.join(

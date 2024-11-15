@@ -19,7 +19,7 @@ class ComponentImporter(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(ComponentImporter, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Filepath",
             validate=True,
             value="",
@@ -38,7 +38,7 @@ class ComponentImporter(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
         if requirement_name == "Filepath":
             return aniseed.widgets.everywhere.FilepathSelector(
                 default_value=self.option("Filepath").get(),
@@ -47,7 +47,7 @@ class ComponentImporter(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def is_valid(self):
 
-        filepath = self.requirement("Filepath").get()
+        filepath = self.input("Filepath").get()
 
         if not os.path.exists(filepath):
             print(f"{filepath} does not exist")

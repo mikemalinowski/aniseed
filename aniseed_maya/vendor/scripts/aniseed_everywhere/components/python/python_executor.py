@@ -1,9 +1,9 @@
 import qute
-import aniseed
+import aniseed_everywhere
 
 
 # --------------------------------------------------------------------------------------
-class PythonExecutionComponent(aniseed.RigComponent):
+class PythonExecutionComponent(aniseed_everywhere.RigComponent):
 
     identifier = "Utility : Execute Python"
 

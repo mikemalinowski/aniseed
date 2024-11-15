@@ -16,21 +16,21 @@ class SimpleIKComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(SimpleIKComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             description="The parent for the control hierarchy",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Root Joint",
             description="The root of the chain",
             validate=True,
             group="Required Joints"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Tip Joint",
             description="The tip of the chain",
             validate=True,
@@ -86,7 +86,7 @@ class SimpleIKComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.LocationSelector(self.config)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
 
         object_fields = [
             "Parent",
@@ -110,8 +110,8 @@ class SimpleIKComponent(aniseed.RigComponent):
     def is_valid(self):
 
         arm_joints = bony.hierarchy.get_between(
-            self.requirement("Root Joint").get(),
-            self.requirement("Tip Joint").get(),
+            self.input("Root Joint").get(),
+            self.input("Tip Joint").get(),
         )[1:]
 
         facing_direction = bony.direction.get_chain_facing_direction(
@@ -140,9 +140,9 @@ class SimpleIKComponent(aniseed.RigComponent):
 
         # -- Our shoulder control is always FK, so lets build a simple
         # -- fk control for that
-        parent = self.requirement("Parent").get()
-        root_joint = self.requirement('Root Joint').get()
-        tip_joint = self.requirement("Tip Joint").get()
+        parent = self.input("Parent").get()
+        root_joint = self.input('Root Joint').get()
+        tip_joint = self.input("Tip Joint").get()
 
         name = self.option('Name').get()
         location = self.option("Location").get()
@@ -568,8 +568,8 @@ class SimpleIKComponent(aniseed.RigComponent):
             tip_joint,
         ]
 
-        self.requirement("Root Joint").set(upper_joint)
-        self.requirement("Tip Joint").set(tip_joint)
+        self.input("Root Joint").set(upper_joint)
+        self.input("Tip Joint").set(tip_joint)
 
         if self.option("Location").get() == self.config.right:
             bony.flip.global_mirror(

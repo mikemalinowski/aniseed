@@ -30,19 +30,19 @@ class StickyPatchComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(StickyPatchComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Geometry Patch",
             value="",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Joint To Drive",
             value="",
             group="Control Rig",
@@ -78,7 +78,7 @@ class StickyPatchComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        xform = self.requirement("Geometry Patch").get()
+        xform = self.input("Geometry Patch").get()
 
         mc.setAttr(
             f"{xform}.inheritsTransform",
@@ -123,14 +123,14 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         mc.parentConstraint(
             control,
-            self.requirement("Joint To Drive").get(),
+            self.input("Joint To Drive").get(),
             maintainOffset=True,
         )
 
         self.output("Pin").set(control)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -151,7 +151,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             ),
         )
 
-        patch_xform = self.requirement("Geometry Patch").get()
+        patch_xform = self.input("Geometry Patch").get()
         patch_shape = mc.listRelatives(
             patch_xform,
             shapes=True,
@@ -159,7 +159,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         mc.parent(
             follicle,
-            self.requirement("Parent").get(),
+            self.input("Parent").get(),
         )
 
         mc.connectAttr(
@@ -214,7 +214,7 @@ class StickyPatchComponent(aniseed.RigComponent):
         # -- Clear all history
         mc.delete(xform, constructionHistory=True)
 
-        joint_to_drive = self.requirement("Joint To Drive").get()
+        joint_to_drive = self.input("Joint To Drive").get()
 
         if joint_to_drive:
             mc.xform(
@@ -228,14 +228,14 @@ class StickyPatchComponent(aniseed.RigComponent):
                 worldSpace=True,
             )
 
-        self.requirement("Geometry Patch").set(
+        self.input("Geometry Patch").set(
             xform,
         )
 
     # ----------------------------------------------------------------------------------
     def match_patch_surface_to_joint(self):
 
-        surface_node = self.requirement("Geometry Patch").get()
+        surface_node = self.input("Geometry Patch").get()
         surface_shape = mc.listRelatives(
             surface_node,
             shapes=True,
@@ -260,7 +260,7 @@ class StickyPatchComponent(aniseed.RigComponent):
         mc.xform(
             surface_node,
             matrix=mc.xform(
-                self.requirement("Joint To Drive").get(),
+                self.input("Joint To Drive").get(),
                 query=True,
                 matrix=True,
                 worldSpace=True,
@@ -271,8 +271,8 @@ class StickyPatchComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def skin_patch_to_skeleton(self):
 
-        joint = self.requirement("Joint To Drive").get()
-        surface_node = self.requirement("Geometry Patch").get()
+        joint = self.input("Joint To Drive").get()
+        surface_node = self.input("Geometry Patch").get()
 
         if not joint:
             print("No join defined")

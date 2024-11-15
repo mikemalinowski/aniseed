@@ -26,14 +26,14 @@ class FKSpineComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(FKSpineComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             description="The parent for the control hierarchy",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Hip",
             description="The root of the spine",
             validate=True,
@@ -41,7 +41,7 @@ class FKSpineComponent(aniseed.RigComponent):
             group="Required Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Chest",
             description="The tip of the spine",
             validate=True,
@@ -78,7 +78,7 @@ class FKSpineComponent(aniseed.RigComponent):
             return aniseed.widgets.everywhere.LocationSelector(self.config)
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name in ["Hip", "Chest", "Parent"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -91,8 +91,8 @@ class FKSpineComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def is_valid(self):
 
-        hip = self.requirement("Hip").get()
-        chest = self.requirement("Chest").get()
+        hip = self.input("Hip").get()
+        chest = self.input("Chest").get()
 
         if not mc.objExists(hip):
             print(f"{hip} does not exist")
@@ -117,8 +117,8 @@ class FKSpineComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        hip_bone = self.requirement("Hip").get()
-        chest_bone = self.requirement("Chest").get()
+        hip_bone = self.input("Hip").get()
+        chest_bone = self.input("Chest").get()
 
         align_to_world = self.option("Align Controls To World").get()
 
@@ -130,7 +130,7 @@ class FKSpineComponent(aniseed.RigComponent):
         chain = long_name.split("|")
         joints = chain[chain.index(hip_bone):]
 
-        control_parent = self.requirement("Parent").get()
+        control_parent = self.input("Parent").get()
 
         kwargs = dict(
             config=self.config,
@@ -281,7 +281,7 @@ class FKSpineComponent(aniseed.RigComponent):
             match_to=parent,
             config=self.config
         )
-        self.requirement("Hip").set(hip_joint)
+        self.input("Hip").set(hip_joint)
 
         mc.xform(
             hip_joint,
@@ -315,7 +315,7 @@ class FKSpineComponent(aniseed.RigComponent):
             match_to=parent,
             config=self.config
         )
-        self.requirement("Chest").set(chest_joint)
+        self.input("Chest").set(chest_joint)
 
         mc.setAttr(
             f"{chest_joint}.translateX",

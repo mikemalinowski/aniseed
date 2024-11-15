@@ -1,13 +1,15 @@
 import os
-import qute
 import typing
 import functools
-import xstack_app
+
+import qute
+from .vendor import xstack_app
+from crosswalk import app
 
 from . import Rig
 from . import resources
 
-from crosswalk import app
+
 
 
 # --------------------------------------------------------------------------------------

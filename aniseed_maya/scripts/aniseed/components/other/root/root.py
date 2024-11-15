@@ -18,14 +18,14 @@ class GlobalControlRoot(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(GlobalControlRoot, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             description="Typically the root of the rig",
             validate=True,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Joint To Drive",
             description="The joint which should be driven by this control",
             validate=True,
@@ -61,7 +61,7 @@ class GlobalControlRoot(aniseed.RigComponent):
             )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
         if requirement_name == "Parent":
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -71,8 +71,8 @@ class GlobalControlRoot(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        parent = self.requirement("Parent").get()
-        joint_to_drive = self.requirement("Joint To Drive").get()
+        parent = self.input("Parent").get()
+        joint_to_drive = self.input("Joint To Drive").get()
 
         srt_control = aniseed.control.create(
             description=self.option("Label").get(),

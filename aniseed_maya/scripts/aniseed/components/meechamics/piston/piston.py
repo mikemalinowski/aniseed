@@ -10,25 +10,25 @@ class PistonComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(PistonComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Base Parent",
             value="",
             group="Control Rig"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Tip Parent",
             value="",
             group="Control Rig"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Base Joint",
             value="",
             group="Joint Requirements",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Tip Joint",
             value="",
             group="Joint Requirements",
@@ -52,7 +52,7 @@ class PistonComponent(aniseed.RigComponent):
         self.declare_output(name="Tip")
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
 
         object_requirements = [
             "Base Parent",
@@ -72,11 +72,11 @@ class PistonComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self) -> bool:
 
-        base_parent = self.requirement("Base Parent").get()
-        tip_parent = self.requirement("Tip Parent").get()
+        base_parent = self.input("Base Parent").get()
+        tip_parent = self.input("Tip Parent").get()
 
-        piston_root_jnt = self.requirement("Base Joint").get()
-        piston_tip_jnt = self.requirement("Tip Joint").get()
+        piston_root_jnt = self.input("Base Joint").get()
+        piston_tip_jnt = self.input("Tip Joint").get()
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()

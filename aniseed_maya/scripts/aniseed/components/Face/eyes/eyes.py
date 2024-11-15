@@ -26,45 +26,45 @@ class EyesComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(EyesComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Left Eye Joint",
             value="",
             group="Required Joints (Left)"
         )
-        self.declare_requirement(
+        self.declare_input(
             name="Left Upper Eye Lid Joint",
             value="",
             validate=False,
             group="Required Joints (Left)"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Left Lower Eye Lid Joint",
             value="",
             validate=False,
             group="Required Joints (Left)"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Right Eye Joint",
             value="",
             group="Required Joints (Right)"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Right Upper Eye Lid Joint",
             value="",
             validate=False,
             group="Required Joints (Right)"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Right Lower Eye Lid Joint",
             value="",
             validate=False,
@@ -141,7 +141,7 @@ class EyesComponent(aniseed.RigComponent):
 
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
 
         object_attributes = [
             "Parent",
@@ -176,7 +176,7 @@ class EyesComponent(aniseed.RigComponent):
             location=self.config.middle,
             config=self.config,
             shape="core_sphere",
-            parent=self.requirement("Parent").get(),
+            parent=self.input("Parent").get(),
             match_to=lf_eye_component.output("Aim Control").get(),
         )
 
@@ -244,10 +244,10 @@ class EyesComponent(aniseed.RigComponent):
 
         # -- Deal with the shared requirements and options
         for component in components:
-            for requirement in self.requirements():
-                if component.requirement(requirement.name()):
-                    component.requirement(requirement.name()).set(
-                        requirement.get(),
+            for input_ in self.inputs():
+                if component.input(input_.name()):
+                    component.input(input_.name()).set(
+                        input_.get(),
                     )
 
             for option in self.options():
@@ -257,28 +257,28 @@ class EyesComponent(aniseed.RigComponent):
                     )
 
         # -- Now set the side specific requirements
-        lf_eye_component.requirement("Eye Joint").set(
-            self.requirement("Left Eye Joint").get(),
+        lf_eye_component.input("Eye Joint").set(
+            self.input("Left Eye Joint").get(),
         )
 
-        rt_eye_component.requirement("Eye Joint").set(
-            self.requirement("Right Eye Joint").get(),
+        rt_eye_component.input("Eye Joint").set(
+            self.input("Right Eye Joint").get(),
         )
 
-        lf_eye_component.requirement("Lower Eye Lid Joint").set(
-            self.requirement("Left Lower Eye Lid Joint").get(),
+        lf_eye_component.input("Lower Eye Lid Joint").set(
+            self.input("Left Lower Eye Lid Joint").get(),
         )
 
-        rt_eye_component.requirement("Lower Eye Lid Joint").set(
-            self.requirement("Right Lower Eye Lid Joint").get(),
+        rt_eye_component.input("Lower Eye Lid Joint").set(
+            self.input("Right Lower Eye Lid Joint").get(),
         )
 
-        lf_eye_component.requirement("Upper Eye Lid Joint").set(
-            self.requirement("Left Upper Eye Lid Joint").get(),
+        lf_eye_component.input("Upper Eye Lid Joint").set(
+            self.input("Left Upper Eye Lid Joint").get(),
         )
 
-        rt_eye_component.requirement("Upper Eye Lid Joint").set(
-            self.requirement("Right Upper Eye Lid Joint").get(),
+        rt_eye_component.input("Upper Eye Lid Joint").set(
+            self.input("Right Upper Eye Lid Joint").get(),
         )
 
         lf_eye_component.option("Location").set(
@@ -321,28 +321,28 @@ class EyesComponent(aniseed.RigComponent):
             )
 
             # -- Now set the side specific requirements
-            self.requirement(f"{label} Eye Joint").set(
-                component.requirement("Eye Joint").get(),
+            self.input(f"{label} Eye Joint").set(
+                component.input("Eye Joint").get(),
             )
 
-            self.requirement(f"{label} Eye Joint").set(
-                component.requirement("Eye Joint").get(),
+            self.input(f"{label} Eye Joint").set(
+                component.input("Eye Joint").get(),
             )
 
-            self.requirement(f"{label} Lower Eye Lid Joint").set(
-                component.requirement("Lower Eye Lid Joint").get(),
+            self.input(f"{label} Lower Eye Lid Joint").set(
+                component.input("Lower Eye Lid Joint").get(),
             )
 
-            self.requirement(f"{label} Lower Eye Lid Joint").set(
-                component.requirement("Lower Eye Lid Joint").get(),
+            self.input(f"{label} Lower Eye Lid Joint").set(
+                component.input("Lower Eye Lid Joint").get(),
             )
 
-            self.requirement(f"{label} Upper Eye Lid Joint").set(
-                component.requirement("Upper Eye Lid Joint").get(),
+            self.input(f"{label} Upper Eye Lid Joint").set(
+                component.input("Upper Eye Lid Joint").get(),
             )
 
-            self.requirement(f"{label} Upper Eye Lid Joint").set(
-                component.requirement("Upper Eye Lid Joint").get(),
+            self.input(f"{label} Upper Eye Lid Joint").set(
+                component.input("Upper Eye Lid Joint").get(),
             )
 
 
@@ -357,26 +357,26 @@ class EyeComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(EyeComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Eye Joint",
             value="",
             group="Required Joints"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Upper Eye Lid Joint",
             value="",
             validate=False,
             group="Optional Joints",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Lower Eye Lid Joint",
             value="",
             validate=False,
@@ -448,7 +448,7 @@ class EyeComponent(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
 
         object_requirements = [
             "Parent",
@@ -499,7 +499,7 @@ class EyeComponent(aniseed.RigComponent):
             ),
         )
 
-        self.requirement("Eye Joint").set(eye_joint)
+        self.input("Eye Joint").set(eye_joint)
 
         for label in ["Lower", "Upper"]:
             mc.select(eye_joint)
@@ -513,7 +513,7 @@ class EyeComponent(aniseed.RigComponent):
                 ),
             )
 
-            self.requirement(f"{label} Eye Lid Joint").set(lid_joint)
+            self.input(f"{label} Eye Lid Joint").set(lid_joint)
 
         mc.parent(
             eye_joint,
@@ -542,8 +542,8 @@ class EyeComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        parent = self.requirement("Parent").get()
-        eye_joint = self.requirement("Eye Joint").get()
+        parent = self.input("Parent").get()
+        eye_joint = self.input("Eye Joint").get()
 
         description = self.option("Name").get()
         location = self.option("Location").get()
@@ -711,8 +711,8 @@ class EyeComponent(aniseed.RigComponent):
 
     def create_eyelid_behaviour(self, component_org, eye_control, aim_control):
 
-        parent = self.requirement("Parent").get()
-        eye_joint = self.requirement("Eye Joint").get()
+        parent = self.input("Parent").get()
+        eye_joint = self.input("Eye Joint").get()
 
         description = self.option("Name").get()
         location = self.option("Location").get()
@@ -959,6 +959,6 @@ class EyeComponent(aniseed.RigComponent):
             )
             mc.parentConstraint(
                 lid_control, # lid_driver,
-                self.requirement(f"{label} Eye Lid Joint").get(),
+                self.input(f"{label} Eye Lid Joint").get(),
                 maintainOffset=True,
             )

@@ -19,21 +19,21 @@ class HandComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(HandComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value=None,
             validate=False,
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Finger Tips",
             value=list(),
             validate=True,
             group="Required Joints"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Thumb Tip",
             value="",
             validate=True,
@@ -84,7 +84,7 @@ class HandComponent(aniseed.RigComponent):
         self.declare_output("Hand")
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name):
+    def input_widget(self, requirement_name):
 
         if requirement_name in ["Finger Tips"]:
             return aniseed.widgets.everywhere.ObjectList()
@@ -109,8 +109,8 @@ class HandComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def is_valid(self):
-        finger_tips = self.requirement("Finger Tips").get() or list()
-        thumb_tip = self.requirement("Thumb Tip").get()
+        finger_tips = self.input("Finger Tips").get() or list()
+        thumb_tip = self.input("Thumb Tip").get()
 
         if not len(finger_tips) > 0:
             print("You must specify at least one finger")
@@ -133,8 +133,8 @@ class HandComponent(aniseed.RigComponent):
     def run(self):
     
         # -- Get our hand control if one was given
-        parent = self.requirement("Parent").get()
-        finger_tips = self.requirement("Finger Tips").get() or list()
+        parent = self.input("Parent").get()
+        finger_tips = self.input("Finger Tips").get() or list()
 
         finger_roots = [
             self.get_parent(tip, self.option("Finger Depth").get() - 1)
@@ -160,10 +160,10 @@ class HandComponent(aniseed.RigComponent):
             hand = aniseed.control.create(
             description=f"{self.option('Descriptive Prefix').get()}Hand",
                 location=location,
-                parent=self.requirement("Parent").get(),
+                parent=self.input("Parent").get(),
                 shape="core_arrow_handle",
                 config=self.config,
-                match_to=self.requirement("Parent").get(),
+                match_to=self.input("Parent").get(),
                 shape_scale=45.0,
                 rotate_shape=hand_shape_rotation,
             )
@@ -206,14 +206,14 @@ class HandComponent(aniseed.RigComponent):
         finger_index_excluding_thumb = -1
 
         all_tips_including_thumb = finger_tips[:]
-        all_tips_including_thumb.append(self.requirement("Thumb Tip").get())
+        all_tips_including_thumb.append(self.input("Thumb Tip").get())
 
         for finger_idx, finger_tip in enumerate(all_tips_including_thumb):
 
             finger_root = self.get_parent(finger_tip, self.option("Finger Depth").get() - 1)
 
             # -- If this is not the thumb, increment this value
-            if finger_tip != self.requirement("Thumb Tip").get():
+            if finger_tip != self.input("Thumb Tip").get():
                 finger_index_excluding_thumb += 1
 
             finger_joints = bony.hierarchy.get_between(
@@ -287,7 +287,7 @@ class HandComponent(aniseed.RigComponent):
 
                 # -- If this is a thumb, we are done, as we do not apply
                 # -- any of the attribute drivers to it
-                if finger_tip == self.requirement("Thumb Tip").get():
+                if finger_tip == self.input("Thumb Tip").get():
                     control_parent = finger_control
                     continue
 
@@ -437,8 +437,8 @@ class HandComponent(aniseed.RigComponent):
             if "Finger_03_" in key:
                 finger_tips.append(joint)
 
-        self.requirement("Finger Roots").set(sorted(finger_roots))
-        self.requirement("Finger Tips").set(sorted(finger_tips))
+        self.input("Finger Roots").set(sorted(finger_roots))
+        self.input("Finger Tips").set(sorted(finger_tips))
         self.option("Assume Base Roots").set(True)
 
     # ----------------------------------------------------------------------------------

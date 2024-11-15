@@ -59,25 +59,25 @@ class TriLegComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(TriLegComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             value="",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Leg Root",
             value="",
             group="Joint Requirements"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Toe",
             value="",
             group="Joint Requirements"
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Twist Joints",
             value="",
             group="Joint Requirements",
@@ -120,7 +120,7 @@ class TriLegComponent(aniseed.RigComponent):
         self.declare_output("Toe")
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str):
+    def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Leg Root", "Toe"]:
             return aniseed.widgets.everywhere.ObjectSelector(component=self)
 
@@ -137,7 +137,7 @@ class TriLegComponent(aniseed.RigComponent):
         menu = collections.OrderedDict()
 
         # -- Only show the skeleton creation tools if we dont have a skeleton
-        leg_joint = self.requirement("Leg Root").get()
+        leg_joint = self.input("Leg Root").get()
 
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
@@ -165,8 +165,8 @@ class TriLegComponent(aniseed.RigComponent):
             print("You must remove the guide before building")
             return False
 
-        leg_root = self.requirement("Leg Root").get()
-        toe_tip = self.requirement("Toe").get()
+        leg_root = self.input("Leg Root").get()
+        toe_tip = self.input("Toe").get()
 
         all_joints = bony.hierarchy.get_between(
             leg_root,
@@ -199,9 +199,9 @@ class TriLegComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
-        parent = self.requirement("Parent").get()
-        root_joint = self.requirement("Leg Root").get()
-        tip_joint = self.requirement("Toe").get()
+        parent = self.input("Parent").get()
+        root_joint = self.input("Leg Root").get()
+        tip_joint = self.input("Toe").get()
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -870,7 +870,7 @@ class TriLegComponent(aniseed.RigComponent):
             vis_driver=None,
     ):
 
-        all_twist_joints = self.requirement("Twist Joints").get()
+        all_twist_joints = self.input("Twist Joints").get()
 
         twists_joints_for_segment = []
 
@@ -892,10 +892,10 @@ class TriLegComponent(aniseed.RigComponent):
             stack=self.rig,
         )
 
-        twist_component.requirement("Joints").set(twists_joints_for_segment)
-        twist_component.requirement("Parent").set(parent)
-        twist_component.requirement("Root").set(nk_chain[root_index])
-        twist_component.requirement("Tip").set(nk_chain[root_index + 1])
+        twist_component.input("Joints").set(twists_joints_for_segment)
+        twist_component.input("Parent").set(parent)
+        twist_component.input("Root").set(nk_chain[root_index])
+        twist_component.input("Tip").set(nk_chain[root_index + 1])
 
         twist_component.option("Constrain Root").set(False)
         twist_component.option("Constrain Tip").set(True)
@@ -1021,8 +1021,8 @@ class TriLegComponent(aniseed.RigComponent):
             ),
         )
 
-        self.requirement("Leg Root").set(joint_map["upper"])
-        self.requirement("Toe").set(joint_map["toe"])
+        self.input("Leg Root").set(joint_map["upper"])
+        self.input("Toe").set(joint_map["toe"])
 
         all_joints = []
 
@@ -1073,7 +1073,7 @@ class TriLegComponent(aniseed.RigComponent):
                     )
                     all_joints.append(twist_joint)
 
-            self.requirement("Twist Joints").set(twist_joints)
+            self.input("Twist Joints").set(twist_joints)
 
         if self.option("Location").get() == self.config.right:
             bony.flip.global_mirror(
@@ -1088,7 +1088,7 @@ class TriLegComponent(aniseed.RigComponent):
     def _get_guide(self):
 
         connections = mc.listConnections(
-            f"{self.requirement('Leg Root').get()}.message",
+            f"{self.input('Leg Root').get()}.message",
             destination=True,
             plugs=True,
         )
@@ -1100,8 +1100,8 @@ class TriLegComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def user_func_create_guide(self):
 
-        leg_root = self.requirement("Leg Root").get()
-        toe = self.requirement("Toe").get()
+        leg_root = self.input("Leg Root").get()
+        toe = self.input("Toe").get()
 
         guide_org = aniseed.control.basic_transform(
             classification="gde",
@@ -1218,8 +1218,8 @@ class TriLegComponent(aniseed.RigComponent):
         transforms = dict()
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Leg Root").get(),
-            self.requirement("Toe").get(),
+            self.input("Leg Root").get(),
+            self.input("Toe").get(),
         )
 
         for joint in all_chain:
@@ -1278,8 +1278,8 @@ class TriLegComponent(aniseed.RigComponent):
     def user_func_align_guide_ik(self):
 
         all_chain = bony.hierarchy.get_between(
-            self.requirement("Leg Root").get(),
-            self.requirement("Toe").get(),
+            self.input("Leg Root").get(),
+            self.input("Toe").get(),
         )
 
         if self._get_guide():

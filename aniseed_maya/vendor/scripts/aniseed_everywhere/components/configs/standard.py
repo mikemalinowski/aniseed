@@ -1,6 +1,5 @@
+import crosswalk
 import aniseed_everywhere
-
-from crosswalk import app
 
 
 # --------------------------------------------------------------------------------------
@@ -21,7 +20,7 @@ class RigConfigurationBasic(aniseed_everywhere.RigConfiguration):
 
     # --------------------------------------------------------------------------------------
     def create_component_structure(self):
-        global_joint = app.objects.create(
+        global_joint = crosswalk.app.objects.create(
             self.generate_name(
                 classification=self.joint,
                 description="GlobalSrt",
@@ -33,8 +32,8 @@ class RigConfigurationBasic(aniseed_everywhere.RigConfiguration):
         sub_struct = self.rig.add_component(
             component_type="Utility : Add Sub Structure",
             label="Define Rig Structure",
-            requirements={
-                "Parent": app.objects.get_name(self.rig.host()),
+            inputs={
+                "Parent": crosswalk.app.objects.get_name(self.rig.host()),
             },
             options={
                 "Sub Nodes": [
@@ -49,8 +48,8 @@ class RigConfigurationBasic(aniseed_everywhere.RigConfiguration):
         self.rig.add_component(
             component_type="Utility : Reparent",
             label="Parent Skeleton",
-            requirements={
-                "Node To Re-Parent": app.objects.get_name(global_joint),
+            inputs={
+                "Node To Re-Parent": crosswalk.app.objects.get_name(global_joint),
                 "New Parent": self.generate_name(
                     classification=self.organisational,
                     description="skeleton",
@@ -68,7 +67,7 @@ class RigConfigurationBasic(aniseed_everywhere.RigConfiguration):
         self.rig.add_component(
             component_type="Utility : Delete Children",
             label="Clear Control Rig",
-            requirements={
+            inputs={
                 "Node": self.generate_name(
                     classification=self.organisational,
                     description="controls",

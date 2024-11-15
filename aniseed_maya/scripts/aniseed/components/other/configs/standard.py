@@ -24,7 +24,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
         sub_struct = self.rig.add_component(
             component_type="Utility : Add Sub Structure",
             label="Define Rig Structure",
-            requirements={
+            inputs={
                 "Parent": self.rig.label,
             },
             options={
@@ -39,7 +39,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
         self.rig.add_component(
             component_type="Utility : Reparent",
             label="Parent Skeleton",
-            requirements={
+            inputs={
                 "Node To Re-Parent": global_joint,
                 "New Parent": self.generate_name(
                     classification=self.organisational,
@@ -64,7 +64,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
         self.rig.add_component(
             component_type="Utility : Delete Children",
             label="Clear Control Rig",
-            requirements={
+            inputs={
                 "Node": self.generate_name(
                     classification=self.organisational,
                     description="controls",
@@ -82,7 +82,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
         self.rig.add_component(
             component_type="Core : Global Control Root",
             label="Global SRT",
-            requirements={
+            inputs={
                 "Joint To Drive": global_joint,
                 "Parent": self.generate_name(
                     classification=self.organisational,

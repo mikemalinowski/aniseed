@@ -21,22 +21,22 @@ class MouthComponent(aniseed.RigComponent):
     def __init__(self, *args, **kwargs):
         super(MouthComponent, self).__init__(*args, **kwargs)
 
-        self.declare_requirement(
+        self.declare_input(
             name="Parent",
             group="Control Rig",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Jaw Joint",
             group="Joint Requirements",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Upper Lip Joint",
             group="Joint Requirements",
         )
 
-        self.declare_requirement(
+        self.declare_input(
             name="Lower Lip Joint",
             group="Joint Requirements",
         )
@@ -67,7 +67,7 @@ class MouthComponent(aniseed.RigComponent):
         )
 
     # ----------------------------------------------------------------------------------
-    def requirement_widget(self, requirement_name: str) -> "PySide6.QWidget":
+    def input_widget(self, requirement_name: str) -> "PySide6.QWidget":
 
         object_attributes = [
             "Parent",
@@ -94,12 +94,12 @@ class MouthComponent(aniseed.RigComponent):
     def run(self) -> bool:
 
         # -- Start by getting our requirements
-        parent = self.requirement("Parent").get()
+        parent = self.input("Parent").get()
 
         # -- Get our joints
-        jaw_joint = self.requirement("Jaw Joint").get()
-        upper_lip_joint = self.requirement("Upper Lip Joint").get()
-        lower_lip_joint = self.requirement("Lower Lip Joint").get()
+        jaw_joint = self.input("Jaw Joint").get()
+        upper_lip_joint = self.input("Upper Lip Joint").get()
+        lower_lip_joint = self.input("Lower Lip Joint").get()
 
         # -- Get our options
         location = self.option("Location").get()
@@ -525,6 +525,6 @@ class MouthComponent(aniseed.RigComponent):
         mc.setAttr(f"{upper_lip_joint}.ty", -4.800)
         mc.setAttr(f"{upper_lip_joint}.rz", -120)
 
-        self.requirement("Jaw Joint").set(jaw_joint)
-        self.requirement("Upper Lip Joint").set(upper_lip_joint)
-        self.requirement("Lower Lip Joint").set(lower_lip_joint)
+        self.input("Jaw Joint").set(jaw_joint)
+        self.input("Upper Lip Joint").set(upper_lip_joint)
+        self.input("Lower Lip Joint").set(lower_lip_joint)
