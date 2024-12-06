@@ -207,6 +207,15 @@ class HandComponent(aniseed.RigComponent):
 
         all_tips_including_thumb = finger_tips[:]
         all_tips_including_thumb.append(self.input("Thumb Tip").get())
+        finger_labels = [
+            "index",
+            "middle",
+            "ring",
+            "pinky",
+            "other",
+            "other",
+            "other",
+        ]
 
         for finger_idx, finger_tip in enumerate(all_tips_including_thumb):
 
@@ -251,7 +260,7 @@ class HandComponent(aniseed.RigComponent):
             for idx, finger_joint in enumerate(finger_joints):
 
                 finger_control = aniseed.control.create(
-                description=self.config.extract_description(finger_joint),
+                    description=finger_labels[finger_idx],
                     location=location,
                     parent=control_parent,
                     shape="core_paddle",

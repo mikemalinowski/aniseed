@@ -96,6 +96,12 @@ class ArmComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
+        self.declare_option(
+            name="Guide Org",
+            value="",
+            hidden=True,
+        )
+
         self.declare_output(
             name="Blended Upper Arm",
         )
@@ -837,18 +843,17 @@ class ArmComponent(aniseed.RigComponent):
                     parent=control,
                 )
 
+        self.option("Guide Org").set(guide_org)
+
     # ----------------------------------------------------------------------------------
     def get_guide(self):
 
-        connections = mc.listConnections(
-            f"{self.input('Shoulder').get()}.message",
-            destination=True,
-            plugs=True,
-        )
+        guide_node = self.option("Guide Org").get()
 
-        for connection in connections or list():
-            if "guideRig" in connection:
-                return connection.split(".")[0]
+        if mc.objExists(guide_node):
+            return guide_node
+
+        return None
 
     # ----------------------------------------------------------------------------------
     def delete_guide(self):
