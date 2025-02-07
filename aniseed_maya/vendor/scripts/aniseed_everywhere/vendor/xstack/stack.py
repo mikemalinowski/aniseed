@@ -691,9 +691,14 @@ class Stack:
         you may want to stored with it, and then saved to the given filepath
         """
 
-        if not filepath or not os.path.exists(filepath):
+        if not filepath:
             print("No filepath given to save to")
             return
+        
+        # -- Ensure the save directory exists
+        save_directory = os.path.dirname(filepath)
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
 
         # -- Ensure we're fully serialised
         data = self.serialise()
