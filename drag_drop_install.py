@@ -1,9 +1,13 @@
 import os
 import sys
 import shutil
-import PySide6
 import traceback
 
+try:
+    from PySide6 import QtWidgets
+
+except:
+    from PySide2 import QtWidgets
 
 # -- Run a check to ensure we're running within maya
 try:
@@ -22,15 +26,15 @@ def confirmation(title='Text Request', label='', parent=None, **kwargs):
 
     :return: str, or None
     """
-    answer = PySide6.QtWidgets.QMessageBox.warning(
+    answer = QtWidgets.QMessageBox.warning(
         parent,
         title,
         label,
-        PySide6.QtWidgets.QMessageBox.Yes,
-        PySide6.QtWidgets.QMessageBox.No,
+        QtWidgets.QMessageBox.Yes,
+        QtWidgets.QMessageBox.No,
     )
 
-    if answer == PySide6.QtWidgets.QMessageBox.Yes:
+    if answer == QtWidgets.QMessageBox.Yes:
         return True
 
     return False
@@ -44,7 +48,7 @@ def message(title='Text Request', label='', parent=None, **kwargs):
 
     :return: str, or None
     """
-    PySide6.QtWidgets.QMessageBox.information(
+    QtWidgets.QMessageBox.information(
         parent,
         title,
         label,
