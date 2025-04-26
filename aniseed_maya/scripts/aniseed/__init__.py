@@ -1,48 +1,30 @@
 """
-Aniseed is an application embedded (Maya) rigging tool. This is built upon AniseedX/StackX
+AniseedX is a cross-application rigging tool built upon the xstack framework.
 
-To launch the tool in maya, open the script editor and add a python tab, then run
-this code:
+Note: AniseedX does interact with 3d applications. Part of its core Rig class
+assumes the creation of objects, attributes and data. In order to do this in
+an application agnostic way, it uses crosswalk.
 
-    import aniseed;aniseed.app.launch()
+Crosswalk is a lightweight python package which exposes a common set of functions
+to perform tasks. This package handles the re-routing between applications and their
+underlying api.
 
-If you want to add your own rigging components you can either:
-
-    Place your components within the aniseed/components folder (or subfolder). This
-    is useful for small development studios or individuals.
-
-    Place your components in a folder and declare that folder path in an environment
-    variable called ANISEED_RIG_COMPONENT_PATHS. This option is particularly useful
-    for larger development studio's whom have a requirement to keep open source code
-    seperate from their internally developed code.
-
-Note: All functionality available through the UI is also available in a headless/code-only
-form as well.
+IMPORTANT NOTE: When implementing application specific components you DO NOT need
+to use crosswalk at all. It is only used at the framwork level because the amount
+of interaction is minimal.
 """
-# -- Expose our app and utils
+from .rig import Rig
+from .host import EmbeddedHost
+from .component import RigComponent
+from .config import RigConfiguration
+from .app import AppConfig
+from .app import AppWidget
+from .app import AppWindow
+
 from . import app
-from . import utils
 from . import widgets
-from . import initialize
-
-# -- Expose some of the classes from aniseed_everywhere so that users
-# -- developing in maya only have to import aniseed
-from .rig import MayaRig
-# noinspection PyUnresolvedReferences
-from aniseed_everywhere import RigComponent
-# noinspection PyUnresolvedReferences
-from aniseed_everywhere import RigConfiguration
-
-# -- The control creation is used a lot, so we raise that to the
-# -- main ani level
-from .utils import control
-from .utils import joint
-
+from . import constants
+from . import resources
 from . import environment
 
-# -- Now we initialize the environment, which sets some environment
-# -- variables for other dependent packages
-if not environment.initialize_environment():
-    print("Failed to initialize environment")
-
-__version__ = "0.2.1"
+__version__ = "2.0.1"

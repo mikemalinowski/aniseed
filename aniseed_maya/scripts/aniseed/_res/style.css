@@ -6,9 +6,16 @@ QToolTip {
     background-image: url(images/welcome.png);
 }
 
-
 QMenuBar {
     min-height: 30px;
     border: 1px solid black;
     background-color: rgb(50, 50 ,50);
+}
+
+QTreeView::item::selected {
+	background-color: rgba(_ITEMHIGHLIGHT_, 35);
+}
+
+QTreeView::item::hover:!selected {
+    background: rgba(_ITEMHIGHLIGHT_, 50);
 }

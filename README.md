@@ -1,9 +1,4 @@
-# Aniseed (BETA RELEASE)
-
-<span style="color:orangered">
-IMPORTANTE NOTE: Aniseed is currently in OPEN BETA. It is not yet ready for use in a 
-production environment. It is expected to reach Open Release late december 2024.
-</span>
+# Aniseed (Version 2.*)
 
 Aniseed is an application embedded (Maya) rigging tool. 
 
@@ -31,6 +26,40 @@ This approach makes aniseed incredibly flexible, as a component does not have to
 specifically drive joints, or could simply modify what has been been before it (a great
 example of this is the space switching mechanism).
 
+<span style="color:orangered">
+IMPORTANTE NOTE: Aniseed is now at version two. For general users the major version
+bump will not affect you (all pre-existing components, saves etc will continue to 
+work). For developers, please ensure you read the note below and familiarise yourself
+with aniseed_toolkit.
+</span>
+
+```markdown
+Version 2.*
+
+What is new in version 2?
+The user flow and primary tool for rigging with aniseed has remained unchanged in 
+version two. Its still focused entirely on the build stack, and all pre-existing
+components work just as they did before. 
+
+However, in the first iteration I found that there was too much "rigging logic" within
+the aniseed module itself. Whilst aniseed -is- a rigging tool, it should be considered
+a rigging framework with the flexibility for anyone to build rigs, or author components
+to their own standards. Therefore the concept of what a control is, or how softik 
+should work etc should not be part of the aniseed module, but instead be part of 
+either components or utility functionality. 
+
+That way a user or studio is able to take Aniseed as a bare bones framework and build 
+out their own set of components specifically for their requirements, conventions and
+standards.
+
+Therefore in version 2.* the aniseed.utils has been removed completely - as this is 
+where much of the rig assumptions were being made. Instead there is now a completely
+new module called aniseed_toolkit. This contains "tools" which can be used within 
+components to create controls, get upvector locations etc. But it is entirely the 
+choice of the component author as to whether they use them or not. This means the 
+core of aniseed stays free of convention-specific expansion.
+
+```
 
 # Installing
 
@@ -200,6 +229,25 @@ control root, re-applies control shapes and applies control colours.
 
 ![Aniseed Add Component](aniseed_maya/documentation/images/aniseed_basic_iterative_stack.png)
 
+
+# Aniseed Toolkit
+
+The Aniseed Toolkit is both a user facing tool and a code factory which can be called
+and used by components or other tools. 
+
+You can launch the user facing tool through either the Aniseed menu or through the 
+Tools menu within aniseed. This will present you with a list of available tools which 
+you can double click to instigate. To see documentation relating to the tool simply
+hover your cursor over the tool - the tooltip will show the documentation.
+
+There are (currently) two classifications of tools which you can switch between. These
+are:
+
+* Animation
+![Aniseed Toolkit - Animation](aniseed_maya/documentation/images/toolkit_animation.png)
+
+* Rigging
+![Aniseed Toolkit - Rigging](aniseed_maya/documentation/images/toolkit_rigging.png)
 
 # Using Aniseed 
 
@@ -555,103 +603,70 @@ Alternatively you can add your component path to the following environment varia
 For studio deployments it is strongly recommended to use the environment variable approach 
 and to keep your custom components seperate from the aniseed deployment.
 
+## Aniseed Toolkit Code
+
+When using tools within code (i.e, in components or your own tools), you can simply
+use this syntax to instigate it:
+
+```python
+import aniseed_toolkit
+
+distance = aniseed_toolkit.run("Get Distance Between", node_a, node_b)
+```
+This will run the `Get Distance Between` tool with `node_a` and `node_b` being
+passed as arguments. 
+
+You can find a list of tools here:
+[asd](asd)
+
+To write a tool, you simply inherit from the `aniseed_toolkit.Tool` class and 
+implement the run function with whatever arguments you require. Its highly recommended
+that you use keyword arguments (due to the blind nature of tools), and make them typed.
+
+```python
+import aniseed_toolkit
+import maya.cmds as mc
+
+class MyExampleTool(aniseed_toolkit.Tool):
+    
+    identifier = "Move By 5"
+    
+    def run(self, node: str = "", axis: str = "x") -> float:
+        """
+        Simple example to show how a tool can be constructed. This tool will take
+        the given node and move it on a specific axis 5 units. 
+        
+        Args:
+            node: The node to move
+            axis: the axis in which to move it (x, y, z)
+        
+        Returns:
+            The final value of the attribute
+        """
+        attribute = f"{node}.translate{axis.upper()}"
+        mc.setAttr(
+            attribute,
+            mc.getAttr(attribute) + 5,
+        )
+        return mc.getAttr(attribute)
+```
+
+It is worth noting that it is recommended to use google style docstrings for the tool
+if you plan to use the auto generation of documentation, as this specifically expects
+that style for parsing.
+
+We can then call this tool in the same way as the example above shown. For example:
+
+```python
+import aniseed_toolkit
+import maya.cmds as mc
+
+my_node = mc.createNode("transform")
+distance = aniseed_toolkit.run("Move By 5", node=my_node, axis="y")
+```
+
 ## Utils 
 
 Rigging code is typically filled with repetative tasks. Aniseed comes with some utility
 functionality you may find useful. However, its worth noting that there is no requirement
 to use any of the utility functionality
-
-# Extending aniseed_dev_alpha
-
-pass
-
-# Alpha Tracking List
-
-### Road To Release
-These items are considered "critical to do before general release"
-
-* Documentation for each component
-* Updated video guides
-* Rig Example Characters
-* Code clean
-
-### Medium Priority
-* On component not recognised, add in a stand in
-* Add aim tool
-* Make each bony tool a maya command
-* Expose Aniseed functionality to maya commands
-* Discuss the vendor/scripts location - does it make sense?
-* Clean up tree.py, particularly around the menu generation
-* Show Help/Description of options/requirements in ui
-* Comment Bony
-* Comment Crosswalk
-* Comment Shapeshift
-
-
-### DONE LIST:
-* Done : Manipulation Guide for Tri Leg
-* Done : Manipulation Guide for Leg
-* Done : Manipulation Guide for Arm
-* Done : Bony writer to orient in worldspace
-* Done : Simple Ik Component
-* Done : Allow for components to be locked/clamped at specific versions
-* Done : Expose version info to the ui
-* Done : Eye Component
-* Done : Add mirror shapes to shapeshift
-* Done : Add shapeshift save/load to aniseed
-* Done : Insert Control Component (an FK control which does not require a joint)
-* Done : On creation of a rig component instead of relying on the user to add left / right into the name and then setting the left / right attr in the component could you have that option in the creation dialogue so it would ask for the component name and have a dropdown for center / left / right?
-* Done : Spline Spine
-* Done : Tri Leg
-* Done : Hide tech joints and nodes in manipulation guide for spline spine
-* Done : Adding copy skin to unskinned mesh tool
-* Done : Add Skin Disconnect/Reconnect tool
-* Done : ability to reference outputs of a component from another component
-* Done : Ability to "copy" an unbuilt node name from a node to be able to paste into a child (done through attribute addresses)
-* Done : Possible to infer some attributes from parent (side when building a hand to an arm for example). (LD)
-* Done : Possible to disable/enable (checkboxes etc) on components in the Ui to skip on validation and build?
-* Done : Possible to Duplicate a component through the Ui?
-* Done : That dropdown to spawn components is going to become huge very quickly.  I would consider categorizing them and put those categories as options into the right click menu.  Categories like rig part / connection / process / whatever / whatever
-* Done : Add dedicated window to display components which has a filtering option
-* Done : Categorise component identifiers (This will be a breaking change) 
-* Done : Default Configuration is added when creating a new rig (user can enable/disable this)(user can specify the config)(configs can still be removed and added)
-* Done : Auto adjustment of layout based on aspect ratio is now off by default, and can be manually enabled
-* Done : Aniseed preferences are now implemeneted and exposed through the ui (first pass ui)
-* Done : Auto mirror the joints based on left/right location (HS)
-* Done : Fix for component data saving/loading
-* Done : If the ui is not visible when a new scene is made, it will not re-populate automatically
-* Done : Fix for crash on showing ui between sessions
-* Done : Store constraints in rig export (this will be a breaking change for existing json files)
-* Done : Import & Export functionality is currently part of the app, not the rig
-* Done : Show/hide component
-* Done : Hide non-control elements**
-* Done : Align output text on execution
-* Done: rename component
-* Done : Create joints for leg
-* Done : Create joints for head
-* Done : grouping for all components
-* Done : config ui
-* Done : Switch bony menu to be data based
-* Done : put the bone stuff in a bone tools module
-* Done : icons for bones menu
-* Done : icons on ui helper widgets
-* Done : Expose Joint Orient Tools
-* Done : expose shape save/load
-* Done : bone tool: pin
-* Done : bone tool: unpin
-* Done : pin with aim alignment
-* Done : bone tool: align ik
-* Done : drawing of line when dragging items
-* Done : scroll area for options and requirements
-* Done : save rig elements on file save
-* Done : mirror across
-* Done : custom ui on mirror across?
-* Done : Apply/Store A/T Pose should be stored in the option data, not the bone
-* Done : Align IK with option to retain child ws transforms
- 
-### Feedback to be discussed and tasked
-* Option to read "Apply Pose" data from bones first, and component second to allow a Richard Lico workflow (i.e, building rigs on the fly) (HS)
-* Components to store/apply animation data to support a Richard Lico approach (HS)
-* Option to lock skeleton from accidental edits (HS)
-
-* Could there be the desire to specify the mirror behavour mode? : Left/Right = axis-down/axis-up (ala Unreal mannequin / mGear) ; Left/Right = axis-down/axis-down +180 (ala traditional)
