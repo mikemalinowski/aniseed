@@ -127,7 +127,7 @@ qtility.app.get()
 ```
 """
 import traceback
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 # -- "x" is the variable we use for "cross environment" and is
 # -- the accessor for either two or six without the user caring

@@ -89,7 +89,7 @@ def create(
 
             if icon:
                 # -- Create the menu action
-                action = QtGui.QAction(
+                action = QtWidgets.QAction(
                     QtGui.QIcon(icon),
                     label,
                     menu,
@@ -97,7 +97,7 @@ def create(
 
             else:
                 # -- Create the menu action
-                action: QtGui.QAction = QtGui.QAction(
+                action: QtWidgets.QAction = QtWidgets.QAction(
                     label,
                     menu,
                 )
@@ -109,7 +109,7 @@ def create(
             menu.addAction(action)
 
         # -- this allows the user to pre-construct their own actions with more advanced set-ups
-        elif isinstance(target, QtGui.QAction):
+        elif isinstance(target, QtWidgets.QAction):
             menu.addAction(target)
 
     return menu
