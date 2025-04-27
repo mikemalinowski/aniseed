@@ -357,9 +357,5 @@ class ToolWindow(QtWidgets.QMainWindow):
         )
 
 def launch():
-
-    q_app = qtility.app.get()
-
     w = ToolWindow(parent=qtility.windows.application())
     w.show()
-    q_app.exec()
