@@ -1,5 +1,6 @@
 import json
 import os
+import snappy
 import aniseed
 import qtility
 import functools
@@ -145,18 +146,18 @@ class LegComponent(aniseed.RigComponent):
     def input_widget(self, requirement_name):
 
         if requirement_name in ["Parent", "Leg Root", "Toe"]:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Upper Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
         if requirement_name == "Lower Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name: str):
 
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
     def user_functions(self):
 
@@ -600,6 +601,42 @@ class LegComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
+    def create_snap(self):
+
+        group = "Leg_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+
+        snappy.new(
+            node=self.ik_foot_control.ctl,
+            target=self.nk_joints[2],
+            group=group,
+        )
+
+        snappy.new(
+            node=self.upvector_control.ctl,
+            target=self.nk_joints[1],
+            group=group,
+        )
+
+        for pivot_control in self.pivot_controls:
+            print("setting %s to be a snap zero" % pivot_control )
+            # -- We leave the target blank for these - which meanas the
+            # -- controls will just get zero'd
+            snappy.new(
+                node=pivot_control,
+                target=None,
+                group=group,
+            )
+
+        for idx, fk_control in enumerate(self.fk_controls):
+            snappy.new(
+                node=fk_control,
+                target=self.nk_joints[idx],
+                group=group,
+            )
+
     def create_twists(self):
 
         upper_twist_joints = self.input("Upper Twist Joints").get()
@@ -700,6 +737,7 @@ class LegComponent(aniseed.RigComponent):
         self.create_controls()
         self.create_ik()
         self.create_nk()
+        self.create_snap()
         self.create_twists()
         self.set_outputs()
 

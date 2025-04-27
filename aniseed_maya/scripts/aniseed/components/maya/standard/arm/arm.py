@@ -1,4 +1,5 @@
 import os
+import snappy
 import typing
 import aniseed
 import qtility
@@ -145,7 +146,7 @@ class ArmComponent(aniseed.RigComponent):
         This allows us to provide dedicate widgets for specific options
         """
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
     def input_widget(self, requirement_name):
         """
@@ -159,13 +160,13 @@ class ArmComponent(aniseed.RigComponent):
         ]
 
         if requirement_name in object_list:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Upper Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
         if requirement_name == "Lower Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def user_functions(self) -> typing.Dict[str, callable]:
         """
@@ -588,6 +589,42 @@ class ArmComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
+    def create_snap(self):
+        group = "Arm_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+
+        snappy.new(
+            node=self.ik_hand_control.ctl,
+            target=self.nk_joints[2],
+            group=group,
+        )
+
+        snappy.new(
+            node=self.upvector_control.ctl,
+            target=self.nk_joints[1],
+            group=group,
+        )
+
+        snappy.new(
+            node=self.fk_upper_control.ctl,
+            target=self.nk_joints[0],
+            group=group,
+        )
+
+        snappy.new(
+            node=self.fk_lower_control.ctl,
+            target=self.nk_joints[1],
+            group=group,
+        )
+
+        snappy.new(
+            node=self.fk_hand_control.ctl,
+            target=self.nk_joints[2],
+            group=group,
+        )
+
     def create_twist_setup(self):
 
         upper_twist_joints = self.input("Upper Twist Joints").get()
@@ -678,6 +715,7 @@ class ArmComponent(aniseed.RigComponent):
         self.create_controls()
         self.create_ik_setup()
         self.create_nk_setup()
+        self.create_snap()
         self.create_twist_setup()
         self.set_outputs()
 
