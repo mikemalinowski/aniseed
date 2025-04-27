@@ -128,11 +128,11 @@ class StickyPatchComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
     def create_follicle(self):
 

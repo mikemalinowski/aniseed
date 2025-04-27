@@ -56,7 +56,7 @@ class InsertControlComponent(aniseed.RigComponent):
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
         if option_name == "Shape":
             return aniseed.widgets.ShapeSelector(
@@ -64,11 +64,11 @@ class InsertControlComponent(aniseed.RigComponent):
             )
 
         if option_name == "Match Transform To":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def input_widget(self, requirement_name: str) :
         if requirement_name == "Parent":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         return None
 

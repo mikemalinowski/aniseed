@@ -15,4 +15,6 @@ from .graphical import GraphicalItemSelectorEditor
 from .lists import TextList
 from .lists import ObjectList
 
+from .shapes import ShapeSelector
+
 from .files import FilepathSelector

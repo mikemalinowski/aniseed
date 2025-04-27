@@ -33,7 +33,7 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name: str):
         if requirement_name == "BlendShape Node":
-            return aniseed.widgets.everywhere.ObjectSelector()
+            return aniseed.widgets.ObjectSelector()
 
     def option_widget(self, option_name: str):
         if option_name == "BlendShape Connection Data":

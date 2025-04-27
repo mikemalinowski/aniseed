@@ -43,14 +43,14 @@ class PosingComponent(aniseed.RigComponent):
 
     def option_widget(self, option_name: str):
         if option_name == "_StorePose":
-            return aniseed.widgets.everywhere.ButtonWidget(
+            return aniseed.widgets.ButtonWidget(
                 button_name="Store Pose",
                 func=self._store
             )
 
     def input_widget(self, requirement_name: str) :
         if requirement_name == "Node":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         return None
 

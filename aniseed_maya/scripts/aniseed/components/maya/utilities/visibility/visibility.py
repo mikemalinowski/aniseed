@@ -35,7 +35,7 @@ class VisibilityComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name):
         if requirement_name == "Nodes To Set Visibility":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def run(self):
 
@@ -94,11 +94,11 @@ class ObjectTypeVisibility(aniseed.RigComponent):
 
     def input_widget(self, requirement_name):
         if requirement_name == "Nodes To Search Under":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name):
         if option_name == "Node Types to Hide":
-            return aniseed.widgets.everywhere.TextList()
+            return aniseed.widgets.TextList()
 
     def run(self):
 

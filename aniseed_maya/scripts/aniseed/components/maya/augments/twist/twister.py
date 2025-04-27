@@ -78,22 +78,22 @@ class TwisterComponent(aniseed.RigComponent):
             )
 
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(
+            return aniseed.widgets.LocationSelector(
                 config=self.config,
             )
 
         if option_name == "Lock and Hide":
-            return aniseed.widgets.everywhere.TextList()
+            return aniseed.widgets.TextList()
 
     def input_widget(self, requirement_name):
         if requirement_name == "Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
         if requirement_name == "Root Driver":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Tip Driver":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def is_valid(self) -> bool:
 

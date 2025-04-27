@@ -80,11 +80,11 @@ class HeadComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name):
         if requirement_name in ["Parent", "Neck Joint", "Head Joint"]:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
         if option_name in ["Location"]:
-            return aniseed.widgets.everywhere.ItemSelector(
+            return aniseed.widgets.ItemSelector(
                 items=[
                     self.config.left,
                     self.config.middle,

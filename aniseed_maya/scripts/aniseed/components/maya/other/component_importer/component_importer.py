@@ -37,7 +37,7 @@ class ComponentImporter(aniseed.RigComponent):
 
     def input_widget(self, requirement_name: str):
         if requirement_name == "Filepath":
-            return aniseed.widgets.everywhere.FilepathSelector(
+            return aniseed.widgets.FilepathSelector(
                 default_value=self.option("Filepath").get(),
             )
 

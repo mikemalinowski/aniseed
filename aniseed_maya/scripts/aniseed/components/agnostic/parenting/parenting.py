@@ -27,10 +27,10 @@ class ReParentComponent(aniseed.RigComponent):
     def input_widget(self, requirement_name):
 
         if requirement_name == "Node To Re-Parent":
-            return aniseed_everywhere.widgets.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "New Parent":
-            return aniseed_everywhere.widgets.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self):

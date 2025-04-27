@@ -83,18 +83,18 @@ class HandComponent(aniseed.RigComponent):
     def input_widget(self, requirement_name):
 
         if requirement_name in ["Finger Tips"]:
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
         if requirement_name in ["Parent", "Hand", "Thumb Tip"]:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
 
         if option_name == "Expose Attributes To Nodes":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
     def user_functions(self):
         return {

@@ -116,14 +116,14 @@ class TriLegComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Leg Root", "Toe"]:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Twist Joints":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
     def user_functions(self) -> typing.Dict[str, callable]:
         menu = collections.OrderedDict()

@@ -144,7 +144,7 @@ class EyesComponent(aniseed.RigComponent):
         ]
 
         for object_attribute in object_attributes:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def user_functions(self) -> typing.Dict[str, callable]:
         return {
@@ -445,15 +445,15 @@ class EyeComponent(aniseed.RigComponent):
         ]
 
         if requirement_name in object_requirements:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
 
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
         if option_name in ["Forward Axis", "Up Axis"]:
-            return aniseed.widgets.everywhere.AxisSelector()
+            return aniseed.widgets.AxisSelector()
 
     def user_functions(self) -> typing.Dict[str, callable]:
         return {

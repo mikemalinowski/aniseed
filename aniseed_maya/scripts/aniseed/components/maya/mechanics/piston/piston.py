@@ -61,11 +61,11 @@ class PistonComponent(aniseed.RigComponent):
         ]
 
         if requirement_name in object_requirements:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
     def run(self) -> bool:
 

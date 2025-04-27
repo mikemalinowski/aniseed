@@ -59,10 +59,10 @@ class GlobalControlRoot(aniseed.RigComponent):
 
     def input_widget(self, requirement_name):
         if requirement_name == "Parent":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Joint To Drive":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):
 

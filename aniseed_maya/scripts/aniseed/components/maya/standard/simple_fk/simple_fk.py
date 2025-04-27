@@ -79,17 +79,17 @@ class SimpleFkComponent(aniseed.RigComponent):
         # -- Here we're providing a list of locations from the configuration
         # -- component to pick from
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
         if option_name == "Lock and Hide":
-            return aniseed.widgets.everywhere.TextList()
+            return aniseed.widgets.TextList()
 
     def input_widget(self, requirement_name):
         if requirement_name == "Parent":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Joints To Drive":
-            return aniseed.widgets.everywhere.ObjectList()
+            return aniseed.widgets.ObjectList()
 
     def is_valid(self) -> bool:
 

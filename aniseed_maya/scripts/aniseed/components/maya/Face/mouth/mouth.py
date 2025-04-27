@@ -73,11 +73,11 @@ class MouthComponent(aniseed.RigComponent):
         ]
 
         for object_attribute in object_attributes:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str) -> "PySide6.QWidget":
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
     def user_functions(self) -> typing.Dict[str, callable]:
         return {

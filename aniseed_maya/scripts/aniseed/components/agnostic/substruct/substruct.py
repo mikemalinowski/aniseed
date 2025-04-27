@@ -32,12 +32,12 @@ class AddSubStructureComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name):
         if option_name == "Sub Nodes":
-            return aniseed_everywhere.widgets.TextList()
+            return aniseed.widgets.TextList()
 
     # ----------------------------------------------------------------------------------
     def input_widget(self, requirement_name):
         if requirement_name == "Parent":
-            return aniseed_everywhere.widgets.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self):
@@ -92,7 +92,7 @@ class DeleteChildren(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def input_widget(self, requirement_name):
         if requirement_name == "Node":
-            return aniseed_everywhere.widgets.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self) -> bool:

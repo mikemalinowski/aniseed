@@ -122,12 +122,12 @@ class SplineSpine(aniseed.RigComponent):
         ]
 
         if requirement_name in object_requirements:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
 
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(config=self.config)
+            return aniseed.widgets.LocationSelector(config=self.config)
 
         if option_name == "Shape":
             return aniseed.widgets.ShapeSelector(
@@ -135,7 +135,7 @@ class SplineSpine(aniseed.RigComponent):
             )
 
         if option_name == "Upvector Axis":
-            return aniseed.widgets.everywhere.AxisSelector()
+            return aniseed.widgets.AxisSelector()
 
     def user_functions(self) -> typing.Dict[str, callable]:
 

@@ -28,7 +28,7 @@ class ColorControls(aniseed.RigComponent):
 
     def option_widget(self, option_name):
         if option_name in self._colour_options:
-            return aniseed.widgets.everywhere.ColorPicker(
+            return aniseed.widgets.ColorPicker(
                 default_colour=self.option(option_name).get(),
             )
 

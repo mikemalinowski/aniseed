@@ -46,10 +46,10 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
     def input_widget(self, requirement_name: str):
         if requirement_name == "To Be Driven":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Attribute Host":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):
         """
@@ -588,9 +588,9 @@ class OptionsBlock(QtWidgets.QWidget):
         self._ignore_serialisation = False
         self._active_uuid = None
 
-        self.target = aniseed.widgets.everywhere.ObjectSelector(component=component)
+        self.target = aniseed.widgets.ObjectSelector(component=component)
         self.label = QtWidgets.QLineEdit()
-        self.target_transform = aniseed.widgets.everywhere.ObjectSelector(component=component)
+        self.target_transform = aniseed.widgets.ObjectSelector(component=component)
         self.position_only = QtWidgets.QCheckBox()
         self.orientation_only = QtWidgets.QCheckBox()
         self.include_scale = QtWidgets.QCheckBox()

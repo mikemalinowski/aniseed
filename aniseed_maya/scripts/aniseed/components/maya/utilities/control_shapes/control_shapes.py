@@ -34,7 +34,7 @@ class StoreControlShapes(aniseed.RigComponent):
 
     def option_widget(self, option_name):
         if option_name == "_Clear Shapes":
-            return aniseed.widgets.everywhere.ButtonWidget(
+            return aniseed.widgets.ButtonWidget(
                 button_name="Clear Shape Data",
                 func=functools.partial(
                     self._clear_shapes,

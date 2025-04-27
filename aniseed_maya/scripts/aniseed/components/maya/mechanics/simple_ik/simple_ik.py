@@ -80,7 +80,7 @@ class SimpleIKComponent(aniseed.RigComponent):
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
-            return aniseed.widgets.everywhere.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config)
 
     def input_widget(self, requirement_name):
 
@@ -90,10 +90,10 @@ class SimpleIKComponent(aniseed.RigComponent):
             "Tip Joint",
         ]
         if requirement_name in object_fields:
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name == "Parent":
-            return aniseed.widgets.everywhere.ObjectSelector(component=self)
+            return aniseed.widgets.ObjectSelector(component=self)
 
     def user_functions(self) -> typing.Dict[str, callable]:
         return {
