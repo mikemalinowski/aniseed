@@ -84,7 +84,6 @@ SOFTWARE.
 """
 from .core import new
 from .core import snap
-from .core import snap_group
 from .core import snappable
 from .core import groups
 from .core import members

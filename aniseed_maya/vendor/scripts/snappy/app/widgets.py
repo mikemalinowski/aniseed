@@ -86,7 +86,6 @@ class SnapList(QtWidgets.QTreeWidget):
         is shown
         """
         self._register_script_jobs()
-        self.app.switch_rig()
 
     # noinspection PyUnusedLocal
     def hideEvent(self, event):
@@ -305,16 +304,6 @@ class SnapList(QtWidgets.QTreeWidget):
             menu (QtWidgets.QMenu): The menu to add actions to
             item (QtWidgets.QTreeWidgetItem): The group item being clicked
         """
-        action = menu.addAction(self._get_icon("snap"), "Snap!")
-        action.triggered.connect(
-            functools.partial(
-                self._snap_member,
-                snap_node,
-                group,
-                item,
-            ),
-        )
-
         action = menu.addAction(self._get_icon("delete"), "Remove Snap")
         action.triggered.connect(
             functools.partial(
@@ -391,7 +380,6 @@ class SnapList(QtWidgets.QTreeWidget):
             group,
             item,
         )
-        print("adding snap member")
 
     def _delete_snap_group(self, group, item):
 
@@ -401,25 +389,9 @@ class SnapList(QtWidgets.QTreeWidget):
         self.takeTopLevelItem(
             self.indexOfTopLevelItem(item),
         )
-        print("deleting snap group")
 
     def _snap_group(self, group, item):
-        core.snap_group(group=group)
-        print("snapping group")
-
-    def _snap_member(self, snap_node, group, item):
-
-        core.snap(
-            core.get_node_to_snap(
-                snap_node,
-                group,
-            ),
-            core.get_node_to_snap_to(
-                snap_node,
-                group,
-            ),
-        )
-        print("snapping member")
+        core.snap(group=group)
 
     def _remove_snap(self, snap_node, group, item):
         core.remove(snap_node, group)
@@ -432,10 +404,7 @@ class SnapList(QtWidgets.QTreeWidget):
                 self.indexOfTopLevelItem(parent),
             )
 
-        print("removing snap")
-
     def _update_offset(self, snap_node, group, item):
-        print("updating offset")
         core.update_offset(
             core.get_node_to_snap(
                 snap_node,

@@ -3,7 +3,7 @@ import maya.api.OpenMaya as om
 
 
 # --------------------------------------------------------------------------------------
-def new(node, target, group="", resets=None):
+def new(node, target, group=""):
     """
     Creates a snap mapping from the given node to the target. The current
     offset between the two are stored during this process, allowing for that
@@ -18,9 +18,6 @@ def new(node, target, group="", resets=None):
     :param group: An identifier for the snap offset
     :type group: str
 
-    :param resets: If given, those objects will be zero"d on snap
-    :type resets: list or None
-
     :return: Snap node containing the offset
     :rtype: pm.nt.DependNode
     """
@@ -33,41 +30,47 @@ def new(node, target, group="", resets=None):
     mc.setAttr(f"{snap_node}.snapNode", True)
 
     # -- Connect the relationship attributes
-    mc.connectAttr(
-        f"{target}.message",
-        f"{snap_node}.snapTarget",
-        force=True,
-    )
+    if target:
+        mc.connectAttr(
+            f"{target}.message",
+            f"{snap_node}.snapTarget",
+            force=True,
+        )
+
     mc.connectAttr(
         f"{node}.message",
         f"{snap_node}.snapSource",
         force=True,
     )
 
-    # -- Finally we need to get the relative matrix
-    # -- between the two objects in their current
-    # -- state.
-    node_to_modify_mat4 = om.MMatrix(
-        mc.xform(
-            node,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-    )
+    if target:
+        # -- Finally we need to get the relative matrix
+        # -- between the two objects in their current
+        # -- state.
+        node_to_modify_mat4 = om.MMatrix(
+            mc.xform(
+                node,
+                query=True,
+                matrix=True,
+                worldSpace=True,
+            ),
+        )
 
-    node_of_interest_mat4 = om.MMatrix(
-        mc.xform(
-            target,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-    )
+        node_of_interest_mat4 = om.MMatrix(
+            mc.xform(
+                target,
+                query=True,
+                matrix=True,
+                worldSpace=True,
+            ),
+        )
 
-    # -- Determine the offset between the two
-    offset_mat4 = node_to_modify_mat4 * node_of_interest_mat4.inverse()
-    print(offset_mat4)
+        # -- Determine the offset between the two
+        offset_mat4 = node_to_modify_mat4 * node_of_interest_mat4.inverse()
+
+    else:
+        offset_mat4 = om.MMatrix()
+
     # -- Store that matrix into the matrix
     # -- attribute
     mc.setAttr(
@@ -75,14 +78,6 @@ def new(node, target, group="", resets=None):
         offset_mat4,
         type="matrix",
     )
-
-    # -- If we"re given any resets, hook them up now
-    if resets:
-        for node_to_zero in resets:
-            plug = snap_node.attr("nodesToZero").elementByLogicalIndex(
-                snap_node.attr("nodesToZero").numElements(),
-            )
-            node_to_zero.message.connect(plug)
 
     return snap_node
 
@@ -220,13 +215,23 @@ def get_node_to_snap_to(node, group):
     """
     snap_node = get(node=node, group=group)[0]
     target = mc.ls(mc.listConnections(f"{snap_node}.snapTarget", source=True))
-    return target[0]
+
+    try:
+        return target[0]
+
+    except IndexError:
+        return None
 
 
 def get_node_to_snap(node: str, group: str) -> str:
     snap_node = get(node=node, group=group)[0]
     source = mc.ls(mc.listConnections(f"{snap_node}.snapSource", source=True))
-    return source[0]
+
+    try:
+        return source[0]
+
+    except IndexError:
+        return None
 
 
 # --------------------------------------------------------------------------------------
@@ -300,92 +305,6 @@ def snappable(node):
     return len(get(node)) > 0
 
 
-# --------------------------------------------------------------------------------------
-# noinspection PyUnresolvedReferences
-def snap(node, target, start_time=None, end_time=None, key=True):
-    """
-    This will match one node to the other providing there is a snap
-    relationship between then. If a time range is given then the match
-    will occur over time.
-
-    If no snap relationship exists between the two nodes then a straight
-    forward matrix matching will occur.
-
-    :param node: The node to move
-    :type node: pm.nt.Transform
-
-    :param target: The node to match to
-    :type target: pm.nt.Transform
-
-    :param start_time: The time to start from. If this is not given then
-        the match will only occur on the current frame
-    :type start_time: int
-
-    :param end_time: The time to stop at. If this is not given then the
-        match will only occur on the current frame
-    :type end_time: int
-
-    :param key: If true the matching will be keyed. Note, if a start and
-        end time are given then this is ignored and the motion will always
-        be keyed.
-    :type key: bool
-
-    :return:
-    """
-    # -- Get the snaps between the two nodes
-    snap_nodes = get(node, target=target)
-
-    # -- If we have a snap, take the first and use that offset matrix
-    # -- otherwise we use
-    if snap_nodes:
-        offset_matrix = mat4 = om.MMatrix(
-            mc.getAttr(
-                f"{snap_nodes[0]}.offsetMatrix",
-            ),
-        )
-
-    else:
-        offset_matrix = om.MMatrix()
-
-    # -- Get the list of nodes to reset
-    zero_these = list()
-    for snap_node in snap_nodes:
-        if mc.objExists(f"{snap_node}.nodesToZero"):
-            zero_these.extend(
-                mc.listConnections(
-                    f"{snap_node}.nodesToZero",
-                    source=True,
-                ) or list()
-            )
-    print("nodes to zero : %s" % zero_these)
-    # -- Use the current time if we"re not given specific
-    # -- frame ranges
-    start_time = start_time if start_time is not None else int(mc.currentTime(q=True))
-    end_time = end_time if end_time is not None else int(mc.currentTime(q=True))
-
-    # -- Cycle the frame range ensuring we dont accidentally
-    # -- drop off the last frame
-    for frame in range(start_time, end_time + 1):
-        mc.currentTime(frame)
-
-        _set_worldspace_matrix(
-            node,
-            target,
-            offset_matrix,
-        )
-
-        # -- Zero any nodes which require it
-        for node_to_zero in zero_these:
-            _zero_node(node_to_zero)
-
-            if key or start_time != end_time:
-                mc.setKeyframe(node_to_zero)
-
-        # -- Check if we need to key
-        if key or start_time != end_time:
-            mc.setKeyframe(node)
-
-
 def update_offset(node, target):
 
     snap_nodes = get(node, target=target)
@@ -426,7 +345,7 @@ def update_offset(node, target):
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
-def snap_group(group=None, restrict_to=None, start_time=None, end_time=None, key=True):
+def snap(group=None, restrict_to=None, start_time=None, end_time=None, key=True):
     """
     This will match all the members of the snap group.
 
@@ -470,51 +389,45 @@ def snap_group(group=None, restrict_to=None, start_time=None, end_time=None, key
     for frame in range(start_time, end_time + 1):
         mc.currentTime(frame)
 
+        snap_target_matrices = dict()
+
         for snap_node in snap_nodes:
-            # -- NOTE: We *could* group the target/node together
-            # -- outside the frame iteration as an optimisation. For
-            # -- the sake of code simplicity on the first pass its
-            # -- done during iteration.
-            pass
+            target = get_node_to_snap_to(snap_node, group)
 
-            # -- Get the target node - if there is no target
-            # -- we do nothing
-            targets = mc.listConnections(f"{snap_node}.snapTarget", source=True)
+            if target:
 
-            if not targets:
+                # -- Apply the offset
+                target_matrix = om.MMatrix(
+                    mc.xform(
+                        target,
+                        q=True,
+                        matrix=True,
+                        worldSpace=True,
+                    ),
+                )
+                offset_matrix = om.MMatrix(mc.getAttr(f"{snap_node}.offsetMatrix"))
+                target_matrix = offset_matrix * target_matrix
+
+                snap_target_matrices[snap_node] = target_matrix
+
+        # for idx in range(len(snap_nodes)):
+        for snap_node in snap_nodes:
+
+            node = get_node_to_snap(snap_node, group)
+
+            if not node:
                 continue
-
-            # -- Pull out the target as a named variable for
-            # -- code clarity
-            target = targets[0]
-
-            # -- Pull out the node to modify
-            nodes = mc.listConnections(f"{snap_node}.snapSource", source=True)
-
-            if not nodes:
-                continue
-
-            # -- Pull out the node as a named variable for
-            # -- code clarity
-            node = nodes[0]
 
             # -- Match the two objects with the offset matrix
-            _set_worldspace_matrix(
-                node,
-                target,
-                om.MMatrix(mc.getAttr(f"{snap_node}.offsetMatrix"))
-            )
+            if snap_node in snap_target_matrices:
+                mc.xform(
+                    node,
+                    matrix=snap_target_matrices[snap_node],
+                    worldSpace=True,
+                )
 
-            # -- Get the list of nodes to reset
-            if mc.objExists(f"{snap_node}nodesToZero"):
-                zero_these = mc.listConnections(f"{snap_node}.nodesToZero", source=True)
-
-                # -- Zero any nodes which require it
-                for node_to_zero in zero_these:
-                    _zero_node(node_to_zero)
-
-                    if key or start_time != end_time:
-                        mc.setKeyframe(node_to_zero)
+            else:
+                _zero_node(node)
 
             # -- Key the match if we need to
             if key or start_time != end_time:
@@ -566,15 +479,6 @@ def _create_snap_node():
         dt="matrix",
     )
 
-    # -- Define a list of items which should be reset whenever
-    # -- this snap is acted upon
-    mc.addAttr(
-        snap_node,
-        longName="nodesToZero",
-        at="message",
-        multi=True,
-    )
-
     return snap_node
 
 
@@ -618,7 +522,7 @@ def _zero_node(node):
     :param node:
     :return:
     """
-    for attr_name in mc.listAttr(node, k=True):
+    for attr_name in mc.listAttr(node, k=True) or list():
 
         if "scale" in attr_name:
             value = 1.0
@@ -634,7 +538,7 @@ def _zero_node(node):
         except RuntimeError:
             pass
 
-    for attr_name in mc.listAttr(node, k=True, ud=True):
+    for attr_name in mc.listAttr(node, k=True, ud=True) or list():
         value = mc.attributeQuery(
             attr_name,
             node=node,
