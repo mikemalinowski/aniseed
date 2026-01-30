@@ -58,6 +58,7 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
                 lines.append(f"  - [`{tool.identifier}`](#{hyperlink})")
 
         for category in self.get_categories():
+
             lines.append(f"{category_header} {category.title()}")
 
             for tool in self.get_plugins(category):

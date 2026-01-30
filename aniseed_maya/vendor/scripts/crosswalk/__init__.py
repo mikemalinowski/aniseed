@@ -25,4 +25,7 @@ module_name = core.get_usable_app()
 if module_name:
     app = sys.modules[module_name]
 
-__version__ = "0.1.0"
+__version__ = "1.0.1"
+
+# -- Expose the module directly too
+globals().update(app.__dict__)

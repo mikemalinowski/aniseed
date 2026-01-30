@@ -72,11 +72,6 @@ class Rig(xstack.Stack):
             if path:
                 self.component_library.add_path(path)
 
-        x = app.attributes.get_attribute(
-            self.host(),
-            "recipe",
-        )
-
         self.deserialize(
             json.loads(
                 app.attributes.get_attribute(
@@ -137,7 +132,6 @@ class Rig(xstack.Stack):
             attribute_name="recipe",
             value=json.dumps(data),
         )
-        print("storing serialisation data")
         return data
 
     # ----------------------------------------------------------------------------------
@@ -196,20 +190,17 @@ class Rig(xstack.Stack):
             print(traceback.print_exc())
             return False
 
-        self.config().pre_build()
-
         result = super(Rig, self).build(
             build_up_to,
             build_only,
             build_below,
             validate_only,
         )
-        self.config().post_build()
 
         return result
 
     @classmethod
-    def find(cls):
+    def all_rigs(cls):
         """
         This will attempt to find all instances of a rig in the scene
         """

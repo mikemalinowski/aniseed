@@ -3,7 +3,6 @@ import xstack
 import webbrowser
 
 
-
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
 class RigComponent(xstack.Component):
@@ -69,7 +68,14 @@ class RigComponent(xstack.Component):
         return None
 
     # ----------------------------------------------------------------------------------
+    # You may re-implement this
     def user_functions(self) -> typing.Dict[str, callable]:
+        """
+        This should return a dictionary where the key is a label/identifier for the
+        functionality and the value is a callable function. These are typically exposed
+        to the user through the front end tool. This allows you to provide the user
+        with additional features beyond just building the component.
+        """
         return {}
 
     # ----------------------------------------------------------------------------------
@@ -103,16 +109,16 @@ class RigComponent(xstack.Component):
 
     # ----------------------------------------------------------------------------------
     def suggested_label(self):
+        """
+        This allows a component to declare a default label for a component. Typically
+        a user will be able to change this, but it gives a good starting point.
+        """
 
         label = self.identifier.title().split(":")[-1].strip()
 
         if self.option("Location") and self.config:
 
             location = self.option("Location").get()
-            print(location)
-            print(self.config.middle)
-            print(location == self.config.middle)
-
             if location and location != self.config.middle:
                 label = f"{label} {location.upper()}"
 

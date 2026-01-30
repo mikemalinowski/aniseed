@@ -1,6 +1,6 @@
 import qtility
 import functools
-import xstack_app
+import xstack
 
 from crosswalk import app
 from Qt import QtWidgets, QtCore, QtGui
@@ -40,7 +40,7 @@ class CustomLineEdit(QtWidgets.QLineEdit):
             for output in parent.outputs():
 
                 action = submenu.addAction(
-                    QtGui.QIcon(xstack_app.resources.get("address.png")),
+                    QtGui.QIcon(xstack.app.resources.get("address.png")),
                     output.name(),
                 )
 

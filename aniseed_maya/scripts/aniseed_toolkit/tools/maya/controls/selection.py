@@ -184,3 +184,90 @@ class ZeroControl(aniseed_toolkit.Tool):
             except:
                 continue
 
+
+class SelectAlternateControls(aniseed_toolkit.Tool):
+
+    identifier = "Select Alternate Controls"
+    classification = "Animation"
+    categories = [
+        "Selection",
+        "Controls",
+    ]
+
+    def run(self, node: str = "", replace_this="_LF", with_this="_RT") -> None:
+        """
+        This will zero out all the animatable channels for the
+        given node
+
+        Args:
+            node: The node to zero out (reset)
+
+        Returns:
+            None
+        """
+        alternate_controls = []
+        controls = aniseed_toolkit.run("Get Controls")
+
+        for control in controls:
+
+            if not replace_this in control:
+                continue
+
+            alternate = control.replace(replace_this, with_this)
+            if mc.objExists(alternate):
+                alternate_controls.append(alternate)
+
+        mc.select(alternate_controls)
+
+class SelectFilteredControls(aniseed_toolkit.Tool):
+
+    identifier = "Select Filtered Controls"
+    classification = "Animation"
+    categories = [
+        "Selection",
+        "Controls",
+    ]
+
+    def run(self, node: str = "", name_filter="_LF") -> None:
+        """
+        This will zero out all the animatable channels for the
+        given node
+
+        Args:
+            node: The node to zero out (reset)
+
+        Returns:
+            None
+        """
+        filtered_controls = []
+        controls = aniseed_toolkit.run("Get Controls")
+
+        for control in controls:
+            if name_filter in control:
+                filtered_controls.append(control)
+
+        mc.select(filtered_controls)
+
+
+class SelectControlsByLocation(aniseed_toolkit.Tool):
+
+    identifier = "Select Controls By Location"
+    classification = "Animation"
+    categories = [
+        "Selection",
+        "Controls",
+    ]
+
+    def run(self, node: str = "") -> None:
+        """
+        This will zero out all the animatable channels for the
+        given node
+
+        Args:
+            node: The node to zero out (reset)
+
+        Returns:
+            None
+        """
+        filtered_controls = []
+        mc.select(aniseed_toolkit.run("Get By Location"))

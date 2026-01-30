@@ -47,8 +47,8 @@ class Control:
         """
         Returns the location tag of the control
         """
-        if mc.objExists(f"{self._control_node}.location"):
-            return mc.getAttr(f"{self._control_node}.location")
+        if mc.objExists(f"{self._control_node}.naming_data"):
+            return json.loads(mc.getAttr(f"{self._control_node}.naming_data"))["location"]
         return ""
 
     def part(self, classification: str) -> str:
@@ -225,7 +225,7 @@ class Control:
                     f"{source_node}.link_{_structure[target_node_type]}"
                 )
 
-        controller_name = aniseed_toolkit.run("MObject Name", nodes["ctl"])
+        controller_name = aniseed_toolkit.run("MObject Name", nodes[config.control])
 
         mc.addAttr(
             controller_name,

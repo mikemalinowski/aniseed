@@ -7,59 +7,55 @@ https://youtu.be/rNy7F64nDiw
 
 ![Rig Image](aniseed_maya/documentation/images/aniseed_rig.png)
 
-It takes a Joint-First approach whereby the user is expected to provide/draw the 
-joint hierarchy (though some components expose functionality to do this for you!), and
-you can then point the rig components to the joints you want that component to drive. 
 
-Some components also expose functionality to generate manipulation guides to help 
-manipulate joints in a more contextually relevant way (for example the spline spine), 
-but it is an important and fundamental aspect of Aniseed that the skeleton is the 
-authority. This is a purposeful choice, particularly as game engines require a rigger
-to be very concious of the joint transforms and maintaining those transforms whilst
-editing and extending rigs. 
+## What is Aniseed
+Aniseed is a component based rigging framework which takes the form of an execution
+stack. Unlike many rigging framewhere where components are expected to be of a specific
+form (such as limbs etc), aniseed offers a more flexible approach. Each component in
+aniseed is a class which can expose inputs, options and outputs - nothing else is 
+mandated by the framework. Therefore a component could be an elaborate spline based
+spine or it could equally just reparenting something or editing pre-existing objects.
 
-Aniseed itself can be thought of as an execution stack, where the rigger can select
-any components (or the rig as a whole) and choose to build that stack. Aniseed will then
-proceed to execute each component in the order it is presented within the stack.
+It is this approach which allows Aniseed to be incredibly flexible and allow riggers to
+produce rebuildable and deterministic rigs with an incredible amount of flexibility. 
+There is no need for "post scripts" or "special processes" as everything is just a 
+component on the stack which gets executed in order. 
 
-This approach makes aniseed incredibly flexible, as a component does not have to 
-specifically drive joints, or could simply modify what has been been before it (a great
-example of this is the space switching mechanism).
 
-<span style="color:orangered">
-IMPORTANTE NOTE: Aniseed is now at version two. For general users the major version
-bump will not affect you (all pre-existing components, saves etc will continue to 
-work). For developers, please ensure you read the note below and familiarise yourself
-with aniseed_toolkit.
-</span>
+## Aniseed Out the Box
 
-```markdown
-Version 2.*
+The framework of Aniseed is very unassuming. Therefore if you're willing to write your
+own modules you can absolutely choose to take a guide first approach or a joint first
+approach and anything in between! However, all the components which come with Aniseed
+out the box take a joint first approach - though some do allow you to generate guides
+to help manipulate them.
 
-What is new in version 2?
-The user flow and primary tool for rigging with aniseed has remained unchanged in 
-version two. Its still focused entirely on the build stack, and all pre-existing
-components work just as they did before. 
+By default Aniseed comes with an ever growing selection of limbs which include:
 
-However, in the first iteration I found that there was too much "rigging logic" within
-the aniseed module itself. Whilst aniseed -is- a rigging tool, it should be considered
-a rigging framework with the flexibility for anyone to build rigs, or author components
-to their own standards. Therefore the concept of what a control is, or how softik 
-should work etc should not be part of the aniseed module, but instead be part of 
-either components or utility functionality. 
+* Spline Spine (including FK Control)
+* Arm
+* Leg
+* Tri Leg
+* Head
+* Eyes
+* Mouth
+* Simple Fk
 
-That way a user or studio is able to take Aniseed as a bare bones framework and build 
-out their own set of components specifically for their requirements, conventions and
-standards.
+But beyond limbs it also includes a variety of components focused on utility:
 
-Therefore in version 2.* the aniseed.utils has been removed completely - as this is 
-where much of the rig assumptions were being made. Instead there is now a completely
-new module called aniseed_toolkit. This contains "tools" which can be used within 
-components to create controls, get upvector locations etc. But it is entirely the 
-choice of the component author as to whether they use them or not. This means the 
-core of aniseed stays free of convention-specific expansion.
+* Space Switch
+* Store/Apply Poses (good for A/T Pose pipelines)
+* Store/Apply Control Shapes
+* Colouring Controls
+* Hide By Type
+* Parenting/Deletion etc
 
-```
+# Aniseed's Expectations
+
+It is important to note that Aniseed focuses on flexibility and adaptability - allowing
+it to be used in a variety of pipeline environments. Therefore it typically prioritises
+user flexibility over a plug and play nature. Therefore a good understanding of rigging,
+hierarchies, scene structure are a must. 
 
 # Installing
 
@@ -114,6 +110,16 @@ as well as exposing various bone mand shape manipulation tools.
 You can view a walkthrough of building your first rig in aniseed here:
 https://youtu.be/oC2FzNgI_9o
 
+```
+It is highly recommended that you play with some of the examples to get a feel for
+how the tool works and what a typical rig stack looks like. There are currently two 
+example rig files you can look at:
+
+* Biped.json (standard biped with spline spine, ik/fk limbs etc)
+* Giraffe.json (Quadruped with tri legs and spline neck/spine)
+
+There is also a Biped.ma which is the Biped.json rig with geometry skinned to it.
+```
 ## Creating a new Rig
 
 Click File/New Rig
@@ -315,7 +321,7 @@ in the scene. It will expose all the components that are available to aniseed ou
 ```python
 import aniseed
 
-new_rig = aniseed.MayaRig(label="MyNewRig")
+new_rig = aniseed.Rig(label="MyNewRig")
 ```
 
 Alternatively, if there is already a rig in the scene, assuming the rig transform is called
@@ -391,7 +397,7 @@ rig with spine and legs
 import aniseed
 
 # -- Start by create a new rig
-rig = aniseed.MayaRig(label="ExampleRig")
+rig = aniseed.Rig(label="ExampleRig")
 
 # -- Add a rig configuration to the rig
 rig.add_component(
@@ -407,7 +413,7 @@ rig.config().create_component_structure()
 # -- that the global srt component is generated for us from the rig
 # -- configuration
 spine_component = rig.add_component(
-    component_type="Standard : Spline Spine",
+    component_type="Limb : Spline Spine",
     label="Spine",
     parent=rig.find("Global SRT"),
 )
@@ -419,7 +425,7 @@ spine_component.user_func_build_skeleton(joint_count=6)
 # -- In this example, we're setting the parent attribute
 # -- to the address of the main control of the srt. We use the address
 # -- rather than a hard coded name to allow for naming flexibility
-spine_component.requirement("Parent").set(
+spine_component.input("Parent").set(
     rig.find("Global SRT").output("Main Control").address()
 )
 
@@ -427,11 +433,11 @@ spine_component.requirement("Parent").set(
 # -- specifying the parent requirement at the time of adding it rather
 # -- that setting the attribute after the fact
 left_leg_component = rig.add_component(
-    component_type="Standard : Leg",
+    component_type="Limb : Leg",
     label="Leg LF",
     parent=spine_component,
     options={"Location": "lf"},
-    requirements={
+    inputs={
         "Parent": spine_component.output("Root Transform").address()
     }
 )
@@ -440,7 +446,7 @@ left_leg_component = rig.add_component(
 # -- a guide for us. Both the option of creating a skeleton and a guide
 # -- is specific to any given component. 
 left_leg_component.user_func_create_skeleton(
-    parent=spine_component.requirement("Root Joint").get(),
+    parent=spine_component.input("Root Joint").get(),
     upper_twist_count=3,
     lower_twist_count=3,
 )
@@ -449,17 +455,17 @@ left_leg_component.user_func_create_skeleton(
 # -- will mirror itself if its build with the right side set. This is a logic
 # -- choice in the component itself rather than a framework choice. 
 right_leg_component = rig.add_component(
-    component_type="Standard : Leg",
+    component_type="Limb : Leg",
     label="Leg RT",
     parent=spine_component,
     options={"Location": "rt"},
-    requirements={
+    inputs={
         "Parent": spine_component.output("Root Transform").address()
     }
 )
 
 right_leg_component.user_func_create_skeleton(
-    parent=spine_component.requirement("Root Joint").get(),
+    parent=spine_component.input("Root Joint").get(),
     upper_twist_count=3,
     lower_twist_count=3,
 )
@@ -664,9 +670,42 @@ import maya.cmds as mc
 my_node = mc.createNode("transform")
 distance = aniseed_toolkit.run("Move By 5", node=my_node, axis="y")
 ```
+# Vendoring
 
-## Utils 
+Vendoring is a practice of embedding or packaging up dependencies 
+within a module to make it more portable. However it is not a good
+practice in a production environment.
 
-Rigging code is typically filled with repetative tasks. Aniseed comes with some utility
-functionality you may find useful. However, its worth noting that there is no requirement
-to use any of the utility functionality
+Aniseed is deployed with a vendor folder to make it easy for users
+who are not comfortable with python. That way they can download aniseed
+and start using it immediately.
+
+### Single User
+
+If you are a single user purely using Aniseed to build rigs then
+leaving the vendored libraries is most likely the best and easiest
+solution. Therefore you need not make any changes. and run Aniseed
+as it is.
+
+### Production Environment
+
+If you're in an environment where there are a lot of other python 
+modules and tools being used then you should consider moving these
+out of the vendor folder and placing them in a managed location. That
+way you will not risk having duplicate python modules which need
+managing.
+
+Note that the following vendored modules can be grabbed from pypi:
+
+* factories
+* qtility
+* scribble
+* signalling
+* xstack
+* blackout
+* Qt
+
+The following are direct from github (MIT License)
+
+* crosswalk
+* snappy

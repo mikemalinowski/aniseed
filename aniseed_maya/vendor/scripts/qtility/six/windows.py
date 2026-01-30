@@ -20,7 +20,6 @@ The current list of supported applications are:
 import os
 import sys
 import scribble
-
 from PySide6 import QtWidgets, QtCore
 
 
@@ -199,7 +198,6 @@ class MemorableWindow(QtWidgets.QMainWindow):
             self.height(),
         ]
         stored_data.save()
-        print("saved data to : %s" % self._storage_identifier)
 
     # --------------------------------------------------------------------------
     def resizeEvent(self, event):

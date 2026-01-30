@@ -8,7 +8,6 @@ import signalling
 
 from . import constants
 from . import address
-
 from .constants import Status
 from .component import Component
 
@@ -82,7 +81,14 @@ class Stack:
         self.changed = signalling.Signal()
 
         self.build_started = signalling.Signal()
+        self.build_progressed = signalling.Signal()
         self.build_completed = signalling.Signal()
+
+    def component_data(self):
+        """
+        Returns the raw component data
+        """
+        return self._components
 
     # ----------------------------------------------------------------------------------
     def serialise(self) -> typing.Dict:
@@ -103,6 +109,12 @@ class Stack:
 
         return data
 
+    # ----------------------------------------------------------------------------------
+    def validate_stack_data(self, data: typing.Dict):
+        """
+        This will check that all component types in the given dict data are valid
+        and return a list of any invalid components
+        """
     # ----------------------------------------------------------------------------------
     def deserialize(self, data: typing.Dict):
         """
@@ -151,7 +163,6 @@ class Stack:
 
         # -- Pull out any stored build order data
         self._build_order = data.get("build_order", list())
-        self.serialise()
 
     # ----------------------------------------------------------------------------------
     # noinspection PyBroadException
@@ -261,14 +272,23 @@ class Stack:
         if validate_only:
             return not invalid_result
 
+        # -- Run the pre-build events
+        self.run_events(build_order, "on_build_started")
+
         # -- We now re-cycle over the build order but this time we will trigger the build
-        for uuid_ in build_order:
+        uuid_count = len(build_order)
+        for idx, uuid_ in enumerate(build_order):
+
+            # -- Emit a progression signal
+            percentage = (float(idx) / uuid_count) * 100
+            self.build_progressed.emit(percentage)
 
             # -- Get the component for the given uuid
             component_instance = self._components.get(uuid_)
 
             if not component_instance:
                 print(f"Could not find component with id : {uuid_}")
+                self.run_events(build_order, "on_build_finished", False)
                 return False
 
             # -- Just as during the validation, we're executing third party code, so
@@ -286,16 +306,32 @@ class Stack:
 
                 print("Build failed. Please see the script editor for a traceback.")
                 print(traceback.print_exc())
+                self.run_events(build_order, "on_build_finished", False)
                 return False
 
             if not result:
+                self.run_events(build_order, "on_build_finished", False)
                 return False
 
         # -- Emit our completion
+        self.run_events(build_order, "on_build_finished", True)
         print("Build Succeeded.")
+        self.build_progressed.emit(100)
         self.build_completed.emit()
 
         return True
+
+    def run_events(self, build_order, event_name, *args, **kwargs):
+        for uuid_ in build_order:
+            # -- Get the component via the uuid
+            component_instance: Component = self._components.get(uuid_)
+            try:
+                func_ = getattr(component_instance, event_name)
+                func_(*args, **kwargs)
+
+            except:
+                print(f"{component_instance.label()} failed during its pre build")
+                print(traceback.print_exc())
 
     # ----------------------------------------------------------------------------------
     def add_component(
@@ -561,6 +597,7 @@ class Stack:
             removed_component_data = {
                 "uuid": component.uuid(),
                 "label": component.label(),
+                "type": component.identifier,
                 "children": [],
             }
 

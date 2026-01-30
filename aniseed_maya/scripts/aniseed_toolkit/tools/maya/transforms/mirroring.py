@@ -15,6 +15,7 @@ MIRROR_PLANES = {
 class GlobalMirrorTool(aniseed_toolkit.Tool):
 
     identifier = "Global Mirror"
+    classification = "Rigging"
     categories = [
         "Transforms",
     ]
@@ -22,7 +23,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
     def run(
         self,
         transforms: list[str] or str = None,
-        across: str = "XY",
+        across: str = "YZ",
         behaviour: bool = True,
         name_replacement: dict = None,
     ):
@@ -185,6 +186,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
 class InvertTranslationTool(aniseed_toolkit.Tool):
 
     identifier = "Invert Translation"
+    classification = "Rigging"
     categories = [
         "Transforms",
     ]

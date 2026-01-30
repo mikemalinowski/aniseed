@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 
@@ -8,6 +9,11 @@ class CreateGuide(aniseed_toolkit.Tool):
     categories = [
         "Creation",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["joint", "parent", "link_to"]:
+            return aniseed.widgets.ObjectSelector()
 
     # --------------------------------------------------------------------------------------
     def run(
@@ -97,7 +103,7 @@ class CreateGuide(aniseed_toolkit.Tool):
             )
 
         if link_to:
-            link(
+            self.link(
                 guide_control,
                 link_to,
             )

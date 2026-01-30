@@ -1,7 +1,6 @@
 import os
 import sys
 import json
-import traceback
 
 
 # -- This is a special environment variable which the user can set in
@@ -16,44 +15,45 @@ STORAGE_DIRECTORY = os.environ.get(ENVIRONMENT_VARIABLE, None)
 # -- If we have not been provided with a specific storage location
 # -- then we need to resolve to a default location, but this is platform
 # -- dependent
-if sys.platform == 'linux' or sys.platform == 'linux2':
-    if 'XDG_CONFIG_HOME' in os.environ:
+if not STORAGE_DIRECTORY:
+    if sys.platform == 'linux' or sys.platform == 'linux2':
+        if 'XDG_CONFIG_HOME' in os.environ:
+            STORAGE_DIRECTORY = os.path.join(
+                os.environ['XDG_CONFIG_HOME'],
+                'pyscribble',
+            )
+
+        else:
+            STORAGE_DIRECTORY = os.path.join(
+                os.environ['HOME'],
+                '.config',
+                'pyscribble',
+            )
+
+    elif sys.platform == 'win32':
         STORAGE_DIRECTORY = os.path.join(
-            os.environ['XDG_CONFIG_HOME'],
+            os.environ.get('APPDATA'),
+            'pyscribble',
+        )
+
+    elif sys.platform == 'darwin':
+        STORAGE_DIRECTORY = os.path.join(
+            os.environ['HOME'],
+            'Documents',
             'pyscribble',
         )
 
     else:
-        STORAGE_DIRECTORY = os.path.join(
-            os.environ['HOME'],
-            '.config',
-            'pyscribble',
+        raise Exception(
+            (
+                '%s is not supported by default. In order to utilise this module '
+                'you must define an environment variable (%s) specifying the '
+                'storage path'
+            ) % (
+                sys.platform,
+                ENVIRONMENT_VARIABLE,
+            )
         )
-
-elif sys.platform == 'win32':
-    STORAGE_DIRECTORY = os.path.join(
-        os.environ.get('APPDATA'),
-        'pyscribble',
-    )
-
-elif sys.platform == 'darwin':
-    STORAGE_DIRECTORY = os.path.join(
-        os.environ['HOME'],
-        'Documents',
-        'pyscribble',
-    )
-
-else:
-    raise Exception(
-        (
-            '%s is not supported by default. In order to utilise this module '
-            'you must define an environment variable (%s) specifying the '
-            'storage path'
-        ) % (
-            sys.platform,
-            ENVIRONMENT_VARIABLE,
-        )
-    )
 
 
 # ------------------------------------------------------------------------------
@@ -96,12 +96,7 @@ class ScribbleDictionary(dict):
         """
         if os.path.exists(self.location()):
             with open(self.location(), 'r') as f:
-                try:
-                    self.update(json.load(f))
-
-                except BaseException:
-                    traceback.print_exc()
-                    print('Failed to load json data')
+                self.update(json.load(f))
 
     # --------------------------------------------------------------------------
     def save(self):

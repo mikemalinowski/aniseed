@@ -7,7 +7,7 @@ COMPONENT_PATH = os.path.join(
 )
 
 class TestUnitStack(unittest.TestCase):
-
+    counter = 0
     def setUp(self):
         pass
 
@@ -310,3 +310,30 @@ class TestUnitStack(unittest.TestCase):
         self.assertTrue(
             result
         )
+
+    def test_progression(self):
+        self._reset_counter()
+
+        stack = xstack.Stack(
+            component_paths=[COMPONENT_PATH],
+        )
+
+        for i in range(1, 10):
+            component = stack.add_component(
+                label="",
+                component_type="ComponentWithOption",
+            )
+
+        stack.build_progressed.connect(self._increment_counter)
+        result = stack.build()
+
+        self.assertEqual(
+            self.counter,
+            10,
+        )
+
+    def _reset_counter(self):
+        counter = 0
+
+    def _increment_counter(self, *args, **kwargs):
+        self.counter += 1

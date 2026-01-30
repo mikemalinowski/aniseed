@@ -194,7 +194,7 @@ class GetChainFacingDirection(aniseed_toolkit.Tool):
                 axis[channel] += mc.getAttr(
                     f"{joint}.translate{channel.upper()}",
                 )
-    
+
         has_x = abs(axis["x"]) > epsilon
         has_y = abs(axis["y"]) > epsilon
         has_z = abs(axis["z"]) > epsilon

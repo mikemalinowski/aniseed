@@ -65,3 +65,4 @@ PYSCRIBBLE_STORAGE_DIR, if this is set then the path defined by that variable
 will always be used over the default behaviour.
 """
 from .core import get
+from .core import STORAGE_DIRECTORY

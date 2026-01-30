@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 from maya.api import OpenMaya as om
@@ -11,6 +12,11 @@ class DistanceBetweenTool(aniseed_toolkit.Tool):
     categories = [
         "Math",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["node_a", "node_b"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(
         self,

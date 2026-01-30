@@ -1,25 +1,26 @@
 import os
+import xstack
 import typing
 import qtility
 import functools
 import aniseed_toolkit
-
-from Qt import QtWidgets, QtCore, QtGui
-import xstack_app
 from crosswalk import app
+from Qt import QtWidgets, QtCore, QtGui
 
 from . import Rig
 from . import host
 from . import resources
 
 
-
-
 # --------------------------------------------------------------------------------------
-class AppConfig(xstack_app.AppConfig):
+class AppConfig(xstack.app.AppConfig):
     """
-    We use the app config class to tailor the xstack app to be specific to the
-    purpose of rigging.
+    The AppConfig class allows us to tailor how the xstack app is represented. It
+    gives us the oppotunity to tailor certain wording and branding to align with the
+    end use cases.
+
+    It also allolws us to define component paths as well as the stack class we
+    want to use.
     """
 
     # -- These allow applications to tailor their appearance and
@@ -59,7 +60,7 @@ class AppConfig(xstack_app.AppConfig):
 
 
 # --------------------------------------------------------------------------------------
-class AppWidget(xstack_app.AppWidget):
+class AppWidget(xstack.app.AppWidget):
     """
     We subclass the app widget class as in the context of rigging we want to be
     able to switch rigs via the menu.
@@ -163,13 +164,11 @@ class AppWidget(xstack_app.AppWidget):
         has selected
         """
         if not rig_host:
-
             try:
                 rig_host = self.all_rigs()[0]
-
                 if app.objects.get_name(self._host) == app.objects.get_name(rig_host):
+                    # -- Last log before crash is here
                     return
-
             except IndexError:
                 self.set_active_stack(stack=None)
                 return
@@ -182,8 +181,8 @@ class AppWidget(xstack_app.AppWidget):
         self.set_active_stack(
             stack=rig
         )
-
         self._host = rig_host
+
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
@@ -195,7 +194,7 @@ class AppWindow(QtWidgets.QMainWindow):
 
     OBJECT_NAME = "xstackBuilderWindow"
 
-    def __init__(self, app_config=AppConfig, *args, **kwargs):
+    def __init__(self, app_config=AppConfig, allow_threading=True, *args, **kwargs):
         super(AppWindow, self).__init__(*args, **kwargs)
 
         self.app_config = app_config
@@ -223,6 +222,7 @@ class AppWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(
             AppWidget(
                 app_config=self.app_config,
+                allow_threading=allow_threading,
                 parent=self,
             ),
         )
@@ -242,9 +242,9 @@ def launch(app_config=None, blocking: bool = False, *args, **kwargs):
         return
 
     q_app = qtility.app.get()
-
     w = AppWindow(
         app_config=app_config or AppConfig,
+        allow_threading=False,
         parent=qtility.windows.application(),
         *args,
         **kwargs

@@ -1,0 +1,107 @@
+{
+    "foot": {
+        "attributes": {
+            "jointOrientX": 179.99999999999974,
+            "jointOrientY": -1.6896786578674055e-14,
+            "jointOrientZ": -3.1805546814635176e-15,
+            "rotateX": 179.9999999996646,
+            "rotateY": -1.00972405782303e-10,
+            "rotateZ": -67.73023519727853,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 22.000000000000004,
+            "translateY": -1.0644263248593688e-14,
+            "translateZ": -2.6645352591003757e-14
+        },
+        "name": "foot",
+        "parent": "lower",
+        "radius": 0.9337644710419017,
+        "root_transform_data": {},
+        "type": "joint"
+    },
+    "lower": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": -2.7876721284253234e-10,
+            "rotateY": 1.9019710817466753e-11,
+            "rotateZ": 52.022122942902776,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 42.000000000000014,
+            "translateY": -3.552713678800501e-15,
+            "translateZ": -5.861977570020827e-14
+        },
+        "name": "lower",
+        "parent": "mid",
+        "radius": 1.422540822666062,
+        "root_transform_data": {},
+        "type": "joint"
+    },
+    "mid": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": -3.832518390070452e-11,
+            "rotateY": -1.354717210815069e-10,
+            "rotateZ": -52.169586544994075,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 41.999999999999964,
+            "translateY": -7.105427357601002e-15,
+            "translateZ": -5.329070518200751e-15
+        },
+        "name": "mid",
+        "parent": "upper",
+        "radius": 2.0,
+        "root_transform_data": {},
+        "type": "joint"
+    },
+    "toe": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": -2.6058781466899573e-10,
+            "rotateY": -1.401542138830062e-10,
+            "rotateZ": 1.709548173158517e-14,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 9.386113106810118,
+            "translateY": -8.43769498715119e-15,
+            "translateZ": 1.5987211554602254e-14
+        },
+        "name": "toe",
+        "parent": "foot",
+        "radius": 0.9337644710419017,
+        "root_transform_data": {},
+        "type": "joint"
+    },
+    "upper": {
+        "attributes": {
+            "jointOrientX": 1.2722218725854067e-14,
+            "jointOrientY": -1.2722218725854067e-14,
+            "jointOrientZ": 4.4527765540489235e-14,
+            "rotateX": 89.99999999981887,
+            "rotateY": -20.589260160507923,
+            "rotateZ": -89.99999999985602,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 0.0,
+            "translateY": 0.0,
+            "translateZ": 0.0
+        },
+        "name": "upper",
+        "parent": null,
+        "radius": 2.0,
+        "root_transform_data": {},
+        "type": "joint"
+    }
+}

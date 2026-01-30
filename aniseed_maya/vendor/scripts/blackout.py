@@ -81,3 +81,19 @@ def drop(package):
     for m in list(sys.modules.keys()):
         if m == package or m.startswith('%s.' % package):
             del sys.modules[m]
+
+
+def find(package):
+    """
+    This will list all packages and subpackages with the provided string
+    Makes it easier to find which modules you want to unload
+    """
+    for m in list(sys.modules.keys() ):
+        if package in m or m.startswith('{}.'.format(package) ) :
+            module = sys.modules[m]
+            if module != None:
+                print (module)
+
+def findAll() :
+    for m in list(sys.modules.keys() ) :
+        print (m)             

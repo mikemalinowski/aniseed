@@ -1,5 +1,6 @@
 import uuid
 import json
+import copy
 import typing
 import traceback
 import signalling
@@ -8,7 +9,6 @@ from . import stack
 from .attributes import Option
 from .attributes import Input
 from .attributes import Output
-
 from .constants import Status
 
 
@@ -78,7 +78,7 @@ class Component:
 
         ```
         if option_name == "foobar":
-            return QtWidgets.QLineEdit()
+            return qute.QLineEdit()
         ```
 
         If you do not want a specific option to be shown in the ui, you can do:
@@ -101,7 +101,7 @@ class Component:
 
         ```
         if requirement_name == "foobar":
-            return QtWidgets.QLineEdit()
+            return qute.QLineEdit()
         ```
 
         If you do not want a specific requirement to be shown in the ui, you can do:
@@ -120,7 +120,6 @@ class Component:
         """
         return None
 
-
     # ----------------------------------------------------------------------------------
     def on_removed_from_stack(self):
         """
@@ -129,6 +128,25 @@ class Component:
         :return:
         """
         return None
+
+    # ----------------------------------------------------------------------------------
+    def on_build_finished(self, successful: bool) -> None:
+        """
+        This is run when the build is complete and will pass bool declaring whether the
+        build was successful or not.
+
+        Args:
+             successful (bool): Whether the build was successful or not.
+        """
+        pass
+
+    # ----------------------------------------------------------------------------------
+    def on_build_started(self) -> None:
+        """
+        This is run immediately at the start of the build before any components have
+        their run functions called.
+        """
+        pass
 
     # ----------------------------------------------------------------------------------
     def help(self):
@@ -442,6 +460,10 @@ class Component:
 
         return None
 
+    def remove_output(self, name: str) -> None:
+        output_ = self.output(name)
+        self._outputs.remove(output_)
+
     # ----------------------------------------------------------------------------------
     def describe(self):
         """
@@ -459,7 +481,8 @@ class Component:
         )
 
         for option in self.options():
-            print(f"        {option.name().ljust(option_len + 2, ' ')} : {self.option(option.name()).get()}")
+            print(
+                f"        {option.name().ljust(option_len + 2, ' ')} : {self.option(option.name()).get()}")
 
         print(f"    Inputs :")
 
@@ -471,7 +494,8 @@ class Component:
         )
 
         for input_ in self.inputs():
-            print(f"        {input_.name().ljust(inputs_len + 2, ' ')} : {self.input(input_.name()).get()}")
+            print(
+                f"        {input_.name().ljust(inputs_len + 2, ' ')} : {self.input(input_.name()).get()}")
 
     # ----------------------------------------------------------------------------------
     def describe_outputs(self):
@@ -486,7 +510,8 @@ class Component:
         )
 
         for output in self.outputs():
-            print(f"        {output.name().ljust(output_len + 2, ' ')} : {self.output(output.name()).get()}")
+            print(
+                f"        {output.name().ljust(output_len + 2, ' ')} : {self.output(output.name()).get()}")
 
     # ----------------------------------------------------------------------------------
     def serialise(self) -> dict:
@@ -543,14 +568,12 @@ class Component:
         # -- Backward compat with old format of inputs. Note that all
         # -- serialisation is done with inputs, not inputs.
         for input_data in data.get("inputs", list()):
-
             name = input_data["name"]
             value = input_data["value"]
 
             self.input(name).set(value)
 
         for option_data in data.get("options", list()):
-
             name = option_data["name"]
             value = option_data["value"]
 
@@ -587,7 +610,6 @@ class Component:
 
         new_component.changed.emit()
 
-
     # ----------------------------------------------------------------------------------
     def copy(self, other_component):
         """
@@ -605,7 +627,7 @@ class Component:
 
             if input_to_copy:
                 self.input(input_.name()).set(
-                    input_to_copy.get(resolved=False),
+                    copy.deepcopy(input_to_copy.get(resolved=False)),
                 )
 
         for option in self.options():

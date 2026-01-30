@@ -232,7 +232,6 @@ class ScaleShapes(aniseed_toolkit.Tool):
             curves = mc.listRelatives(node, type="nurbsCurve")
 
         if not curves:
-            print("no curves")
             return
 
         for curve in curves:
@@ -273,6 +272,7 @@ class RotateShapeFromUpAxis(aniseed_toolkit.Tool):
                 items=["x", "y", "z"],
                 title="Select Up Axis",
                 message="Select Up Axis.",
+                editable=False,
             )
 
         if not up_axis:
@@ -319,6 +319,7 @@ class GetUpAxisShapeRotation(aniseed_toolkit.Tool):
                 items=["x", "y", "z"],
                 title="Select Up Axis",
                 message="Select Up Axis.",
+                editable=False,
             )
 
         if not up_axis:
@@ -330,3 +331,16 @@ class GetUpAxisShapeRotation(aniseed_toolkit.Tool):
 
         if up_axis.lower() == "z":
             vector = [-90, 0, 0]
+
+
+class SnapShapeToNodeTransform(aniseed_toolkit.Tool):
+
+    identifier = "Snap Shape To Node Transform"
+    classification = "Rigging"
+    categories = [
+        "Shapes",
+    ]
+
+    def run(self, node_to_snap: str = "", target: str = "") -> list[float]:
+        pass
+

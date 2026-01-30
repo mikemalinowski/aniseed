@@ -40,7 +40,8 @@ class Tool:
     def run(self, *args, **kwargs):
         pass
 
-    def ui_elements(self, keyword_name):
+    @classmethod
+    def ui_elements(cls, keyword_name):
         """
         This allows you to optionally return a QWidget to represent
         the given keyword argument in a ui if you wish to. If not then

@@ -161,7 +161,7 @@ class GetJointFromPinTool(aniseed_toolkit.Tool):
 
 class GetPinFromNode(aniseed_toolkit.Tool):
 
-    identifier = "Get Pin From Joint"
+    identifier = "Get Pin From Node"
     classification = "Rigging"
     user_facing = False
     categories = [

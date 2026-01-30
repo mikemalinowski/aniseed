@@ -15,6 +15,7 @@ def grayscaled(pixmap: QtGui.QPixmap) -> QtGui.QPixmap:
     """
     # -- Get an image object
     image: QtGui.QImage = pixmap.toImage()
+    alpha: QtGui.QImage = pixmap.toImage()
 
     # -- Cycle the pixels and convert them to grayscale
     for x in range(image.width()):
@@ -40,9 +41,7 @@ def grayscaled(pixmap: QtGui.QPixmap) -> QtGui.QPixmap:
             )
 
     # -- Re-apply the alpha channel
-    image.setAlphaChannel(
-        pixmap.toImage().alphaChannel()
-    )
+    image.setAlphaChannel(alpha)
 
     # -- Return the pixmap
     return QtGui.QPixmap.fromImage(image)

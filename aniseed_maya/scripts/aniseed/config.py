@@ -325,7 +325,7 @@ class RigConfiguration(component.RigComponent):
 
             counter += 1
 
-    def pre_build(self):
+    def on_build_started(self):
         """
         These functions are specific to the rig configuration and allow the
         config node to operate before and after the build.
@@ -335,7 +335,7 @@ class RigConfiguration(component.RigComponent):
         # -- any name generated through this config.
         self._decomposition_map = dict()
 
-    def post_build(self):
+    def on_build_finished(self, successful: bool):
         """
         These functions are specific to the rig configuration and allow the
         config node to operate before and after the build.
@@ -353,6 +353,10 @@ class RigConfiguration(component.RigComponent):
         location,
         counter,
     ):
+        """
+        We store the name decomposition because it allows us to look up name data
+        later on through tools.
+        """
         self._decomposition_map[name] = dict(
             classification=classification,
             description=description,

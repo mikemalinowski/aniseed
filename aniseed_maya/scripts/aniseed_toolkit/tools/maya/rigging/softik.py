@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 
@@ -9,6 +10,11 @@ class CreateSoftIkSetup(aniseed_toolkit.Tool):
     categories = [
         "Rigging",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["root", "target", "second_joint", "third_joint"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(
         self,

@@ -199,7 +199,6 @@ class MemorableWindow(QtWidgets.QMainWindow):
             self.height(),
         ]
         stored_data.save()
-        print("saved data to : %s" % self._storage_identifier)
 
     # --------------------------------------------------------------------------
     def resizeEvent(self, event):

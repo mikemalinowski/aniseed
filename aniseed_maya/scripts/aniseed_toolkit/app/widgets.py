@@ -129,8 +129,11 @@ class ToolWidget(QtWidgets.QWidget):
 
         for option_name, option_value in self.resolved_options(tool).items():
 
-            # -- Create the widget and the layout
-            widget = qtility.derive.qwidget(option_value)
+            widget = tool.ui_elements(keyword_name=option_name)
+
+            if not widget:
+                # -- Create the widget and the layout
+                widget = qtility.derive.qwidget(option_value)
 
             if not widget:
                 continue

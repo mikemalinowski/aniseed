@@ -19,7 +19,7 @@ class GetControls(aniseed_toolkit.Tool):
         )
 
         if not rigs:
-            rigs = aniseed.Rig.find()
+            rigs = aniseed.Rig.all_rigs()
 
         if not rigs:
             return
@@ -138,3 +138,47 @@ class GetOpposite(aniseed_toolkit.Tool):
             opposites.append(opposite_control)
 
         return opposites
+
+class GetByLocation(aniseed_toolkit.Tool):
+
+    identifier = "Get By Location"
+    classification = "Animation"
+    user_facing = False
+    categories = [
+        "Selection",
+        "Controls",
+    ]
+
+    def run(self, controls: list[str] or None = None) -> list[str]:
+        """
+        This will return the opposite controls for the given controls
+
+        Args:
+            controls: List of controls to get the opposites for. If none are
+                given then the selection will be used.
+        """
+        filtered_controls = []
+        rig = None
+
+        if not controls:
+            reference_node = mc.ls(sl=True)[0]
+        else:
+            reference_node = controls[0]
+
+        # -- Get the rig
+        location_filter = None
+        control = aniseed_toolkit.run("Get Control", reference_node)
+        rig = aniseed_toolkit.run("Get Rig", control.ctl)
+        location_filter = control.location
+
+        for control in aniseed_toolkit.run("Get Controls"):
+
+            control = aniseed_toolkit.run("Get Control", control)
+
+            if not control:
+                continue
+
+            if control.location == location_filter:
+                filtered_controls.append(control.ctl)
+
+        return filtered_controls

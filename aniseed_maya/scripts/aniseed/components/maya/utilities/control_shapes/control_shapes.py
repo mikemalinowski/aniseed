@@ -2,6 +2,7 @@ import os
 import aniseed
 import qtility
 import functools
+import traceback
 import aniseed_toolkit
 
 import maya.cmds as mc
@@ -27,6 +28,11 @@ class StoreControlShapes(aniseed.RigComponent):
             hidden=True,
         )
 
+        self.declare_option(
+            name="Transient Shape Data",
+            value=list(),
+            hidden=True,
+        )
         self.declare_option(
             name="_Clear Shapes",
             value=None,
@@ -79,11 +85,19 @@ class StoreControlShapes(aniseed.RigComponent):
             if existing_data["node"] not in read:
                 shape_data.append(existing_data)
 
-        self.option("Shape Data").set(
+        self.option("Transient Shape Data").set(
             shape_data,
         )
 
         return True
+
+    def on_build_finished(self, successful: bool) -> None:
+
+        if successful:
+            self.option("Shape Data").set(
+                self.option("Transient Shape Data").get(),
+            )
+            self.option("Transient Shape Data").set(list())
 
     @staticmethod
     def _clear_shapes(component):
@@ -126,7 +140,10 @@ class ApplyControlShapes(aniseed.RigComponent):
         # -- Find the store component so we can extract the data
         for component in self.rig.components():
             if isinstance(component, StoreControlShapes):
-                stored_shape_data: list = component.option("Shape Data").get()
+                option_name = "Shape Data"
+                if component.option("Transient Shape Data").get():
+                    option_name = "Transient Shape Data"
+                stored_shape_data: list = component.option(option_name).get()
 
         if not stored_shape_data:
             return True
@@ -138,7 +155,7 @@ class ApplyControlShapes(aniseed.RigComponent):
             if not mc.objExists(node):
                 continue
 
-            connection_data = list()
+            connection_pairs = []
             for shape in mc.listRelatives(node, shapes=True) or list():
                 connection_data = mc.listConnections(
                     shape,
@@ -146,13 +163,31 @@ class ApplyControlShapes(aniseed.RigComponent):
                     plugs=True,
                     connections=True,
                 ) or list()
+                print(f"checking on {node} : {connection_data}")
+                for idx in range(int(len(connection_data) * 0.5)):
+                    stage = idx * 2
+                    destination_attribute = connection_data[stage].split(".")[-1]
+                    driving_attribute = connection_data[stage+1]
 
-                break
+                    connection_pairs.append([driving_attribute, destination_attribute])
 
+            print("got connection data : %s" % connection_pairs)
             aniseed_toolkit.run(
                 "Apply Shape",
                 node=node,
                 data=shape_data,
             )
+
+            for connection_pair in connection_pairs:
+                for shape in mc.listRelatives(node, shapes=True) or list():
+                    driving_attribute = connection_pair[0]
+                    destination_attribute = f"{shape}.{connection_pair[1]}"
+
+                    try:
+                        mc.connectAttr(driving_attribute, destination_attribute)
+                    except:
+                        traceback.print_exc()
+                        pass
+
 
         return True

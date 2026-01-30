@@ -2,10 +2,74 @@ import os
 import json
 import typing
 import qtility
+import aniseed
 import aniseed_toolkit
 
 import maya.cmds as mc
 import maya.api.OpenMaya as om
+
+
+class CopyShape(aniseed_toolkit.Tool):
+
+    identifier = 'Copy Shape'
+    classification = "Rigging"
+    categories = [
+        "Shapes"
+    ]
+    CACHE = None
+
+    def run(self, node: str = ""):
+        """
+        This will return a list of shape files which are present in the
+        aniseed toolkit shapes directory
+
+        Returns:
+            List of absolute paths to the json shape files
+        """
+        try:
+            node = node or mc.ls(sl=True)[0]
+        except IndexError:
+            print("You must give or select a node")
+            return
+
+        CopyShape.CACHE = aniseed_toolkit.run(
+            "Read Shape From Node",
+            node,
+        )
+
+
+class PasteShape(aniseed_toolkit.Tool):
+    identifier = 'Paste Shape'
+    classification = "Rigging"
+    categories = [
+        "Shapes"
+    ]
+    _CACHE = None
+
+    def run(self, node: str = "", clear=True):
+        """
+        This will return a list of shape files which are present in the
+        aniseed toolkit shapes directory
+
+        Returns:
+            List of absolute paths to the json shape files
+        """
+        if not CopyShape.CACHE:
+            print("No copied shape data")
+            return
+
+        try:
+            node = node or mc.ls(sl=True)[0]
+        except IndexError:
+            print("You must give or select a node")
+            return
+
+        CopyShape._CACHE = aniseed_toolkit.run(
+            "Apply Shape",
+            node=node,
+            data=CopyShape.CACHE,
+            clear=clear,
+        )
 
 
 class GetShapeList(aniseed_toolkit.Tool):
@@ -204,6 +268,14 @@ class ApplyShape(aniseed_toolkit.Tool):
         if not node:
             node = mc.ls(sl=True)[0]
 
+        if not data:
+            data = qtility.request.item(
+                items=aniseed_toolkit.run("Get Shape List"),
+                title="Apply Shape",
+                message="Select Shape",
+                editable=False,
+            )
+
         if isinstance(data, str):
             data = aniseed_toolkit.run("Read Shape From File", data)
 
@@ -254,3 +326,70 @@ class ApplyShape(aniseed_toolkit.Tool):
         mc.select(node)
 
         return shape_list
+
+
+class SaveAllRigControlShapesToFile(aniseed_toolkit.Tool):
+
+    identifier = "Save All Rig Control Shapes"
+    classification = "Rigging"
+    categories = ["Shapes"]
+
+    def run(self, filepath: str = ""):
+
+        if not filepath:
+            filepath = qtility.request.filepath(
+                title="Store Shapes",
+                filter_="*.json (*.json)",
+                save=True,
+                parent=None,
+            )
+
+        if not filepath:
+            return
+
+        all_controls = aniseed_toolkit.run("Get Controls")
+
+        all_data = dict()
+
+        for control in all_controls:
+            all_data[control] = aniseed_toolkit.run("Read Shape From Node", control)
+
+        with open(filepath, "w") as f:
+            json.dump(
+                all_data,
+                f,
+                indent=4,
+                sort_keys=True,
+            )
+
+
+class LoadRigControlShapesFromFile(aniseed_toolkit.Tool):
+
+    identifier = "Load Rig Control Shapes From File"
+    classification = "Rigging"
+    categories = ["Shapes"]
+
+    def run(self, filepath: str = ""):
+
+        if not filepath:
+            filepath = qtility.request.filepath(
+                title="Load Shapes",
+                filter_="*.json (*.json)",
+                save=False,
+                parent=None,
+            )
+
+        if not filepath:
+            return
+
+        with open(filepath, "r") as f:
+            all_data = json.load(f)
+
+        for control, shape_data in all_data.items():
+            if mc.objExists(control):
+                aniseed_toolkit.run("Apply Shape", control, shape_data)
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name == "filepath":
+            return aniseed.widgets.FilepathSelector()

@@ -10,7 +10,6 @@ class StandaloneHost(aniseed.EmbeddedHost):
         This is responsible for launching the application within the
         current host.
         """
-        print("checking for launch")
         return None
 
     def environment_initialization(self):
@@ -24,12 +23,10 @@ class StandaloneHost(aniseed.EmbeddedHost):
         """
         This is called when a rig is being saved
         """
-        print("on rig save")
         return dict()
 
     def on_rig_load(self, rig, file_data: dict) -> None:
         """
         Called when a rig has been loaded
         """
-        print("on rig load")
         return None

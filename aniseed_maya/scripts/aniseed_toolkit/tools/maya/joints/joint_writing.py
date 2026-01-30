@@ -2,6 +2,7 @@
 import json
 import typing
 import qtility
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 
@@ -51,6 +52,7 @@ class SerialiseNodesToDict(aniseed_toolkit.Tool):
         Returns:
             dict of the dataset in the format supported by the joint writing tools
         """
+        nodes = nodes or mc.ls(sl=True)
         return _create_dataset_from_nodes(nodes)
 
 
@@ -69,7 +71,7 @@ class CreateNodesFromDict(aniseed_toolkit.Tool):
         dataset: typing.Dict = None,
         apply_names: bool = True,
         invert: bool = False,
-        localise_root: bool = False,
+        worldspace_root: bool = False,
     ) -> dict:
         """
         This will take a dictionary (in the format returned by SerialiseNodesToDict)
@@ -81,8 +83,7 @@ class CreateNodesFromDict(aniseed_toolkit.Tool):
             apply_names: Whether to apply the names to the created nodes
             invert: Whether translations should be inverted or not (useful when
                 mirroring)
-            localise_root: If false, the root of the structure will be matched
-                in worldspace
+            worldspace_root: If true, the values will be applied in worldspace
         
         Returns:
             Dictionary where the key is the name as defined in the data and the value
@@ -93,7 +94,7 @@ class CreateNodesFromDict(aniseed_toolkit.Tool):
             dataset,
             apply_names,
             invert,
-            localise_root,
+            worldspace_root,
         )
 
 
@@ -121,7 +122,7 @@ class WriteJointFileTool(aniseed_toolkit.Tool):
             if not mc.ls(sl=True):
                 return
 
-            joints = mc.ls(sl=True)
+            nodes = mc.ls(sl=True)
 
         if not filepath:
             filepath = qtility.request.filepath(
@@ -151,13 +152,20 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
         "Joints",
     ]
 
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name == "root_parent":
+            return aniseed.widgets.ObjectSelector()
+        if keyword_name == "filepath":
+            return aniseed.widgets.FilepathSelector()
+        
     def run(
         self,
-        root_parent=None,
-        filepath=None,
+        root_parent: str = "",
+        filepath: str = "",
         apply_names=True,
         invert=False,
-        localise_root=False,
+        worldspace_root=False,
     ):
         """
         This will parse the given json file and generate the structure defined within
@@ -169,7 +177,7 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             apply_names: Whether to apply the names to the created nodes
             invert: Whether translations should be inverted or not (useful when
                 mirroring)
-            localise_root: If false, the root of the structure will be matched
+            worldspace_root: If false, the root of the structure will be matched
                 in worldspace
         
         Returns:
@@ -181,6 +189,7 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
                 root_parent = mc.ls(sl=True)[0]
 
             except IndexError:
+                print("Could not resolve parent")
                 return
 
         if not filepath:
@@ -192,6 +201,7 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             )
 
         if not filepath:
+            print("Could not resolve file")
             return
 
         with open(filepath, "r") as f:
@@ -202,7 +212,7 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             dataset=all_joint_data,
             apply_names=apply_names,
             invert=invert,
-            localise_root=localise_root,
+            worldspace_root=worldspace_root,
         )
 
 
@@ -234,7 +244,7 @@ def _create_dataset_from_nodes(nodes):
         if node_type == "joint":
 
             item_data["radius"] = mc.getAttr(f"{node}.radius")
-            item_data["root_transform_data"] = _get_root_transform_data(node)
+            # item_data["root_transform_data"] = _get_root_transform_data(node)
 
             for type_ in ["translate", "rotate", "scale", "jointOrient"]:
                 for axis in ["X", "Y", "Z"]:
@@ -244,7 +254,7 @@ def _create_dataset_from_nodes(nodes):
 
         if node_type == "transform":
 
-            item_data["root_transform_data"] = _get_root_transform_data(node)
+            # item_data["root_transform_data"] = _get_root_transform_data(node)
 
             for type_ in ["translate", "rotate", "scale"]:
                 for axis in ["X", "Y", "Z"]:
@@ -298,75 +308,75 @@ def _create_dataset_from_nodes(nodes):
 
     return all_node_data
 
+# # --------------------------------------------------------------------------------------
+# def _get_root_transform_data(node):
+#
+#     try:
+#         parent = mc.listRelatives(node, parent=True)[0]
+#
+#         parent_translation = mc.xform(
+#             parent,
+#             query=True,
+#             translation=True,
+#             worldSpace=True,
+#         )
+#
+#     except IndexError:
+#         parent_translation = [0, 0, 0]
+#
+#     node_ws_translation = mc.xform(
+#         node,
+#             query=True,
+#             translation=True,
+#             worldSpace=True,
+#     )
+#
+#     relative_translation = [
+#         node_ws_translation[0] - parent_translation[0],
+#         node_ws_translation[1] - parent_translation[1],
+#         node_ws_translation[2] - parent_translation[2],
+#     ]
+#
+#     return dict(
+#         relative_translation=relative_translation,
+#         ws_orientation=mc.xform(node, query=True, ws=True, rotation=True),
+#     )
+#
+# # --------------------------------------------------------------------------------------
+# def _apply_root_transform_data(node, data):
+#
+#     print("applying root transform data")
+#     try:
+#         parent = mc.listRelatives(node, parent=True)[0]
+#
+#         parent_translation = mc.xform(
+#             parent,
+#             query=True,
+#             translation=True,
+#             worldSpace=True,
+#         )
+#
+#     except IndexError:
+#         parent_translation = [0, 0, 0]
+#
+#     mc.xform(
+#         node,
+#         translation=[
+#             parent_translation[0] + data["relative_translation"][0],
+#             parent_translation[1] + data["relative_translation"][1],
+#             parent_translation[2] + data["relative_translation"][2],
+#         ],
+#         worldSpace=True,
+#     )
+#
+#     mc.xform(
+#         node,
+#         rotation=data["ws_orientation"],
+#         worldSpace=True,
+#     )
+
 # --------------------------------------------------------------------------------------
-def _get_root_transform_data(node):
-
-    try:
-        parent = mc.listRelatives(node, parent=True)[0]
-
-        parent_translation = mc.xform(
-            parent,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
-
-    except IndexError:
-        parent_translation = [0, 0, 0]
-
-    node_ws_translation = mc.xform(
-        node,
-            query=True,
-            translation=True,
-            worldSpace=True,
-    )
-
-    relative_translation = [
-        node_ws_translation[0] - parent_translation[0],
-        node_ws_translation[1] - parent_translation[1],
-        node_ws_translation[2] - parent_translation[2],
-    ]
-
-    return dict(
-        relative_translation=relative_translation,
-        ws_orientation=mc.xform(node, query=True, ws=True, rotation=True),
-    )
-
-# --------------------------------------------------------------------------------------
-def _apply_root_transform_data(node, data):
-
-    print("applying root transform data")
-    try:
-        parent = mc.listRelatives(node, parent=True)[0]
-
-        parent_translation = mc.xform(
-            parent,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
-
-    except IndexError:
-        parent_translation = [0, 0, 0]
-
-    mc.xform(
-        node,
-        translation=[
-            parent_translation[0] + data["relative_translation"][0],
-            parent_translation[1] + data["relative_translation"][1],
-            parent_translation[2] + data["relative_translation"][2],
-        ],
-        worldSpace=True,
-    )
-
-    mc.xform(
-        node,
-        rotation=data["ws_orientation"],
-        worldSpace=True,
-    )
-
-# --------------------------------------------------------------------------------------
-def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_names=True, invert=False, localise_root=False):
+def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_names=True, invert=False, worldspace_root=False):
     """
     Creates a joint hierarchy based on the given data. If the data
     is a dictionary it is parsed as is otherwise it is assumed to be
@@ -437,35 +447,13 @@ def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_nam
             if mc.objExists(item + "." + name):
                 mc.setAttr(item + "." + name, value)
 
-    if not localise_root:
-        print("setting special")
-        for identifier in root_nodes:
+    # -- Now check if we need to apply it in worldspace
+    if worldspace_root:
+        for identifier, item in generated_item_map.items():
+            if not dataset[identifier]["parent"]:
+                local_matrix = mc.xform(item, q=True, m=True)
+                mc.xform(item, m=local_matrix, ws=True)
 
-            # -- If there is no root transform data, do nothing
-            if "root_transform_data" not in dataset[identifier]:
-                print("no root transform data")
-                continue
-
-            root_data = dataset[identifier]["root_transform_data"]
-            node = generated_item_map[identifier]
-
-            _apply_root_transform_data(node, root_data)
-
-    # -- Always do constraints last
-    for item_data in dataset.values():
-        if item_data.get("type") == "parentConstraint":
-            created_item = mc.parentConstraint(
-                item_data["constrain_to"],
-                item_data["constrain_this"],
-                maintainOffset=True
-            )
-
-        if item_data.get("type") == "pointConstraint":
-            created_item = mc.pointConstraint(
-                item_data["constrain_to"],
-                item_data["constrain_this"],
-                maintainOffset=True
-            )
     if invert:
         aniseed_toolkit.run("Invert Translation", transforms=generated_item_map.values())
 

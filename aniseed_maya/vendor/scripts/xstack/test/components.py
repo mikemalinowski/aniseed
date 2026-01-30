@@ -168,7 +168,6 @@ class ComponentWithTenOptions(xstack.Component):
         return True
 
 
-
 class ComponentWithOutputs(xstack.Component):
 
     identifier = "ComponentWithOutputs"

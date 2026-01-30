@@ -1,0 +1,44 @@
+{
+    "JNT_Head_01_MD": {
+        "attributes": {
+            "jointOrientX": 1.1768052321415009e-13,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 0.0,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 9.541664044390549e-15,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 10.667783737182617,
+            "translateY": -4.110250473022452,
+            "translateZ": -6.825910826050973e-16
+        },
+        "name": "JNT_Head_01_MD",
+        "parent": "JNT_Neck_01_MD",
+        "radius": 1.0,
+        "root_transform_data": {},
+        "type": "joint"
+    },
+    "JNT_Neck_01_MD": {
+        "attributes": {
+            "jointOrientX": -90.00000000000001,
+            "jointOrientY": -2.9869567711769074,
+            "jointOrientZ": 90.00000000000004,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 1.590277340731758e-15,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 4.5435592658654053e-14,
+            "translateY": 2.2699638498207355e-29,
+            "translateZ": 1.008872822142549e-29
+        },
+        "name": "JNT_Neck_01_MD",
+        "parent": null,
+        "radius": 1.0,
+        "root_transform_data": {},
+        "type": "joint"
+    }
+}

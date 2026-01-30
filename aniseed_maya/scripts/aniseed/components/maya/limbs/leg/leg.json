@@ -1,0 +1,130 @@
+{
+    "foot": {
+        "attributes": {
+            "jointOrientX": 0.0,
+            "jointOrientY": 0.0,
+            "jointOrientZ": 55.74170459578538,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 0.9999999999999999,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 48.192001342773146,
+            "translateY": 6.750155989720952e-14,
+            "translateZ": -1.889144720166107e-12
+        },
+        "name": "foot",
+        "parent": "lowerleg",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                8.786540483630284e-13,
+                -47.801132232935515,
+                -6.125418407852789
+            ],
+            "ws_orientation": [
+                90.00000000000003,
+                -48.43940249321984,
+                -90.00000000000124
+            ]
+        },
+        "type": "joint"
+    },
+    "lowerleg": {
+        "attributes": {
+            "jointOrientX": 1.1004786846695887e-11,
+            "jointOrientY": 2.188818180551141e-12,
+            "jointOrientZ": -11.302302102565477,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 42.24000167846745,
+            "translateY": 1.7763568394002505e-15,
+            "translateZ": -1.3345350938218584e-14
+        },
+        "name": "lowerleg",
+        "parent": "upperleg",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                -8.776752751109381e-13,
+                -42.13710715735377,
+                2.946513568035776
+            ],
+            "ws_orientation": [
+                90.0,
+                7.302302102565545,
+                -90.00000000000122
+            ]
+        },
+        "type": "joint"
+    },
+    "toe": {
+        "attributes": {
+            "jointOrientX": 1.2114351351005255e-12,
+            "jointOrientY": 1.9900983405690388e-13,
+            "jointOrientZ": 41.56059750678016,
+            "rotateX": 0.0,
+            "rotateY": 0.0,
+            "rotateZ": 0.0,
+            "scaleX": 0.9999999999999999,
+            "scaleY": 1.0000000000000004,
+            "scaleZ": 1.0,
+            "translateX": 8.65516760271829,
+            "translateY": -3.2862601528904634e-14,
+            "translateZ": 0.0
+        },
+        "name": "toe",
+        "parent": "foot",
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                -1.2161009985832917e-13,
+                -5.741940253929963,
+                6.476268088293053
+            ],
+            "ws_orientation": [
+                0.0,
+                -90.0,
+                0.0
+            ]
+        },
+        "type": "joint"
+    },
+    "upperleg": {
+        "attributes": {
+            "jointOrientX": 90.0,
+            "jointOrientY": -3.9999999999999334,
+            "jointOrientZ": -90.00000000000122,
+            "rotateX": 0.0,
+            "rotateY": -0.0,
+            "rotateZ": 0.0,
+            "scaleX": 1.0,
+            "scaleY": 1.0,
+            "scaleZ": 1.0,
+            "translateX": 0.0,
+            "translateY": 96.859,
+            "translateZ": 0.0
+        },
+        "name": "upperleg",
+        "parent": null,
+        "radius": 1.0,
+        "root_transform_data": {
+            "relative_translation": [
+                0.0,
+                96.859,
+                0.0
+            ],
+            "ws_orientation": [
+                90.0,
+                -3.9999999999999334,
+                -90.00000000000122
+            ]
+        },
+        "type": "joint"
+    }
+}

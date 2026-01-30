@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 import maya.api.OpenMaya as om
@@ -11,6 +12,11 @@ class CalculateUpvectorPosition(aniseed_toolkit.Tool):
         "Transforms",
     ]
 
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["point_a", "point_b", "point_c"]:
+            return aniseed.widgets.ObjectSelector()
+        
     def run(
         self,
         point_a: str = "",

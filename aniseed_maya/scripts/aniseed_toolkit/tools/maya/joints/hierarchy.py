@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 
@@ -11,10 +12,16 @@ class ReplicateJoint(aniseed_toolkit.Tool):
         "Joints",
     ]
 
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["joint", "parent"]:
+            return aniseed.widgets.ObjectSelector()
+
     def run(
         self,
         joint: str = "",
         parent: str = "",
+        worldspace: bool = False,
         link: bool = False,
         copy_local_name: bool = False,
     ):
@@ -57,6 +64,18 @@ class ReplicateJoint(aniseed_toolkit.Tool):
                 joint.split(":")[-1],
             )
 
+        if worldspace:
+            mc.xform(
+                new_joint,
+                matrix=mc.xform(
+                    joint,
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
+
         return new_joint
 
 
@@ -67,6 +86,11 @@ class CopyJointAttributes(aniseed_toolkit.Tool):
     categories = [
         "Joints",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["from_this", "to_this"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(
         self,
@@ -124,6 +148,11 @@ class GetJointsBetween(aniseed_toolkit.Tool):
         "Joints",
     ]
 
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["start", "end"]:
+            return aniseed.widgets.ObjectSelector()
+
     def run(
         self,
         start: str = "",
@@ -158,6 +187,11 @@ class ReplicateChain(aniseed_toolkit.Tool):
     categories = [
         "Joints",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["from_this", "to_this", "parent"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(
         self,
@@ -248,6 +282,11 @@ class ReverseChain(aniseed_toolkit.Tool):
         "Joints",
     ]
 
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name == "joints":
+            return aniseed.widgets.ObjectList()
+
     def run(self, joints: list[str] = None) -> list[str]:
         """
         Reverses the hierarchy of the joint chain.
@@ -309,6 +348,11 @@ class ReplicateEntireChain(aniseed_toolkit.Tool):
     categories = [
         "Joints",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["joint_root", "parent"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(
         self,
@@ -385,6 +429,11 @@ class GetChainLength(aniseed_toolkit.Tool):
     categories = [
         "Joints",
     ]
+
+    @classmethod
+    def ui_elements(cls, keyword_name):
+        if keyword_name in ["start", "end"]:
+            return aniseed.widgets.ObjectSelector()
 
     def run(self, start: str = "", end: str = "", log_result: bool = True) -> float:
         """

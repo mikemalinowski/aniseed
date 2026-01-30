@@ -202,13 +202,14 @@ class MenuBuilder:
     # noinspection PyUnresolvedReferences
     @classmethod
     def _launch_app(cls, *args, **kwargs):
-        mc.evalDeferred("import aniseed;aniseed.app.launch()")
+        print("running launch app")
+        mc.evalDeferred("import aniseed;print(aniseed.__file__);aniseed.app.launch()")
 
 
     # noinspection PyUnresolvedReferences
     @classmethod
     def _launch_aniseed_toolkit(cls, *args, **kwargs):
-        mc.evalDeferred("import aniseed_toolkit;aniseed_toolkit.launch()")
+        mc.evalDeferred("import aniseed_toolkit;aniseed_toolkit.run('Launch Maya Toolkit')")
 
 
     # noinspection PyUnusedLocal
@@ -303,6 +304,7 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
         self.app = aniseed.AppWidget(
             app_config=aniseed.AppConfig,
+            allow_threading=False,
             parent=self,
         )
         self.setCentralWidget(

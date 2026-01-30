@@ -153,4 +153,14 @@ from .component import Component
 from . import address
 from . import constants
 
-__version__ = "1.0.1"
+# -- Expose the app if Qt is available. We do not fail the module
+# -- load if Qt is not present as we allow xstack to run headless
+try:
+    from . import app
+    from .app.demo import launch_demo
+    from .app import launch
+
+except:
+    pass
+
+__version__ = "1.0.2"

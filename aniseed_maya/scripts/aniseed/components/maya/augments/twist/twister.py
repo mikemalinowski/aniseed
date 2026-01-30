@@ -144,8 +144,7 @@ class TwisterComponent(aniseed.RigComponent):
             ),
             worldSpace=True,
         )
-        print("tiop: %s" % twist_builder.tip())
-        print("tip driver : %s" % tip_driver)
+
         mc.xform(
             twist_builder.tip(),
             translation=mc.xform(
@@ -188,6 +187,7 @@ class TwisterComponent(aniseed.RigComponent):
             "Distance Between",
             root_driver,
             tip_driver,
+            print_result=False,
         )
 
         for idx, joint in enumerate(joints_to_drive):
@@ -196,6 +196,7 @@ class TwisterComponent(aniseed.RigComponent):
                 "Distance Between",
                 root_driver,
                 joint,
+                print_result=False,
             )
 
             factor = root_distance / total_distance

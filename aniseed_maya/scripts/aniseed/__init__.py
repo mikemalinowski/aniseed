@@ -27,4 +27,4 @@ from . import constants
 from . import resources
 from . import environment
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
