@@ -58,7 +58,7 @@ def apply(
             # -- Firstly we check if we're given an absolute path which
             # -- resolves
             if not os.path.exists(given_style):
-                constants.log("%s does not exist" % given_style)
+                print("%s does not exist" % given_style)
                 continue
 
             with open(given_style, 'r') as f:
@@ -67,7 +67,7 @@ def apply(
         # -- If we still do not have an extracted style then we need
         # -- to report a warning
         if not extracted_style:
-            constants.log.warning(
+            print(
                 'Could not extract or locate the style : %s' % given_style
             )
             continue

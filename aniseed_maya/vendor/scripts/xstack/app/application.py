@@ -183,6 +183,10 @@ class AppWidget(QtWidgets.QWidget):
         """
         This will regenerate the tool menu
         """
+        # -- If we're asked not to show the menu then lets immediately
+        # -- exit.
+        if not self.app_config.show_menu_bar:
+            return
 
         # -- We do not hard code the term "stack" into the App. This is because the
         # -- stack library will be used for many purposes, and in most cases the user
@@ -509,3 +513,5 @@ def launch(app_config=None, blocking: bool = True, load_file: str = None, run_on
 
     if blocking:
         q_app.exec_()
+
+    return w
