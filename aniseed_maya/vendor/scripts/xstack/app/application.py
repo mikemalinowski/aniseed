@@ -183,11 +183,6 @@ class AppWidget(QtWidgets.QWidget):
         """
         This will regenerate the tool menu
         """
-        # -- If we're asked not to show the menu then lets immediately
-        # -- exit.
-        if not self.app_config.show_menu_bar:
-            return
-
         # -- We do not hard code the term "stack" into the App. This is because the
         # -- stack library will be used for many purposes, and in most cases the user
         # -- will want to tailor the terminology. Therefore we get the label from
@@ -255,6 +250,11 @@ class AppWidget(QtWidgets.QWidget):
         # -- Finally, apply the menu bar
         self.layout().setMenuBar(self.menu_bar)
 
+
+        # -- If we're asked not to show the menu then lets immediately
+        # -- exit.
+        self.menu_bar.setVisible(self.app_config.show_menu_bar)
+
     # ----------------------------------------------------------------------------------
     def build_layout(self):
         """
@@ -319,6 +319,14 @@ class AppWidget(QtWidgets.QWidget):
 
             else:
                 force_horizontal = True
+
+        if self.app_config.forced_orientation == "vertical":
+            force_vertical = True
+            force_horizontal = False
+
+        if self.app_config.forced_orientation == "horizontal":
+            force_vertical = False
+            force_horizontal = True
 
         widget_is_wide = self.rect().width() > self.rect().height()
         use_horizontal_alignment = widget_is_wide

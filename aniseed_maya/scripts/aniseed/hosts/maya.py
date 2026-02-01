@@ -376,8 +376,11 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
         import gc
 
         for obj in gc.get_objects():
-            if isinstance(obj, DockableMayaApp):
-                return obj
+            try:
+                if isinstance(obj, DockableMayaApp):
+                    return obj
+            except:
+                pass
 
     @classmethod
     def remove_workspace_control(cls, control):

@@ -659,11 +659,14 @@ class SplineSpine(aniseed.RigComponent):
         )
 
         if parent:
-            mc.parent(
-                spline_setup.out_org,
-                parent,
-            )
-
+            try:
+                mc.parent(
+                    spline_setup.out_org,
+                    parent,
+                )
+            except:
+                pass
+        
         # -- Now we need to name the components based on the configs
         # -- naming convention
         descriptive = self.option("Descriptive Prefix").get()

@@ -21,6 +21,7 @@ class AppConfig:
     show_tree_header = True
     splitter_bias = None # -- Percentage along the splitter should be by default
     show_menu_bar = True
+    forced_orientation = None  # -- Can be None, "vertical" or "horizontal"
 
     # -- These let you tailor the icons which will be displayed for various
     # -- items and actions
