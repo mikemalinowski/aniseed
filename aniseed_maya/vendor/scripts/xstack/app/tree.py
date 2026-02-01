@@ -117,10 +117,9 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             self._root_item = QtWidgets.QTreeWidgetItem(
                 [label],
             )
-            print("show me")
         else:
             self._root_item = self.invisibleRootItem()
-            print("hide")
+
         self.insertTopLevelItems(0, [self._root_item])
 
         # -- Add the children, and get any warnings back

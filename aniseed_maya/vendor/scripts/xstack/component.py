@@ -638,8 +638,8 @@ class Component:
                     option_to_copy.get(resolved=False),
                 )
 
-        self.set_label(other_component.label())
-        self.set_enabled(other_component.is_enabled())
+        self.set_label(copy.deepcopy(other_component.label()))
+        self.set_enabled(copy.deepcopy(other_component.is_enabled()))
 
     # ----------------------------------------------------------------------------------
     def set_forced_version(self, version: int or None):

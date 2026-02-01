@@ -217,16 +217,20 @@ class Rig(xstack.Stack):
         data: str or typing.Dict,
         component_paths: typing.List or None = None,
     ):
+        if isinstance(data, str):
+            with open(data, 'r') as f:
+                data = json.load(f)
+
         # -- Call the parent class which manages the load
         rig = super(Rig, cls).load(
             data,
             component_paths=component_paths,
         )
-
-        if isinstance(data, str):
-            with open(data, 'r') as f:
-                data = json.load(f)
-
+        app.attributes.set_attribute(
+            object_=rig.host(),
+            attribute_name="recipe",
+            value=json.dumps(data),
+        )
         # -- Now call the host callback - which allows an embedded environment
         # -- to tie into the load process
         host_app = host_.get()

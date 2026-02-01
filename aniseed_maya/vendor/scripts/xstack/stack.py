@@ -1,4 +1,5 @@
 import os
+import copy
 import json
 import typing
 import functools
@@ -106,6 +107,8 @@ class Stack:
 
         for uuid, component in self._components.items():
             data["components"][component.uuid()] = component.serialise()
+            build_order_entry = self._get_build_order_dict(component.uuid())
+            build_order_entry["label"] = component.label()
 
         return data
 
@@ -162,7 +165,8 @@ class Stack:
                 new_component.set_enabled(False)
 
         # -- Pull out any stored build order data
-        self._build_order = data.get("build_order", list())
+        self._build_order = copy.deepcopy(data.get("build_order", list()))
+
 
     # ----------------------------------------------------------------------------------
     # noinspection PyBroadException
