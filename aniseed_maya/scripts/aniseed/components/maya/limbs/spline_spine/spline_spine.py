@@ -666,7 +666,7 @@ class SplineSpine(aniseed.RigComponent):
                 )
             except:
                 pass
-        
+
         # -- Now we need to name the components based on the configs
         # -- naming convention
         descriptive = self.option("Descriptive Prefix").get()

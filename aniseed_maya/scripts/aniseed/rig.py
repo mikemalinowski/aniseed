@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import xstack
 import typing
@@ -66,7 +67,8 @@ class Rig(xstack.Stack):
         )
 
         # -- Ensure we add any paths set by the environment
-        paths = os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, "").split(",")
+        path_string = os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, "")
+        paths = re.split(";|,", path_string)
 
         for path in paths:
             if path:
