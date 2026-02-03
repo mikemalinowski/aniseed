@@ -1,17 +1,22 @@
+import typing
 import pyfbsdk as mobu
 
-from . import objects
+from . import items
 
 
-# --------------------------------------------------------------------------------------
-def add_string_attribute(object_, attribute_name, value):
+def add_string_attribute(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should add an attribute to the object, and where the attributes are
+    This should add an attribute to the item, and where the attributes are
     typed, it should be a string
-    """
-    object_ = objects.get_object(object_)
 
-    object_.PropertyCreate(
+    Args:
+        item: The item or item name to add the attribute to
+        attribute_name: The name of the attribute
+        value: The value of the attribute
+    """
+    item = items.get(item)
+
+    item.PropertyCreate(
         attribute_name,
         mobu.FBPropertyType.kFBPT_charptr,
         "String",
@@ -19,22 +24,21 @@ def add_string_attribute(object_, attribute_name, value):
         True,
         None,
     )
-    property_ = object_.PropertyList.Find(attribute_name)
+    property_ = item.PropertyList.Find(attribute_name)
 
     property_.Data = value
 
     return property_
 
 
-# --------------------------------------------------------------------------------------
-def add_float_attribute(object_, attribute_name, value):
+def add_float_attribute(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should add an attribute to the object, and where the attributes are
+    This should add an attribute to the item, and where the attributes are
     typed, it should be a float
     """
-    object_ = objects.get_object(object_)
+    item = items.get(item)
 
-    object_.PropertyCreate(
+    item.PropertyCreate(
         attribute_name,
         mobu.FBPropertyType.kFBPT_double,
         "Number",
@@ -42,40 +46,35 @@ def add_float_attribute(object_, attribute_name, value):
         True,
         None,
     )
-    property_ = object_.PropertyList.Find(attribute_name)
+    property_ = item.PropertyList.Find(attribute_name)
 
     property_.Data = value
 
     return property_
 
 
-
-# --------------------------------------------------------------------------------------
-def set_attribute(object_, attribute_name, value):
+def set_value(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should set the attribute with the givne name on the given object to the
+    This should set the attribute with the given name on the given item to the
     given value
     """
-    property_ = get_attribute(object_, attribute_name)
+    item = items.get(item)
+    item.PropertyList.Find(attribute_name).Data = value
 
-    property_.Data = value
 
-
-# --------------------------------------------------------------------------------------
-def get_attribute(object_, attribute_name):
+def get_value(item: object, attribute_name: str) -> typing.Any:
     """
-    This should look on the object for an attribute of this name and return its value
+    This should look on the item for an attribute of this name and return its value
     """
-    object_ = objects.get_object(object_)
+    item = items.get(item)
 
-    return object_.PropertyList.Find(attribute_name)
+    return item.PropertyList.Find(attribute_name).Data
 
 
-# --------------------------------------------------------------------------------------
-def has_attribute(object_, attribute_name):
+def has_attribute(item: object, attribute_name: str) -> bool:
     """
-    This should check if an object has an attribute of this name
+    This should check if an item has an attribute of this name
     """
-    object_ = objects.get_object(object_)
+    item = items.get(item)
 
-    return object_.PropertyList.Find(attribute_name) is not None
+    return item.PropertyList.Find(attribute_name) is not None

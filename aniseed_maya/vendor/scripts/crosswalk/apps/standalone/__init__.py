@@ -1,4 +1,4 @@
 from . import attributes
-from . import objects
+from . import items
 from . import selection
 from . import scene

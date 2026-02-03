@@ -163,7 +163,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                     plugs=True,
                     connections=True,
                 ) or list()
-                print(f"checking on {node} : {connection_data}")
+
                 for idx in range(int(len(connection_data) * 0.5)):
                     stage = idx * 2
                     destination_attribute = connection_data[stage].split(".")[-1]
@@ -171,7 +171,6 @@ class ApplyControlShapes(aniseed.RigComponent):
 
                     connection_pairs.append([driving_attribute, destination_attribute])
 
-            print("got connection data : %s" % connection_pairs)
             aniseed_toolkit.run(
                 "Apply Shape",
                 node=node,

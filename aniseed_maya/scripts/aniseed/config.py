@@ -1,6 +1,6 @@
 import re
 import typing
-from crosswalk import app
+import crosswalk
 
 from . import component
 from . import widgets
@@ -195,7 +195,7 @@ class RigConfiguration(component.RigComponent):
         return self.option("rule").get()
 
     def create_component_structure(self):
-        global_joint = app.objects.create(
+        global_joint = crosswalk.items.create(
             self.generate_name(
                 classification=self.joint,
                 description="GlobalSrt",
@@ -208,7 +208,7 @@ class RigConfiguration(component.RigComponent):
             component_type="Utility : Add Sub Structure",
             label="Define Rig Structure",
             inputs={
-                "Parent": app.objects.get_name(self.rig.host()),
+                "Parent": crosswalk.items.get_name(self.rig.host()),
             },
             options={
                 "Sub Nodes": [
@@ -224,7 +224,7 @@ class RigConfiguration(component.RigComponent):
             component_type="Utility : Reparent",
             label="Parent Skeleton",
             inputs={
-                "Node To Re-Parent": app.objects.get_name(global_joint),
+                "Node To Re-Parent": crosswalk.items.get_name(global_joint),
                 "New Parent": self.generate_name(
                     classification=self.organisational,
                     description="skeleton",
@@ -313,7 +313,7 @@ class RigConfiguration(component.RigComponent):
                 )
                 return name
 
-            if not app.objects.exists(name):
+            if not crosswalk.items.exists(name):
                 self.store_name_decomposition(
                     name,
                     classification,

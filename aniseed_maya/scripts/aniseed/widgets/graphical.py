@@ -2,11 +2,11 @@ import os
 import json
 import typing
 import qtility
+import crosswalk
 import functools
 import collections
 
 from Qt import QtWidgets, QtCore, QtGui
-from crosswalk import app
 
 
 # --------------------------------------------------------------------------------------
@@ -1092,16 +1092,16 @@ class Clickable(QtWidgets.QGraphicsEllipseItem):
                 self.get_label()
             ).set(
                 [
-                    app.objects.get_name(n)
-                    for n in app.selection.selected()
+                    crosswalk.items.get_name(n)
+                    for n in crosswalk.selection.selected()
                 ]
             )
 
         elif self.get_variable_type() == VariableType.Requirements:
             value = None
 
-            if app.selection.selected():
-                value = app.selection.selected()[0]
+            if crosswalk.selection.selected():
+                value = crosswalk.selection.selected()[0]
 
             component.requirement(self.get_label()).set(value)
 
@@ -1127,7 +1127,7 @@ class Clickable(QtWidgets.QGraphicsEllipseItem):
             return
 
         try:
-            app.selection.select(result)
+            crosswalk.selection.select(result)
 
         except RuntimeError:
             print(f"Could not select {result}")

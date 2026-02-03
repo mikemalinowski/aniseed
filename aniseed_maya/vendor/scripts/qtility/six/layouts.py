@@ -17,8 +17,8 @@ def empty(layout: QtWidgets.QLayout) -> None:
 
         if isinstance(item, QtWidgets.QWidgetItem):
             widget = item.widget()
-            widget.setParent(None)
             widget.deleteLater()
+            QtWidgets.QApplication.processEvents()
 
         elif isinstance(item, QtWidgets.QSpacerItem):
             pass

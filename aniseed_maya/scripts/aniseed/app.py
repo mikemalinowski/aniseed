@@ -2,9 +2,10 @@ import os
 import xstack
 import typing
 import qtility
+import crosswalk
 import functools
 import aniseed_toolkit
-from crosswalk import app
+
 from Qt import QtWidgets, QtCore, QtGui
 
 from . import Rig
@@ -114,13 +115,13 @@ class AppWidget(xstack.app.AppWidget):
         rigs_menu.addSeparator()
 
         # -- Cycle all the rigs in the scene and add them into the menu too
-        rigs = app.objects.all_objects_with_attribute(
+        rigs = crosswalk.items.all_items_with_attribute(
             attribute_name="aniseed_rig",
         )
 
         for rig_host in rigs or list():
             switch_rig_action = rigs_menu.addAction(
-                app.objects.get_name(rig_host)
+                crosswalk.items.get_name(rig_host)
             )
             switch_rig_action.triggered.connect(
                 functools.partial(
@@ -153,7 +154,7 @@ class AppWidget(xstack.app.AppWidget):
         Returns:
 
         """
-        return app.objects.all_objects_with_attribute(
+        return crosswalk.items.all_items_with_attribute(
             attribute_name="aniseed_rig",
         )
 
@@ -166,7 +167,7 @@ class AppWidget(xstack.app.AppWidget):
         if not rig_host:
             try:
                 rig_host = self.all_rigs()[0]
-                if app.objects.get_name(self._host) == app.objects.get_name(rig_host):
+                if crosswalk.items.get_name(self._host) == crosswalk.items.get_name(rig_host):
                     # -- Last log before crash is here
                     return
             except IndexError:

@@ -1,61 +1,62 @@
+import typing
 
 
-# --------------------------------------------------------------------------------------
-def add_string_attribute(object_, attribute_name, value):
+def add_string_attribute(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should add an attribute to the object, and where the attributes are
+    This should add an attribute to the item, and where the attributes are
     typed, it should be a string
+
+    Args:
+        item: The item or item name to add the attribute to
+        attribute_name: The name of the attribute
+        value: The value of the attribute
     """
     setattr(
-        object_,
+        item,
         attribute_name,
         value,
     )
 
 
-# --------------------------------------------------------------------------------------
-def add_float_attribute(object_, attribute_name, value):
+def add_float_attribute(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should add an attribute to the object, and where the attributes are
+    This should add an attribute to the item, and where the attributes are
     typed, it should be a float
     """
     setattr(
-        object_,
+        item,
         attribute_name,
         value,
     )
 
 
-# --------------------------------------------------------------------------------------
-def set_attribute(object_, attribute_name, value):
+def set_value(item: object, attribute_name: str, value: typing.Any) -> None:
     """
-    This should set the attribute with the givne name on the given object to the
+    This should set the attribute with the given name on the given item to the
     given value
     """
     setattr(
-        object_,
+        item,
         attribute_name,
         value,
     )
 
 
-# --------------------------------------------------------------------------------------
-def get_attribute(object_, attribute_name):
+def get_value(item: object, attribute_name: str) -> typing.Any:
     """
-    This should look on the object for an attribute of this name and return its value
+    This should look on the item for an attribute of this name and return its value
     """
     return getattr(
-        object_,
+        item,
         attribute_name,
     )
 
 
-# --------------------------------------------------------------------------------------
-def has_attribute(object_, attribute_name):
+def has_attribute(item: object, attribute_name: str) -> bool:
     """
-    This should check if an object has an attribute of this name
+    This should check if an item has an attribute of this name
     """
     return hasattr(
-        object_,
+        item,
         attribute_name,
     )

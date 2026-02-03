@@ -119,7 +119,6 @@ class MemorableWindow(QtWidgets.QMainWindow):
         self._offsetX = offsetX
         self._offsetY = offsetY
         self._storage_identifier = storage_identifier
-        print("stor : %s "% self._storage_identifier)
 
         # -- If we're given an id, set this object name
         if self._storage_identifier:
@@ -142,10 +141,8 @@ class MemorableWindow(QtWidgets.QMainWindow):
 
     # --------------------------------------------------------------------------
     def restoreSize(self):
-        print("ID : %s" % self._storage_identifier)
         try:
             stored_data = scribble.get(self._storage_identifier)
-            print("got data from : %s" % self._storage_identifier)
         except:
             stored_data = dict()
 

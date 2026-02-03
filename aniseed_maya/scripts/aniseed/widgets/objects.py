@@ -1,8 +1,7 @@
+import xstack
 import qtility
 import functools
-import xstack
-
-from crosswalk import app
+import crosswalk
 from Qt import QtWidgets, QtCore, QtGui
 
 from .. import resources
@@ -132,8 +131,8 @@ class ObjectSelector(QtWidgets.QWidget):
     def scene_to_field(self):
         try:
             self.set_value(
-                app.objects.get_name(
-                    app.selection.selected()[0]
+                crosswalk.items.get_name(
+                    crosswalk.selection.selected()[0]
                 )
             )
 
@@ -143,7 +142,7 @@ class ObjectSelector(QtWidgets.QWidget):
     # ----------------------------------------------------------------------------------
     def field_to_scene(self):
         try:
-            app.selection.select(self.get_value())
+            crosswalk.selection.select(self.get_value())
 
         except RuntimeError:
             print(f"Failed to select {self.get_value()}")
@@ -234,9 +233,9 @@ class ObjectMap(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def add(self):
-        for item in app.selection.selected():
+        for item in crosswalk.selection.selected():
 
-            item = app.objects.get_name(item)
+            item = crosswalk.items.get_name(item)
 
             label = qtility.request.text(
                 title="Provide Label",

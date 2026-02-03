@@ -44,7 +44,7 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
         parent = self.input("Parent").get()
 
-        existing_nodes = crosswalk.app.objects.get_children(parent)
+        existing_nodes = crosswalk.items.get_children(parent)
 
         for sub_node in self.option("Sub Nodes").get():
 
@@ -58,7 +58,7 @@ class AddSubStructureComponent(aniseed.RigComponent):
             if resolved_name in existing_nodes:
                 continue
 
-            node = crosswalk.app.objects.create(
+            node = crosswalk.items.create(
                 name=resolved_name,
                 parent=parent,
             )
@@ -99,14 +99,14 @@ class DeleteChildren(aniseed.RigComponent):
 
         node = self.input("Node").get()
 
-        if not crosswalk.app.objects.exists(node):
+        if not crosswalk.items.exists(node):
             return True
 
-        for child in crosswalk.app.objects.get_children(node):
-            if crosswalk.app.objects.exists(child):
-                crosswalk.app.objects.delete(child)
+        for child in crosswalk.items.get_children(node):
+            if crosswalk.items.exists(child):
+                crosswalk.items.delete(child)
 
         if self.option("Include Self").get():
-            crosswalk.app.objects.delete(node)
+            crosswalk.items.delete(node)
 
         return True

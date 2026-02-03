@@ -47,7 +47,7 @@ class AppWidget(QtWidgets.QWidget):
 
         # -- These are for our menu system
         self.menu_bar = None
-        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar = QtWidgets.QProgressBar(self)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setVisible(False)
 
@@ -128,14 +128,15 @@ class AppWidget(QtWidgets.QWidget):
         Adds a splash widget into the layout
         """
         # -- Add the splash image to the background whilst its blank
-        splash = QtWidgets.QLabel()
+        splash = QtWidgets.QLabel(parent=self)
+        self.layout().addWidget(splash)
         splash.setPixmap(
             QtGui.QPixmap(
                 self.app_config.icon,
             ),
         )
-        splash.setAlignment(QtCore.Qt.AlignVCenter  | QtCore.Qt.AlignHCenter )
-        self.layout().addWidget(splash)
+        splash.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter )
+        return splash
 
     # ----------------------------------------------------------------------------------
     def additional_menus(self) -> typing.List:
@@ -155,14 +156,15 @@ class AppWidget(QtWidgets.QWidget):
         This function will rebuild the layout of the tool based on the stack we expect
         to be showing as the currently active stack
         """
+        # -- Empty the current layout
+        qtility.layouts.empty(
+            self.layout(),
+        )
+
         # -- If we have not been given a stack, we clear the layout and
         # -- rebuild the menu
         if not stack:
 
-            # -- Empty the current layout
-            qtility.layouts.empty(
-                self.layout(),
-            )
 
             self.tree_widget = None
             self.editor_widget = None
@@ -283,7 +285,8 @@ class AppWidget(QtWidgets.QWidget):
 
         self.set_layout_orientation()
 
-        self.progress_bar = QtWidgets.QProgressBar()
+        self.progress_bar = QtWidgets.QProgressBar(self)
+        self.progress_bar.setVisible(False)
         self.layout().addWidget(self.progress_bar)
 
         if self.app_config.splitter_bias is not None:

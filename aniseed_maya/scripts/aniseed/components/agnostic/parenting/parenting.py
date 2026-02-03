@@ -39,7 +39,7 @@ class ReParentComponent(aniseed.RigComponent):
         new_parent = self.input("New Parent").get()
 
         try:
-            crosswalk.app.objects.set_parent(
+            crosswalk.items.set_parent(
                 node_to_reparent,
                 new_parent
             )

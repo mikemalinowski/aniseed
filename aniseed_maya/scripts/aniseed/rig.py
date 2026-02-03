@@ -3,8 +3,8 @@ import re
 import json
 import xstack
 import typing
+import crosswalk
 import traceback
-from crosswalk import app
 
 from . import host as host_
 from . import config
@@ -76,7 +76,7 @@ class Rig(xstack.Stack):
 
         self.deserialize(
             json.loads(
-                app.attributes.get_attribute(
+                crosswalk.attributes.get_value(
                     self.host(),
                     "recipe",
                 ),
@@ -99,7 +99,7 @@ class Rig(xstack.Stack):
         """
         We always want to return the name of the host when getting the label
         """
-        return app.objects.get_name(self.host())
+        return crosswalk.items.get_name(self.host())
 
     # ----------------------------------------------------------------------------------
     @label.setter
@@ -129,8 +129,8 @@ class Rig(xstack.Stack):
         """
         data = super(Rig, self).serialise()
 
-        app.attributes.set_attribute(
-            object_=self.host(),
+        crosswalk.attributes.set_value(
+            item=self.host(),
             attribute_name="recipe",
             value=json.dumps(data),
         )
@@ -143,18 +143,18 @@ class Rig(xstack.Stack):
         This will create the host object within the applications scene. It ensures the host
         has the right attributes to be able to store its serialised
         """
-        host = app.objects.create(
+        host = crosswalk.items.create(
             name=name,
         )
 
-        app.attributes.add_float_attribute(
-            object_=host,
+        crosswalk.attributes.add_float_attribute(
+            item=host,
             attribute_name="aniseed_rig",
             value=1,
         )
 
-        app.attributes.add_string_attribute(
-            object_=host,
+        crosswalk.attributes.add_string_attribute(
+            item=host,
             attribute_name="recipe",
             value="{}"
         )
@@ -207,7 +207,7 @@ class Rig(xstack.Stack):
         This will attempt to find all instances of a rig in the scene
         """
         results = []
-        for rig_host in app.objects.all_objects_with_attribute("aniseed_rig"):
+        for rig_host in crosswalk.items.all_items_with_attribute("aniseed_rig"):
             results.append(cls(host=rig_host))
         return results
 
@@ -226,8 +226,8 @@ class Rig(xstack.Stack):
             data,
             component_paths=component_paths,
         )
-        app.attributes.set_attribute(
-            object_=rig.host(),
+        crosswalk.attributes.set_value(
+            item=rig.host(),
             attribute_name="recipe",
             value=json.dumps(data),
         )

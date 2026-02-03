@@ -15,17 +15,29 @@ and you MUST implement all the exposed functionality that is defined in the
 "standalone" implemented. This is considered to be the authority.
 """
 import sys
-from . import core
+from . import _core
 from .apps import standalone
 
+# -- This group of imports will be replaced by the globals
+# -- update. However, placing them here allows for IDE auto
+# -- complete
+from . import attributes
+from . import items
+from . import scene
+from . import selection
 
+# -- Always fall back to our standalone implementation
+# -- if there is no option of an app implementation.
 app = standalone
-module_name = core.get_usable_app()
+module_name = _core.get_usable_app()
 
+# -- Providing we have an application, replace the app
+# -- variable with it
 if module_name:
     app = sys.modules[module_name]
 
-__version__ = "1.0.1"
+__version__ = "2.0.1"
 
-# -- Expose the module directly too
+# -- Raise the app implementation up - this will
+# -- replace the relative imports above.
 globals().update(app.__dict__)
