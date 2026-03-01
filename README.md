@@ -16,6 +16,9 @@ tentacle whilst another component might simply apply colours to controls based o
 Essentially each module can declare inputs and options, and once build it can also
 share its outputs.
 
+You can see aniseed being used to create a rig from scratch here:
+https://youtu.be/bTsgaC-UOrg
+
 ## How is this different?
 
 There are many modular rigging tools available. Some of them are more bespoke to 
@@ -124,17 +127,19 @@ The menu at the top allows you to create new rigs, switch between rigs in the sc
 as well as exposing various bone mand shape manipulation tools. 
 
 You can view a walkthrough of building your first rig in aniseed here:
-https://youtu.be/oC2FzNgI_9o
+https://youtu.be/bTsgaC-UOrg
 
 ```
 It is highly recommended that you play with some of the examples to get a feel for
 how the tool works and what a typical rig stack looks like. There are currently two 
 example rig files you can look at:
 
-* Biped.json (standard biped with spline spine, ik/fk limbs etc)
-* Giraffe.json (Quadruped with tri legs and spline neck/spine)
+* BipedRig.ma : This is a standard bipedal rig built using aniseed
+* GiraffeRig.ma (Quadruped with tri legs and spline neck/spine)
 
-There is also a Biped.ma which is the Biped.json rig with geometry skinned to it.
+Both can be opened in Maya 2025 and beyond and can be Unbuilt/rebuilt. Also included
+in the examples directory is a json file for each, which can be used to build a 
+completely fresh rig from.
 ```
 ## Creating a new Rig
 
