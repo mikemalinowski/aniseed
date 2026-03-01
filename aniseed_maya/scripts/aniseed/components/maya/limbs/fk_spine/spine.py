@@ -263,6 +263,7 @@ class FKSpineComponent(aniseed.RigComponent):
 
         increment = 25 / (joint_count - 1)
 
+        all_joints = []
         hip_joint = aniseed_toolkit.run(
             "Create Joint",
             description="Hip" + self.option("Label").get(),
@@ -272,6 +273,7 @@ class FKSpineComponent(aniseed.RigComponent):
             config=self.config
         )
         self.input("Hip").set(hip_joint)
+        all_joints.append(hip_joint)
 
         mc.xform(
             hip_joint,
@@ -296,7 +298,7 @@ class FKSpineComponent(aniseed.RigComponent):
                 f"{spine_joint}.translateX",
                 increment
             )
-
+            all_joints.append(spine_joint)
             parent = spine_joint
 
         chest_joint = aniseed_toolkit.run(
@@ -308,6 +310,7 @@ class FKSpineComponent(aniseed.RigComponent):
             config=self.config
         )
         self.input("Chest").set(chest_joint)
+        all_joints.append(chest_joint)
 
         mc.setAttr(
             f"{chest_joint}.translateX",
@@ -315,3 +318,6 @@ class FKSpineComponent(aniseed.RigComponent):
         )
 
         mc.select(hip_joint)
+
+        # -- Add our joints to a deformers set.
+        aniseed_toolkit.sets.add_to(all_joints, set_name="deformers")

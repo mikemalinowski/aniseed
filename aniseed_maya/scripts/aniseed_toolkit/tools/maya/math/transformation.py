@@ -41,74 +41,10 @@ class CalculateUpvectorPosition(aniseed_toolkit.Tool):
         Returns:
             MVector of the position in worldspace
         """
-
-        if not point_a:
-            point_a = mc.ls(sl=True)[0]
-
-        if not point_b:
-            point_b = mc.ls(sl=True)[1]
-
-        if not point_c:
-            point_c = mc.ls(sl=True)[2]
-
-        # -- If we're given transforms we need to convert them to
-        # -- vectors
-        if isinstance(point_a, str):
-            point_a = mc.xform(
-                point_a,
-                query=True,
-                translation=True,
-                worldSpace=True,
-            )
-
-        if isinstance(point_b, str):
-            point_b = mc.xform(
-                point_b,
-                query=True,
-                translation=True,
-                worldSpace=True,
-            )
-
-        if isinstance(point_c, str):
-            point_c = mc.xform(
-                point_c,
-                query=True,
-                translation=True,
-                worldSpace=True,
-            )
-
-        point_a = om.MVector(*point_a)
-        point_b = om.MVector(*point_b)
-        point_c = om.MVector(*point_c)
-
-        # -- Create the vectors between the points
-        ab = point_b - point_a
-        ac = point_c - point_a
-        cb = point_c - point_b
-
-        # -- Get the center point between the end points
-        center = point_a + (((ab * ac) / (ac * ac))) * ac
-
-        # -- Create a normal vector pointing at the mid point
-        normal = (point_b - center).normal()
-
-        # -- Define the length for the upvector
-        vector_length = (ab.length() + cb.length()) * length
-
-        # -- Calculate the final vector position
-        result = point_b + (vector_length * normal)
-
-        if create:
-            node = mc.createNode('transform')
-            mc.xform(
-                node,
-                t=[
-                    result.x,
-                    result.y,
-                    result.z,
-                ],
-                worldSpace=True,
-            )
-            mc.select(node)
-
-        return result
+        return aniseed_toolkit.transformation.calculate_upvector_position(
+            point_a=point_a,
+            point_b=point_b,
+            point_c=point_c,
+            length=length,
+            create=create,
+        )

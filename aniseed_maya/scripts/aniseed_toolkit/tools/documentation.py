@@ -62,7 +62,7 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
             lines.append(f"{category_header} {category.title()}")
 
             for tool in self.get_plugins(category):
-
+                print(tool.identifier)
                 lines.append("-" * 20)
                 lines.append(f"{tool_header} {tool.identifier}")
                 lines.append(f"Identifier : `{tool.identifier}`")
@@ -78,6 +78,9 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
                 overview = ""
                 return_string = ""
                 arguments = []
+
+                if not documentation:
+                    continue
 
                 for line in documentation.split("\n"):
 
@@ -122,7 +125,8 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
                             continue
 
                         # -- We need to append to the last argument
-                        arguments[-1] += " " + line.strip()
+                        if arguments:
+                            arguments[-1] += " " + line.strip()
                         continue
 
 

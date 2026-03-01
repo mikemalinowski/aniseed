@@ -214,7 +214,7 @@ class TentacleComponent(aniseed.RigComponent):
         # -- We always create our joints along X between zero and ten, so we
         # -- calculate the increment between each joint for the requested
         # -- joint count.
-        increment = 10.0 / float(joint_count + 1)
+        increment = 10.0 / float(joint_count)
 
         # -- Create the joint and ensure its spaced correctly.
         for idx in range(joint_count):
@@ -416,6 +416,30 @@ class TentacleComponent(aniseed.RigComponent):
 
         # -- TODO: We should zero the controls at this stage!
         pass
+
+        # -- Now we need to make the controls location be the zero point.
+        # -- We do this by taking the control and getting the mech parent
+        # -- and matching the transform of hte mech parent to the control
+        # -- then zero the control
+        for control in builder.controls():
+
+            if "Twist" in control:
+                continue
+
+            control = aniseed_toolkit.run("Get Control", control)
+            mech_parent = mc.listRelatives(control.org, p=True)[0]
+
+            mc.xform(
+                mech_parent,
+                matrix=mc.xform(
+                    control.ctl,
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
+            aniseed_toolkit.run("Zero Control", control.ctl)
 
         # -- We now constrain our deformation joints to the control rig
         for idx, mech_joint in enumerate(builder.joint_names()):

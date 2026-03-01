@@ -3,6 +3,8 @@ import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
 
+from aniseed.components.maya.limbs.hand.hand import HandComponent
+
 
 class HeadComponent(aniseed.RigComponent):
     """
@@ -78,6 +80,9 @@ class HeadComponent(aniseed.RigComponent):
         self.neck_control = None
         self.head_control = None
 
+    def on_enter_stack(self):
+        self.user_func_create_skeleton()
+
     def input_widget(self, requirement_name):
         if requirement_name in ["Parent", "Neck Joint", "Head Joint"]:
             return aniseed.widgets.ObjectSelector(component=self)
@@ -96,9 +101,13 @@ class HeadComponent(aniseed.RigComponent):
             )
 
     def user_functions(self):
-        return {
-            "Create Joints": self.build_skeleton,
-        }
+        menu = super(HeadComponent, self).user_functions()
+
+        if not self.input("Head Joint").get():
+            menu["Create Joints"] = self.user_func_create_skeleton
+            return menu
+
+        return menu
 
     def run(self):
 
@@ -183,13 +192,9 @@ class HeadComponent(aniseed.RigComponent):
         self.output("Head Control").set(head_control.ctl)
         self.output("Neck Control").set(neck_controls[0].ctl)
 
-    def build_skeleton(self):
+    def user_func_create_skeleton(self):
 
-        try:
-            parent = mc.ls(sl=True)[0]
-
-        except:
-            parent = None
+        parent = aniseed_toolkit.mutils.first_selected()
 
         joint_map = aniseed_toolkit.run(
             "Load Joints File",
@@ -201,7 +206,7 @@ class HeadComponent(aniseed.RigComponent):
             apply_names=False,
             worldspace_root=True,
         )
-        print(joint_map)
+
         location = self.option("Location").get()
         prefix = self.option("Description Prefix").get()
 
@@ -226,3 +231,9 @@ class HeadComponent(aniseed.RigComponent):
 
         self.input("Neck Joints").set([neck])
         self.input("Head Joint").set(head)
+
+        if parent:
+            aniseed_toolkit.transformation.snap_position(neck, parent)
+
+        # -- Add our joints to a deformers set.
+        aniseed_toolkit.sets.add_to([neck, head], set_name="deformers")

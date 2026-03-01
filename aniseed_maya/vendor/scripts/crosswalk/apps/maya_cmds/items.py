@@ -54,7 +54,6 @@ def get(item_name: str or object) -> object:
     Returns:
         The found item in the applications python api
     """
-    return item_name
     if isinstance(item_name, om.MObject):
         return item_name
 
@@ -140,7 +139,7 @@ def get_parent(item: object or str) -> object:
     try:
         return mc.listRelatives(name, parent=True)[0]
 
-    except IndexError:
+    except (TypeError, IndexError):
         return None
 
 

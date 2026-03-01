@@ -20,6 +20,7 @@ class DemoAppConfig(AppConfig):
 
     stack_class = stack.Stack
 
+
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,PyUnusedLocal
 def launch_demo(blocking: bool = True, load_file: str = None, run_on_launch: bool = False):
@@ -28,7 +29,6 @@ def launch_demo(blocking: bool = True, load_file: str = None, run_on_launch: boo
     mode, which exposes all the components used by xstacks unit tests.
     """
     q_app = qtility.app.get()
-
     w = AppWindow(app_config=DemoAppConfig)
     w.show()
 

@@ -1,5 +1,4 @@
 import aniseed_toolkit
-import maya.cmds as mc
 
 
 class DisconnectAllSkinsTool(aniseed_toolkit.Tool):
@@ -15,12 +14,7 @@ class DisconnectAllSkinsTool(aniseed_toolkit.Tool):
         This will disconnect all the skinCluster nodes in the scene. It does not
         remove them, and does not disconnect them.
         """
-        for skin in mc.ls(type="skinCluster"):
-            mc.skinCluster(
-                skin,
-                edit=True,
-                moveJointsMode=True,
-            )
+        aniseed_toolkit.skin.disconnect_all_skins()
 
 
 class ReconnectAllSkinsTool(aniseed_toolkit.Tool):
@@ -36,9 +30,4 @@ class ReconnectAllSkinsTool(aniseed_toolkit.Tool):
         This will reconnect all skin clusters in the scene which have previously
         been disconnected.
         """
-        for skin in mc.ls(type="skinCluster"):
-            mc.skinCluster(
-                skin,
-                edit=True,
-                moveJointsMode=False,
-            )
+        aniseed_toolkit.skin.reconnect_all_skins()

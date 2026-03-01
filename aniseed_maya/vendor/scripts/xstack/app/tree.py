@@ -1,12 +1,10 @@
-import typing
 import traceback
-import collections
 import qtility
 from Qt import QtWidgets, QtCore, QtGui
 
-from . import add
+from . import dialogs
 from . import delegate
-from . import tree_menu
+from . import menu
 
 
 # --------------------------------------------------------------------------------------
@@ -16,6 +14,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
     The tree view is the heart of the stacking tool - exposing the build order to the
     user and allowing the user to add, remove and move components.
     """
+    is_updated = QtCore.Signal()
 
     # ----------------------------------------------------------------------------------
     def __init__(self, stack: "xstack.Stack", app_config, app: QtWidgets.QWidget = None):
@@ -24,6 +23,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.app = app
         self.app_config = app_config
         self.add_component_window = None
+        self.switch_component_window = None
         self.allow_interaction = True
 
         # -- Declare the settings to allow us to correctly handle drag and
@@ -54,9 +54,9 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         # -- Store a reference to the root item
         self._root_item = None
-
-        # -- This is where we store a mapping of uuid's to widgetitems
-        self._item_lookup = dict()
+        #
+        # # -- This is where we store a mapping of uuid's to widgetitems
+        # self._item_lookup = dict()
 
         # -- Tracker for if we're building
         self.is_building = False
@@ -78,14 +78,18 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         # -- Now we're done, lets populate the tree
         self.populate()
 
-        self.stack.changed.connect(
-            self.populate,
-        )
+        self.stack.hierarchy_changed.connect(self.populate)
+        self.stack.component_added.connect(self.populate)
+        self.stack.component_removed.connect(self.populate)
         self.app.build_started.connect(self.disable_interaction)
-        # self.stack.build_started.connect(self.disable_interaction)
         self.app.build_complete.connect(self.enable_interaction)
-        # self.stack.build_completed.connect(self.enable_interaction)
         self.stack.build_progressed.connect(self.on_build_updated)
+
+    # ----------------------------------------------------------------------------------
+    def describe(self):
+        for component in self.stack.components():
+            print("-" * 100)
+            component.describe()
 
     # ----------------------------------------------------------------------------------
     def disable_interaction(self):
@@ -98,7 +102,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.viewport().update()
 
     # ----------------------------------------------------------------------------------
-    def populate(self):
+    def populate(self, *args, **kwargs):
         """
         This will clear out the tree and rebuild it
         """
@@ -122,22 +126,19 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         self.insertTopLevelItems(0, [self._root_item])
 
-        # -- Add the children, and get any warnings back
-        warnings = self._add_child_components(
-            parent_item=self._root_item,
-            build_pass_data=self.stack.build_order(),
-        )
+        for root_component in self.stack.root_components:
+            root_item = self._create_item(root_component)
+            self._root_item.addChild(root_item)
+            self.generate_child_items(root_item)
+            root_item.setExpanded(True)
+        self._root_item.setExpanded(True)
 
-        # -- If we were given warnings, we should show them to the user
-        if warnings:
-            for warning in warnings:
-                print(f"Warning: {warning}")
-
-            qtility.request.message(
-                title="Initialisation Warning",
-                message="Not all components could be made. Please see the script editor",
-                parent=self
-            )
+    def generate_child_items(self, item):
+        for child_component in item.component.children:
+            child_item = self._create_item(child_component)
+            item.addChild(child_item)
+            self.generate_child_items(child_item)
+        item.setExpanded(True)
 
     # ----------------------------------------------------------------------------------
     def current_component(self) -> "xstack.Component" or None:
@@ -149,55 +150,11 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         if not selected_item:
             return None
 
-        if not hasattr(selected_item, "uuid_"):
+        if not hasattr(selected_item, "component"):
+            print(f"{selected_item} has no component")
             return None
 
-        uuid_ = selected_item.uuid_
-        return self.stack.component(uuid_)
-
-    # ----------------------------------------------------------------------------------
-    def _add_child_components(
-            self,
-            parent_item: QtWidgets.QTreeWidgetItem,
-            build_pass_data: typing.List,
-            silent: bool = False
-    ):
-        """
-        This will add all child components to the parent and is recursive.
-        """
-        warnings = list()
-
-        for component_data in build_pass_data:
-
-            uuid_ = component_data["uuid"]
-            children = component_data["children"]
-
-            item_widget = self._create_item(
-                self.stack.component(uuid_)
-            )
-
-            if not item_widget:
-                label = component_data["label"]
-                warnings.append(f"Could not add {label} ({component_data.get('type')}) ({uuid_})")
-                continue
-
-            # -- Store the uuid on the widget
-            item_widget.uuid_ = uuid_
-
-            parent_item.addChild(item_widget)
-            self._item_lookup[uuid_] = item_widget
-
-            warnings.extend(
-                self._add_child_components(
-                    parent_item=item_widget,
-                    build_pass_data=children,
-                ),
-            )
-
-            # -- Ensure we're showing an expanded tree
-            parent_item.setExpanded(True)
-
-        return warnings
+        return selected_item.component
 
     # ----------------------------------------------------------------------------------
     @classmethod
@@ -213,6 +170,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         item = QtWidgets.QTreeWidgetItem(
             [f"{component.label()} ({component.identifier})"],
         )
+        item.component = component
 
         # -- If we have an icon, apply it
         if component.icon:
@@ -244,10 +202,10 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         new_parent_item = item_being_dropped.parent()
 
         # -- Get the corresponding components for these
-        child_component = self.stack.component(item_being_dropped.uuid_)
+        child_component = item_being_dropped.component
 
-        if hasattr(new_parent_item, "uuid_"):
-            parent_component = self.stack.component(new_parent_item.uuid_)
+        if hasattr(new_parent_item, "component"):
+            parent_component = new_parent_item.component
 
         else:
             parent_component = None
@@ -257,12 +215,9 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         else:
             index = None
-
-        self.stack.set_build_position(
-            component=child_component,
-            parent=parent_component,
-            index=index,
-        )
+        former_parent = child_component.parent
+        child_component.set_parent(parent_component, child_index=index)
+        self.populate()
 
     # ----------------------------------------------------------------------------------
     def mousePressEvent(self, event: QtCore.QEvent):
@@ -274,38 +229,23 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         if not self.allow_interaction:
             return
-
         if event.button() != QtCore.Qt.RightButton:
             return
 
         selected_item = self.itemAt(event.pos())
 
-        menu_dict = collections.OrderedDict()
-        icon_dict = collections.OrderedDict()
-
-        tree_menu.construct(
-            menu_dict,
-            icon_dict,
-            selected_item,
-            self,
-            self.app_config,
-            self.stack,
-            self.app,
+        context_menu = menu.TreeMenu(
+            item=selected_item,
+            app_config=self.app_config,
+            app=self.app,
             parent=self,
         )
-
-        menu = qtility.menus.create(
-            menu_dict,
-            icon_map=icon_dict,
-            parent=self,
-        )
-
-        menu.popup(QtGui.QCursor().pos())
+        context_menu.exec(QtGui.QCursor().pos())
 
     # ----------------------------------------------------------------------------------
     def save_component_settings(self, item):
 
-        component = self.stack.component(item.uuid_)
+        component = item.component
 
         filepath = qtility.request.filepath(
             title="Save Config Settings",
@@ -321,7 +261,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
     # ----------------------------------------------------------------------------------
     def load_component_settings(self, item):
 
-        component = self.stack.component(item.uuid_)
+        component = item.component
 
         filepath = qtility.request.filepath(
             title="Load Config Settings",
@@ -335,29 +275,17 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         component.load_settings(filepath=filepath)
 
     # ----------------------------------------------------------------------------------
-    def switch_version(self, item, version):
-        component = self.stack.component(item.uuid_)
-
-        self.stack.switch_component_version(
-            component,
-            version,
-        )
-
-        self.populate()
-
-    # ----------------------------------------------------------------------------------
     def toggle_enable(self, item):
-        component = self.stack.component(item.uuid_)
+        component = item.component
         component.set_enabled(not component.is_enabled())
 
     # ----------------------------------------------------------------------------------
     def duplicate_component(self, item):
-        self.stack.component(item.uuid_).duplicate()
+        item.component.duplicate()
 
     # ----------------------------------------------------------------------------------
     def help_for_component(self, item):
-        component = self.stack.component(item.uuid_)
-        component.help()
+        item.component.help()
 
     # ----------------------------------------------------------------------------------
     @staticmethod
@@ -377,7 +305,8 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         """
         Removes a component from the stack
         """
-        component = self.stack.component(item.uuid_)
+        # -- Get the component
+        component = item.component
 
         confirmation = qtility.request.confirmation(
             title=f"Remove {self.app_config.component_label}",
@@ -388,6 +317,8 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         if not confirmation:
             return
 
+        # -- Remove the reference to it
+        item.component = None
         self.stack.remove_component(component)
 
         try:
@@ -397,24 +328,23 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             pass
 
     # ----------------------------------------------------------------------------------
-    def add_component(self, parent_uuid: str):
+    def add_component(self, parent):
         """
         Adds the component with the given uuid to the stack
         """
-        self.add_component_window = add.AddComponentWidget(
+        self.add_component_window = dialogs.AddComponentWidget(
             stack=self.stack,
-            component_parent=self.stack.component(parent_uuid),
+            component_parent=parent,
             app_config=self.app_config,
             parent=self,
         )
         self.add_component_window.component_added.connect(self.populate)
-
         self.add_component_window.show()
 
     # ----------------------------------------------------------------------------------
     def rename_component(self, item: QtWidgets.QListWidgetItem):
 
-        component = self.stack.component(item.uuid_)
+        component = item.component
 
         label = qtility.request.text(
             title=f"New {self.app_config.component_label} Label",
@@ -429,3 +359,13 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         component.set_label(label)
 
         self.populate()
+
+    def switch_component_type(self, item: QtWidgets.QListWidgetItem):
+
+        self.switch_component_window = dialogs.SwitchComponentTypeDialog(
+            component=item.component,
+            app_config=self.app_config,
+            parent=self,
+        )
+        self.switch_component_window.component_switched.connect(self.populate)
+        self.switch_component_window.show()

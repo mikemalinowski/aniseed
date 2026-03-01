@@ -13,12 +13,10 @@ class ClearConstraintsTool(aniseed_toolkit.Tool):
         self,
         node: str = "",
     ):
+
         if node:
             nodes = [node]
         else:
-            nodes = mc.ls(sl=True)
+            nodes = mc.ls(selection=True)
 
-        for node in nodes:
-            for child in mc.listRelatives(node, children=True) or list():
-                if "constraint" in mc.nodeType(child).lower():
-                    mc.delete(child)
+        aniseed_toolkit.containts.remove_all(nodes)

@@ -93,7 +93,7 @@ class AppWidget(QtWidgets.QWidget):
                 build_below=build_below,
                 validate_only=validate_only,
             )
-            self.build_complete.emit()
+            self.build_complete.emit() # CRASH
 
     def update_progressbar(self, percentage):
         """
@@ -217,7 +217,7 @@ class AppWidget(QtWidgets.QWidget):
 
         import_stack_action.triggered.connect(
             functools.partial(
-                self.import_stack,
+                self.open,
             )
         )
 
@@ -275,6 +275,7 @@ class AppWidget(QtWidgets.QWidget):
 
         self.tree_widget = tree.BuildTreeWidget(self.stack, self.app_config, app=self)
         self.splitter.addWidget(self.tree_widget)
+        self.tree_widget.is_updated.connect(self.propogate_component_selection)
         self.tree_widget.currentItemChanged.connect(self.propogate_component_selection)
 
         self.editor_widget = options.ComponentEditor(parent=self)
@@ -376,7 +377,7 @@ class AppWidget(QtWidgets.QWidget):
         return new_stack
 
     # ----------------------------------------------------------------------------------
-    def import_stack(self, filepath=None, silent=False):
+    def open(self, filepath=None, silent=False):
         """
         This defines the user flow for importing stack data
         """
@@ -404,7 +405,7 @@ class AppWidget(QtWidgets.QWidget):
                 save=False,
             )
 
-        new_stack = self.app_config.stack_class.load(
+        new_stack = self.app_config.stack_class.open(
             data=filepath,
             component_paths=self.app_config.component_paths,
         )
@@ -439,9 +440,6 @@ class AppWidget(QtWidgets.QWidget):
         in the tree view we call the set_component in the editor panel.
         """
         component = self.tree_widget.current_component()
-
-        if not component:
-            return
         self.editor_widget.set_component(component)
 
     # ----------------------------------------------------------------------------------
@@ -473,25 +471,6 @@ class AppWindow(qtility.windows.MemorableWindow):
                     self.app_config.icon,
                 ),
             )
-
-        custom_overrides = {
-            "_ITEMHIGHLIGHT_": ",".join(
-                [
-                    str(n)
-                    for n in self.app_config.item_highlight_color
-                ]
-            )
-        }
-
-        # # -- Apply our styling, defining some differences
-        qtility.styling.apply(
-            [
-                resources.get('space'),
-                resources.get("style.css")
-            ],
-            self,
-            **custom_overrides
-        )
 
         widget = self.app_config.app_widget or AppWidget
         self.core = widget(

@@ -211,34 +211,28 @@ class Rig(xstack.Stack):
             results.append(cls(host=rig_host))
         return results
 
-    @classmethod
-    def load(
-        cls,
-        data: str or typing.Dict,
-        component_paths: typing.List or None = None,
-    ):
+    def deserialize(self, data: typing.Dict):
         if isinstance(data, str):
             with open(data, 'r') as f:
                 data = json.load(f)
 
         # -- Call the parent class which manages the load
-        rig = super(Rig, cls).load(
-            data,
-            component_paths=component_paths,
-        )
+        super(Rig, self).deserialize(data)
+
+        # -- Store the data on the host node
         crosswalk.attributes.set_value(
-            item=rig.host(),
+            item=self.host(),
             attribute_name="recipe",
             value=json.dumps(data),
         )
+
         # -- Now call the host callback - which allows an embedded environment
         # -- to tie into the load process
         host_app = host_.get()
         host_app.on_rig_load(
-            rig,
+            self,
             data,
         )
-        return rig
 
     def save(
         self,
@@ -259,3 +253,42 @@ class Rig(xstack.Stack):
             filepath,
             additional_data,
         )
+
+
+def get_rig(node):
+    """
+    This is a convenient function for getting the Rig class for a
+    node within its rig hierarchy.
+
+    For instance, the following example is how a rig which has nodes to
+    seperate the edit/build functionality can easily be accessed and built.
+
+
+    >>> # -- Import aniseed. We'll also use crosswalk just to make this
+    >>> # -- example work in any supported application
+    >>> import aniseed
+    >>> import crosswalk
+    >>>
+    >>> # -- Get the rig instance
+    >>> rig = aniseed.get_rig(crosswalk.selection.selected()[0])
+    >>>
+    >>> # -- Find the two components we're interested in
+    >>> build_rig = rig.get_component_by_label("Build Control Rig")
+    >>> make_editable = rig.get_component_by_label("Make Rig Editable")
+    >>>
+    >>> # -- Lets start by making the rig editable
+    >>> rig.build(build_below=make_editable)
+    >>>
+    >>> # -- Now lets build the control rig
+    >>> rig.build(build_below=build_rig)
+    """
+    def _get_top_parent(n):
+        parent_of_parent = crosswalk.items.get_parent(n)
+        if not parent_of_parent:
+            return n
+
+        return _get_top_parent(parent_of_parent)
+
+    root_node = _get_top_parent(node)
+    rig = Rig(host=root_node)
+    return rig

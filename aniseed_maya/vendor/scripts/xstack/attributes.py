@@ -112,6 +112,14 @@ class _Attribute:
     def hidden(self):
         return self._hidden
 
+    # ----------------------------------------------------------------------------------
+    def set_hidden(self, value: bool):
+        self._hidden = value
+
+    # ----------------------------------------------------------------------------------
+    def set_pre_expose(self, value: bool):
+        self._pre_expose = value
+
 
 # --------------------------------------------------------------------------------------
 class Option(_Attribute):
@@ -159,12 +167,20 @@ class Input(_Attribute):
             "requirement",
         )
 
+
 # --------------------------------------------------------------------------------------
 class Output(_Attribute):
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, *args, **kwargs):
+    def __init__(self, is_default=False, *args, **kwargs):
         super(Output, self).__init__(*args, **kwargs)
+        self._is_default = is_default
+
+    def is_default(self):
+        return self._is_default
+
+    def set_default(self, value):
+        self._is_default = value
 
     # ----------------------------------------------------------------------------------
     def address(self):

@@ -1,5 +1,4 @@
 import aniseed_toolkit
-import maya.cmds as mc
 
 
 class AddSeparator(aniseed_toolkit.Tool):
@@ -18,18 +17,4 @@ class AddSeparator(aniseed_toolkit.Tool):
         Return:
             None
         """
-        if not node:
-            node = mc.ls(sl=True)[0]
-
-        character = "_"
-        name_to_use = character * 8
-
-        while mc.objExists(f"{node}.{name_to_use}"):
-            name_to_use += character
-
-        mc.addAttr(
-            node,
-            shortName=name_to_use,
-            k=True,
-        )
-        mc.setAttr(f"{node}.{name_to_use}", lock=True)
+        aniseed_toolkit.attributes.add_separator(node)

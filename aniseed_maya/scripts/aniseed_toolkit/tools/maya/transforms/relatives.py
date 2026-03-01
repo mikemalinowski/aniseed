@@ -1,5 +1,6 @@
 import aniseed_toolkit
 import maya.cmds as mc
+import maya.api.OpenMaya as om
 
 
 class PositionBetweenTool(aniseed_toolkit.Tool):
@@ -31,47 +32,11 @@ class PositionBetweenTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        cns = mc.pointConstraint(
-            to_this,
-            node,
-            maintainOffset=False,
-        )[0]
-
-        mc.pointConstraint(
-            from_this,
-            node,
-            maintainOffset=False,
-        )
-
-        mc.setAttr(
-            cns + "." + mc.pointConstraint(
-                cns,
-                query=True,
-                weightAliasList=True,
-            )[0],
-            1 - factor
-        )
-
-        mc.setAttr(
-            cns + "." + mc.pointConstraint(
-                cns,
-                query=True,
-                weightAliasList=True,
-            )[-1],
-            factor,
-        )
-
-        xform = mc.xform(
-            node,
-            query=True,
-            matrix=True,
-        )
-
-        mc.delete(cns)
-
-        mc.xform(
-            node,
-            matrix=xform,
+        return aniseed_toolkit.transformation.position_between(
+            node=node,
+            from_this=from_this,
+            to_this=to_this,
+            factor=factor,
         )
 
 
@@ -95,44 +60,10 @@ class GetRelativeMatrixTool(aniseed_toolkit.Tool):
         Returns:
             relative matrix as a list (maya.cmds)
         """
-        parent_buffer = mc.createNode("transform")
-        child_buffer = mc.createNode("transform")
-
-        mc.parent(
-            child_buffer,
-            parent_buffer,
+        return aniseed_toolkit.transformation.get_relative_matrix(
+            node=node,
+            relative_to=relative_to,
         )
-
-        mc.xform(
-            parent_buffer,
-            matrix=mc.xform(
-                relative_to,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-        )
-
-        mc.xform(
-            child_buffer,
-            matrix=mc.xform(
-                node,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
-
-        relative_matrix = mc.xform(
-            child_buffer,
-            query=True,
-            matrix=True,
-        )
-
-        mc.delete(parent_buffer)
-
-        return relative_matrix
 
 
 class ApplyRelativeMatrixTool(aniseed_toolkit.Tool):
@@ -156,38 +87,8 @@ class ApplyRelativeMatrixTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        parent_buffer = mc.createNode("transform")
-        child_buffer = mc.createNode("transform")
-
-        mc.parent(
-            child_buffer,
-            parent_buffer,
-        )
-
-        mc.xform(
-            parent_buffer,
-            matrix=mc.xform(
-                relative_to,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-        )
-
-        mc.xform(
-            child_buffer,
+        return aniseed_toolkit.transformation.apply_relative_matrix(
+            node=node,
             matrix=matrix,
+            relative_to=relative_to,
         )
-
-        mc.xform(
-            node,
-            matrix=mc.xform(
-                child_buffer,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
-
-        mc.delete(parent_buffer)

@@ -7,7 +7,7 @@ import aniseed_toolkit
 from Qt import QtCore, QtWidgets, QtGui
 
 import maya
-import maya.cmds as mc
+from maya import cmds
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
 
@@ -41,7 +41,7 @@ class StandaloneHost(aniseed.EmbeddedHost):
             # retain=False,
         )
 
-        mc.workspaceControl(
+        cmds.workspaceControl(
             f'{window.objectName()}WorkspaceControl',
             e=True,
             ttc=["AttributeEditor", -1],
@@ -66,7 +66,7 @@ class StandaloneHost(aniseed.EmbeddedHost):
         nodes = []
 
         nodes.extend(
-            mc.listRelatives(
+            cmds.listRelatives(
                 rig.label,
                 allDescendents=True
             ) or list()
@@ -79,7 +79,7 @@ class StandaloneHost(aniseed.EmbeddedHost):
         nodes = [
             n
             for n in nodes
-            if mc.nodeType(n) in supported_types
+            if cmds.nodeType(n) in supported_types
         ]
 
         return dict(
@@ -94,7 +94,6 @@ class StandaloneHost(aniseed.EmbeddedHost):
         Called when a rig has been loaded
         """
         additional_data = file_data.get("additional_data", dict())
-
         if "hierarchy" in additional_data:
             aniseed_toolkit.run(
                 "Deserialise Nodes From Dict",
@@ -128,11 +127,11 @@ class MenuBuilder:
 
         # -- If the menu already exists, we will delete it to allow
         # -- us to rebuild it
-        if mc.menu(cls.MENU_OBJ, exists=True):
-            mc.deleteUI(cls.MENU_OBJ)
+        if cmds.menu(cls.MENU_OBJ, exists=True):
+            cmds.deleteUI(cls.MENU_OBJ)
 
         # -- Create the new menu for Crab
-        new_menu = mc.menu(
+        new_menu = cmds.menu(
             cls.MENU_OBJ,
             label=cls.MENU_NAME,
             tearOff=True,
@@ -151,21 +150,21 @@ class MenuBuilder:
             icon=aniseed_toolkit.resources.get("icon.png"),
         )
 
-        mc.menuItem(divider=True, parent=new_menu)
+        cmds.menuItem(divider=True, parent=new_menu)
         cls._add_menu_item(
             "Website",
             cls._menu_goto_website,
             icon=aniseed.resources.get("website.png"),
         )
 
-        mc.menuItem(divider=True, parent=new_menu)
+        cmds.menuItem(divider=True, parent=new_menu)
         cls._add_menu_item(
             "Reload",
             cls._menu_reload,
             icon=aniseed.resources.get("reload.png"),
         )
 
-        mc.menuItem(divider=True, parent=new_menu)
+        cmds.menuItem(divider=True, parent=new_menu)
         cls._add_menu_item(
             "About",
             cls._menu_show_version_data,
@@ -174,23 +173,23 @@ class MenuBuilder:
 
         # -- We specifically only want this menu to be visibile
         # -- in the rigging menu
-        cached_menu_set = mc.menuSet(query=True, currentMenuSet=True)
+        cached_menu_set = cmds.menuSet(query=True, currentMenuSet=True)
         rigging_menu_set = maya.mel.eval('findMenuSetFromLabel("Rigging")')
 
         # -- Set our menu to the rigging menu and add it to
         # -- the menu set
-        mc.menuSet(currentMenuSet=rigging_menu_set)
-        mc.menuSet(addMenu=new_menu)
+        cmds.menuSet(currentMenuSet=rigging_menu_set)
+        cmds.menuSet(addMenu=new_menu)
 
         # -- Restore the users cached menu set
-        mc.menuSet(currentMenuSet=cached_menu_set)
+        cmds.menuSet(currentMenuSet=cached_menu_set)
 
 
     # noinspection PyUnresolvedReferences
     @classmethod
     def _add_menu_item(cls, label, callable_func, icon=None, parent=None):
         parent = parent or cls.MENU_OBJ
-        return mc.menuItem(
+        return cmds.menuItem(
             cls.MENU_OBJ + label.replace(" ", "_"),
             label=label,
             command=callable_func,
@@ -198,18 +197,16 @@ class MenuBuilder:
             image=icon,
         )
 
-
     # noinspection PyUnresolvedReferences
     @classmethod
     def _launch_app(cls, *args, **kwargs):
-        print("running launch app")
-        mc.evalDeferred("import aniseed;print(aniseed.__file__);aniseed.app.launch()")
+        cmds.evalDeferred("import aniseed;print(aniseed.__file__);aniseed.app.launch()")
 
 
     # noinspection PyUnresolvedReferences
     @classmethod
     def _launch_aniseed_toolkit(cls, *args, **kwargs):
-        mc.evalDeferred("import aniseed_toolkit;aniseed_toolkit.run('Launch Maya Toolkit')")
+        cmds.evalDeferred("import aniseed_toolkit;aniseed_toolkit.run('Launch Maya Toolkit')")
 
 
     # noinspection PyUnusedLocal
@@ -226,7 +223,7 @@ class MenuBuilder:
         for package in cls.CRITICAL_MODULES:
             blackout.drop(package)
 
-        mc.evalDeferred("import aniseed;aniseed.app.launch()")
+        cmds.evalDeferred("import aniseed;aniseed.app.launch()")
 
     @classmethod
     def _menu_show_version_data(cls, *args, **kwargs):
@@ -260,6 +257,30 @@ class MenuBuilder:
         )
 
 
+class MayaAppWidget(aniseed.AppWidget):
+    """
+    This is a maya implementation of the Aniseed App Widget. It incorporates
+    on screen display of events.
+    """
+    def __init__(self, *args, **kwargs):
+        super(MayaAppWidget, self).__init__(*args, **kwargs)
+        self.options = dict(pos="botCenter", fade=True)
+
+    def notify_component_added(self, *args, **kwargs):
+        message = f"{args[0].label() if args else ''} Component Added"
+        cmds.inViewMessage(amg=message, **self.options)
+
+    def notify_component_removed(self, *args, **kwargs):
+        message = f"{args[0].label() if args else ''} Component Removed"
+        cmds.inViewMessage(amg=message, **self.options)
+
+    def notify_build_started(self, *args, **kwargs):
+        cmds.inViewMessage(amg="Build Started", **self.options)
+
+    def notify_build_finished(self, *args, **kwargs):
+        cmds.inViewMessage(amg="Build Finished", **self.options)
+
+
 # noinspection PyUnresolvedReferences
 class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
     """
@@ -271,7 +292,6 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super(DockableMayaApp, self).__init__(*args, **kwargs)
-
         # -- We update the ui based on various maya events. So we can correctly
         # -- unregister these, we store the event id's
         self.script_job_ids = list()
@@ -302,7 +322,7 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
             **stlying_overrides
         )
 
-        self.app = aniseed.AppWidget(
+        self.app = MayaAppWidget(
             app_config=aniseed.AppConfig,
             allow_threading=False,
             parent=self,
@@ -310,7 +330,7 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
         self.setCentralWidget(
             self.app,
         )
-
+        
         # -- Register into the maya events system
         self._register_script_jobs()
 
@@ -332,7 +352,7 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
         for event in events:
             self.script_job_ids.append(
-                mc.scriptJob(
+                cmds.scriptJob(
                     event=[
                         event,
                         self.app.switch_rig,
@@ -346,7 +366,7 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
         then clear any registered ID's stored within the class.
         """
         for job_id in self.script_job_ids:
-            mc.scriptJob(
+            cmds.scriptJob(
                 kill=job_id,
                 force=True,
             )
@@ -384,15 +404,15 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
     @classmethod
     def remove_workspace_control(cls, control):
-        if mc.workspaceControl(control, q=True, exists=True):
+        if cmds.workspaceControl(control, q=True, exists=True):
 
             try:
-                mc.workspaceControl(control, e=True, close=True)
+                cmds.workspaceControl(control, e=True, close=True)
             except:
                 pass
 
             try:
-                mc.deleteUI(control, control=True)
+                cmds.deleteUI(control, control=True)
             except:
                 pass
 

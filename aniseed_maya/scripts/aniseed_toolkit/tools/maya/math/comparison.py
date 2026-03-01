@@ -1,8 +1,5 @@
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
-from maya.api import OpenMaya as om
-
 
 
 class DistanceBetweenTool(aniseed_toolkit.Tool):
@@ -35,34 +32,11 @@ class DistanceBetweenTool(aniseed_toolkit.Tool):
         Returns:
             The distance between two objects
         """
-
-        if not node_a:
-            node_a = mc.ls(sl=True)[0]
-
-        if not node_b:
-            node_b = mc.ls(sl=True)[1]
-
-        point_a = mc.xform(
-            node_a,
-            query=True,
-            translation=True,
-            worldSpace=True,
+        return aniseed_toolkit.transformation.distance_between(
+            node_a=node_a,
+            node_b=node_b,
+            print_result=True,
         )
-
-        point_b = mc.xform(
-            node_b,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
-
-        point_a = om.MVector(*point_a)
-        point_b = om.MVector(*point_b)
-
-        delta = point_b - point_a
-
-        print(f"Distance between {node_a} and {node_b} is {delta}")
-        return delta.length()
 
 
 class FactorBetween(aniseed_toolkit.Tool):
@@ -87,27 +61,12 @@ class FactorBetween(aniseed_toolkit.Tool):
         Returns:
             The factor for how close the given node is between the from_this and to_this
         """
-        total_distance = aniseed_toolkit.run(
-            "Distance Between",
-            from_this,
-            to_this,
+        return aniseed_toolkit.transformation.factor_between(
+            node=node,
+            from_this=from_this,
+            to_this=to_this,
+            print_result=True,
         )
-
-        delta = aniseed_toolkit.run(
-            "Distance Between",
-            node,
-            to_this,
-        )
-
-        distance_factor = max(
-            0.0,
-            min(
-                1.0,
-                delta / total_distance,
-            ),
-        )
-
-        return distance_factor
 
 
 class DirectionBetween(aniseed_toolkit.Tool):
@@ -137,47 +96,8 @@ class DirectionBetween(aniseed_toolkit.Tool):
         Returns:
             The direction vector between the two nodes
         """
-        a = mc.rename(mc.createNode("transform"), "Xfoo1")
-        b = mc.rename(mc.createNode("transform"), "Xfoo2")
-
-        mc.parent(
-            b,
-            a,
+        return aniseed_toolkit.transformation.direction_between(
+            node_a=node_a,
+            node_b=node_b,
+            print_result=True,
         )
-
-        mc.xform(
-            a,
-            matrix=mc.xform(
-                node_a,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
-
-        mc.xform(
-            b,
-            matrix=mc.xform(
-                node_b,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
-
-        tx = mc.xform(
-            b,
-            query=True,
-            translation=True,
-        )
-
-        n = om.MVector(*tx).normal()
-
-        mc.delete(a)
-
-        if print_result:
-            print(f"Direction between {node_a} and {node_b} is {n}")
-
-        return n

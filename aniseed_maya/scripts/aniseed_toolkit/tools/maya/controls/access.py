@@ -14,30 +14,7 @@ class GetControls(aniseed_toolkit.Tool):
         This will return the control nodes for all the selected rigs. If no
         rig is selected then all controls in all rigs will be returned.
         """
-        rigs = aniseed_toolkit.run(
-            "Get Selected Rigs",
-        )
-
-        if not rigs:
-            rigs = aniseed.Rig.all_rigs()
-
-        if not rigs:
-            return
-
-        rig_nodes = [
-            rig.label
-            for rig in rigs
-        ]
-
-        results = []
-
-        for control in mc.controller(query=True, allControllers=True):
-            rig_node = aniseed_toolkit.run("Resolve Rig Node", control)
-
-            if rig_node in rig_nodes:
-                results.append(control)
-
-        return results
+        return aniseed_toolkit.rig.all_controls()
 
 
 class ResolveRigNode(aniseed_toolkit.Tool):
@@ -56,13 +33,7 @@ class ResolveRigNode(aniseed_toolkit.Tool):
         Returns:
             node name
         """
-        full_node_path = mc.ls(node, long=True)[0].split("|")
-
-        for potential_rig_node in reversed(full_node_path):
-            if mc.objExists(f"{potential_rig_node}.aniseed_rig"):
-                return potential_rig_node
-
-        return ""
+        return aniseed_toolkit.rig.get_rig_node(node)
 
 
 class GetRigTool(aniseed_toolkit.Tool):
@@ -81,12 +52,7 @@ class GetRigTool(aniseed_toolkit.Tool):
         Returns:
             node name
         """
-        rig_node = aniseed_toolkit.run("Resolve Rig Node", node)
-
-        if not rig_node:
-            return None
-
-        return aniseed.Rig(host=rig_node)
+        return aniseed_toolkit.rig.get(node)
 
 
 class GetOpposite(aniseed_toolkit.Tool):
@@ -107,37 +73,9 @@ class GetOpposite(aniseed_toolkit.Tool):
             controls: List of controls to get the opposites for. If none are
                 given then the selection will be used.
         """
-        opposites = []
-        rig = None
+        return aniseed_toolkit.rig.opposing_controls(controls)
 
-        for control in controls or mc.ls(sl=True):
 
-            control = aniseed_toolkit.run("Get Control", control)
-
-            if not control:
-                continue
-
-            # -- Get the rig
-            if not rig:
-                rig = aniseed_toolkit.run("Get Rig", control.ctl)
-
-            # -- Get the location of the control
-            name_decomposition = rig.config().decompose_name(control.ctl)
-
-            # -- Now use the rig's config
-            side = rig.config().left
-            if name_decomposition["location"] == rig.config().left:
-                side = rig.config().right
-
-            name_decomposition["location"] = side
-            opposite_control = rig.config().generate_name(
-                unique=False,
-                **name_decomposition
-
-            )
-            opposites.append(opposite_control)
-
-        return opposites
 
 class GetByLocation(aniseed_toolkit.Tool):
 
@@ -157,28 +95,6 @@ class GetByLocation(aniseed_toolkit.Tool):
             controls: List of controls to get the opposites for. If none are
                 given then the selection will be used.
         """
-        filtered_controls = []
-        rig = None
-
-        if not controls:
-            reference_node = mc.ls(sl=True)[0]
-        else:
-            reference_node = controls[0]
-
-        # -- Get the rig
-        location_filter = None
-        control = aniseed_toolkit.run("Get Control", reference_node)
-        rig = aniseed_toolkit.run("Get Rig", control.ctl)
-        location_filter = control.location
-
-        for control in aniseed_toolkit.run("Get Controls"):
-
-            control = aniseed_toolkit.run("Get Control", control)
-
-            if not control:
-                continue
-
-            if control.location == location_filter:
-                filtered_controls.append(control.ctl)
-
-        return filtered_controls
+        return aniseed_toolkit.rig.controls_by_location(
+            controls or mc.ls(selection=True)
+        )

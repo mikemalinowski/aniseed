@@ -78,8 +78,6 @@ class PistonComponent(aniseed.RigComponent):
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
 
-        print("we are building our piston")
-
         piston_root_ctl = aniseed_toolkit.run(
             "Create Control",
             description=f"{prefix}PistonTip",

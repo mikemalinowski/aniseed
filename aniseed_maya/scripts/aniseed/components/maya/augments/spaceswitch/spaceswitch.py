@@ -132,11 +132,11 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             maintain_offset = True
 
             # -- Resolve any addresses
-            target_attribute = self.rig.lookup_attribute(target)
+            target_attribute = self.rig.resolve_attribute(target)
             if target_attribute:
                 target = target_attribute.get()
 
-            target_transform_attribute = self.rig.lookup_attribute(target_transform)
+            target_transform_attribute = self.rig.resolve_attribute(target_transform)
             if target_transform_attribute:
                 target_transform = target_transform_attribute.get()
 
@@ -179,8 +179,6 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                 mc.parentConstraint(
                     target,
                     node_to_drive.org,
-                    # skipTranslate=["x", "y", "z"] if space["orientation_only"] else [],
-                    # skipRotate=["x", "y", "z"] if space["position_only"] else [],
                     maintainOffset=maintain_offset,
                 )[0]
             )

@@ -3,7 +3,10 @@ import factories
 
 
 class EmbeddedHost:
-
+    """
+    An embedded host can be used to override what happens when launching the app
+    and managing how aniseed should be initialised within the application.
+    """
     priority = 0
 
     def launch(self) -> bool:
@@ -36,7 +39,10 @@ class EmbeddedHost:
 
 
 class EmbeddedHosts(factories.Factory):
-
+    """
+    This stores all the host plugins. Typically only one will ever be
+    valid at any given time.
+    """
     _INSTANCE = None
     _HOST = None
 

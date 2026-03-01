@@ -22,25 +22,7 @@ class HideNodesTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if not items:
-            items = mc.ls(sl=True)
-
-        if not isinstance(items, list):
-            items = [items]
-
-        for item in items:
-
-            if  mc.nodeType(item, "joint"):
-                mc.setAttr(
-                    f"{item}.drawStyle",
-                    2,  # Invisible
-                )
-
-            else:
-                mc.setAttr(
-                    f"{item}.visibility",
-                    False,
-                )
+        aniseed_toolkit.visibility.hide(items)
 
 
 class ShowNodesTool(aniseed_toolkit.Tool):
@@ -63,22 +45,4 @@ class ShowNodesTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if not items:
-            items = mc.ls(sl=True)
-
-        if not isinstance(items, list):
-            items = [items]
-
-        for item in items:
-
-            if mc.nodeType(item, "joint"):
-                mc.setAttr(
-                    f"{item}.drawStyle",
-                    0,  # Bone
-                )
-
-            else:
-                mc.setAttr(
-                    f"{item}.visibility",
-                    True,
-                )
+        aniseed_toolkit.visibility.show(items)

@@ -53,7 +53,8 @@ class RigConfiguration(component.RigComponent):
             "control_label": "ctl",
             "joint_label": "jnt",
             "zero_label": "zro",
-            "offset_label": "off"
+            "offset_label": "off",
+            "mechanical_label": "mech",
         }
 
         for label, value in self.naming_items.items():
@@ -171,6 +172,10 @@ class RigConfiguration(component.RigComponent):
         return self.option("offset_label").get()
 
     @property
+    def mechanical(self):
+        return self.option("mechanical_label").get()
+
+    @property
     def left(self):
         return self.option("left_location").get()
 
@@ -274,6 +279,13 @@ class RigConfiguration(component.RigComponent):
             return str_value.upper()
 
         if format_type == "titled":
+            return "".join(
+                [
+                    title(part)
+                    for part in str_value.split("_")
+                    if part
+                ]
+            )
             return title(str_value)
 
         if format_type == "snake":

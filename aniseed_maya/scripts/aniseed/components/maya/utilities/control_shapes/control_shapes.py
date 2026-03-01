@@ -33,6 +33,7 @@ class StoreControlShapes(aniseed.RigComponent):
             value=list(),
             hidden=True,
         )
+
         self.declare_option(
             name="_Clear Shapes",
             value=None,
@@ -93,7 +94,7 @@ class StoreControlShapes(aniseed.RigComponent):
 
     def on_build_finished(self, successful: bool) -> None:
 
-        if successful:
+        if successful and self.option("Store Data").get():
             self.option("Shape Data").set(
                 self.option("Transient Shape Data").get(),
             )
@@ -130,6 +131,16 @@ class ApplyControlShapes(aniseed.RigComponent):
             value=True,
         )
 
+        self.declare_option(
+            name="Skip Nodes",
+            value=list(),
+            hidden=False,
+        )
+
+    def option_widget(self, option_name):
+        if option_name == "Skip Nodes":
+            return aniseed.widgets.ObjectList()
+
     def run(self) -> bool:
 
         if not self.option("Apply Data").get():
@@ -148,6 +159,8 @@ class ApplyControlShapes(aniseed.RigComponent):
         if not stored_shape_data:
             return True
 
+        skip_nodes = self.option("Skip Nodes").get()
+
         for shape_data in stored_shape_data:
 
             node = shape_data["node"]
@@ -155,6 +168,9 @@ class ApplyControlShapes(aniseed.RigComponent):
             if not mc.objExists(node):
                 continue
 
+            if node in skip_nodes:
+                continue
+            
             connection_pairs = []
             for shape in mc.listRelatives(node, shapes=True) or list():
                 connection_data = mc.listConnections(
@@ -185,7 +201,6 @@ class ApplyControlShapes(aniseed.RigComponent):
                     try:
                         mc.connectAttr(driving_attribute, destination_attribute)
                     except:
-                        traceback.print_exc()
                         pass
 
 

@@ -21,8 +21,7 @@ class ApplyShapeColorPrompt(aniseed_toolkit.Tool):
             return
 
         for node in mc.ls(sl=True):
-            aniseed_toolkit.run(
-                "Apply Shape Color",
+            aniseed_toolkit.shapes.apply_color(
                 node=node,
                 r=user_provided_color[0],
                 g=user_provided_color[1],
@@ -61,26 +60,9 @@ class ApplyShapeColor(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        rgb = [r, g, b]
-        all_shapes = list()
-
-        if mc.nodeType(node) == "transform" or mc.nodeType(node) == "joint":
-            all_shapes.extend(
-                mc.listRelatives(
-                    node,
-                    shapes=True,
-                )
-            )
-
-        elif mc.nodeType(node) == "nurbsCurve":
-            all_shapes.append(node)
-
-        for shape in all_shapes:
-
-            mc.setAttr(f"{shape}.overrideEnabled", True)
-            mc.setAttr(f"{shape}.overrideRGBColors", True)
-            mc.setAttr(f"{shape}.useOutlinerColor", True)
-
-            for idx, channel in enumerate(["R", "G", "B"]):
-                mc.setAttr(f"{shape}.overrideColor{channel}", rgb[idx])# / 255.0)
-                mc.setAttr(f"{shape}.outlinerColor{channel}", rgb[idx])# / 255.0)
+        return aniseed_toolkit.shapes.apply_color(
+            node=node,
+            r=r,
+            g=g,
+            b=b,
+        )

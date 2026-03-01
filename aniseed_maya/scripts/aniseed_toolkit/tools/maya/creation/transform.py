@@ -1,12 +1,11 @@
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
 
 
 class BasicTransform(aniseed_toolkit.Tool):
 
     identifier = "Create Basic Transform"
-    classification = "Rigging"
+    classification = "Creation"
     user_facing = False
 
     def run(
@@ -14,7 +13,7 @@ class BasicTransform(aniseed_toolkit.Tool):
             classification: str,
             description: str,
             location: str,
-            config: aniseed.RigConfiguration,
+            config: "aniseed.RigConfiguration",
             parent=None,
             match_to=None,
     ) -> str:
@@ -34,40 +33,29 @@ class BasicTransform(aniseed_toolkit.Tool):
         Returns:
             The name of the created node
         """
-        # -- Create our component org to keep everything together
-        node = mc.rename(
-            mc.createNode("transform"),
-            config.generate_name(
-                classification=classification,
-                description=description,
-                location=location,
-            ),
+        return aniseed_toolkit.transforms.create(
+            classification=classification,
+            description=description,
+            location=location,
+            config=config,
+            parent=parent,
+            match_to=match_to,
         )
 
-        if parent:
-            mc.parent(
-                node,
-                parent,
-            )
 
-        if match_to:
-            if isinstance(match_to, str):
-                mc.xform(
-                    node,
-                    matrix=mc.xform(
-                        match_to,
-                        query=True,
-                        matrix=True,
-                        worldSpace=True,
-                    ),
-                    worldSpace=True,
-                )
+class CreateLocatorAtCenterTool(aniseed_toolkit.Tool):
 
-            elif isinstance(match_to, (list, tuple)):
-                mc.xform(
-                    node,
-                    matrix=match_to,
-                    worldSpace=True,
-                )
+    identifier = "Create Locator At Center"
+    classification = "Rigging"
+    categories = [
+        "Transforms",
+    ]
 
-        return node
+    def run(self) -> str:
+        """
+        Creates a locator at the center of the current selected components
+
+        Returns:
+            The name of the created locator
+        """
+        return aniseed_toolkit.transforms.create_locator_at_center()

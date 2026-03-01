@@ -83,6 +83,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 from .core import new
+from .core import new_forced_attribute
+from .core import get
 from .core import snap
 from .core import snappable
 from .core import groups
@@ -90,4 +92,4 @@ from .core import members
 
 from . app import launch
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"

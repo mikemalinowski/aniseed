@@ -1,9 +1,14 @@
 import os
 import typing
+
+from moverlay.mayaFeedbackDemo import description
+
 import aniseed
 import aniseed_toolkit
 
 import maya.cmds as mc
+
+from fbxtra.node import create
 
 
 class StickyPatchComponent(aniseed.RigComponent):
@@ -49,9 +54,9 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Descriptive Prefix",
-            value="md",
-            should_inherit=True,
+            value="Patch",
             group="Naming",
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -62,16 +67,39 @@ class StickyPatchComponent(aniseed.RigComponent):
             pre_expose=True,
         )
 
-        self.declare_output(
-            name="Pin",
+        self.declare_option(
+            name="Create Joint And Patch",
+            value=True,
+            group="Creation",
+            pre_expose=True,
         )
 
+        self.declare_output(
+            name="Control",
+        )
+
+    def on_enter_stack(self):
+        creation_option = self.option("Create Joint And Patch")
+
+        if creation_option.get():
+            self.user_func_create_skeleton(create_patch=True)
+
+        # -- Now we hide that option
+        creation_option.set_hidden(True)
+
     def user_functions(self) -> typing.Dict[str, callable]:
-        return {
-            "Create Patch Surface": self.create_patch,
-            "Match Patch Surface to Joint": self.match_patch_surface_to_joint,
-            "Skin Patch To Skeleton": self.skin_patch_to_skeleton,
-        }
+        menu = super(StickyPatchComponent, self).user_functions()
+
+        if not self.input("Joint To Drive").get():
+            menu["Create Joint"] = self.user_func_create_skeleton
+
+        if not self.input("Geometry Patch").get():
+            menu["Create Patch Surface"] = self.user_func_create_patch
+
+        menu["Match Patch Surface to Joint"] = self.user_func_match_patch_surface_to_joint
+        menu["Skin Patch To Skeleton"] = self.user_func_skin_patch_to_skeleton
+
+        return menu
 
     def run(self):
 
@@ -97,7 +125,7 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
         # -- Get the transform so we can properly bind
-        follicle_xfo = mc.listRelatives(follicle, p=True)[0]
+        follicle_xfo = mc.listRelatives(follicle, parent=True)[0]
         mc.setAttr(
             f"{follicle_xfo}.inheritsTransform",
             False,
@@ -105,7 +133,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         # -- Scale constraint the node so that any rig scaling still comes through
         mc.scaleConstraint(
-            mc.listRelatives(follicle_xfo, p=True)[0],
+            mc.listRelatives(follicle_xfo, parent=True)[0],
             follicle_xfo,
         )
 
@@ -124,7 +152,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
-        self.output("Pin").set(control)
+        self.output("Control").set(control.ctl)
 
     def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:
@@ -167,7 +195,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             f"{follicle}.inputWorldMatrix",
         )
 
-        follicle_parent = mc.listRelatives(follicle, p=True)[0]
+        follicle_parent = mc.listRelatives(follicle, parent=True)[0]
 
         mc.connectAttr(
             f"{follicle}.outTranslate",
@@ -191,23 +219,39 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         return follicle
 
-    def create_patch(self):
+    def user_func_create_skeleton(self, create_patch=False):
+        joint = aniseed_toolkit.joints.create(
+            description=self.option("Descriptive Prefix").get(),
+            location=self.option("Location").get(),
+            config=self.config,
+            parent=aniseed_toolkit.mutils.first_selected(),
+            match_to=aniseed_toolkit.mutils.first_selected(),
+        )
+        self.input("Joint To Drive").set(joint)
+
+        if create_patch:
+            self.user_func_create_patch(joint)
+
+        # -- Add our joints to a deformers set.
+        aniseed_toolkit.sets.add_to(joint, set_name="deformers")
+
+    def user_func_create_patch(self, joint_to_drive=None):
 
         xform, _ = mc.nurbsPlane(
-            p=[0, 0, 0],
-            ax=[0, 0, 1],
-            w=1,
-            lr=1,
-            d=3,
-            u=1,
-            v=1,
-            ch=1
+            pivot=(0, 0, 0),
+            axis=(0, 0, 1),
+            width=1,
+            lengthRatio=1,
+            degree=3,
+            patchesU=1,
+            patchesV=1,
+            constructionHistory=True,
         )
 
         # -- Clear all history
         mc.delete(xform, constructionHistory=True)
 
-        joint_to_drive = self.input("Joint To Drive").get()
+        joint_to_drive = joint_to_drive or self.input("Joint To Drive").get()
 
         if joint_to_drive:
             mc.xform(
@@ -225,7 +269,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             xform,
         )
 
-    def match_patch_surface_to_joint(self):
+    def user_func_match_patch_surface_to_joint(self):
 
         surface_node = self.input("Geometry Patch").get()
         surface_shape = mc.listRelatives(
@@ -242,7 +286,7 @@ class StickyPatchComponent(aniseed.RigComponent):
                 surface_shape,
                 source=True,
                 type="skinCluster",
-            ),
+            ) or [],
         )
 
         if has_skin:
@@ -260,7 +304,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             worldSpace=True,
         )
 
-    def skin_patch_to_skeleton(self):
+    def user_func_skin_patch_to_skeleton(self):
 
         joint = self.input("Joint To Drive").get()
         surface_node = self.input("Geometry Patch").get()
@@ -291,7 +335,7 @@ class StickyPatchComponent(aniseed.RigComponent):
                 joint,
                 allDescendents=True,
                 type="joint",
-            ),
+            ) or [],
         )
 
         joints_to_skin_to = [joint_root]

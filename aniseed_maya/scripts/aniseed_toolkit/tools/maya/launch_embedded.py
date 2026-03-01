@@ -84,5 +84,8 @@ class DockableAniseedToolkit(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
         import gc
 
         for obj in gc.get_objects():
-            if isinstance(obj, DockableAniseedToolkit):
-                return obj
+            try:
+                if isinstance(obj, DockableAniseedToolkit):
+                    return obj
+            except:
+                pass

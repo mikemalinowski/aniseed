@@ -1,4 +1,4 @@
-# Aniseed (Version 2.*)
+# Aniseed (Version 3.*)
 
 Aniseed is an application embedded (Maya) rigging tool. 
 
@@ -9,17 +9,52 @@ https://youtu.be/rNy7F64nDiw
 
 
 ## What is Aniseed
-Aniseed is a component based rigging framework which takes the form of an execution
-stack. Unlike many rigging framewhere where components are expected to be of a specific
-form (such as limbs etc), aniseed offers a more flexible approach. Each component in
-aniseed is a class which can expose inputs, options and outputs - nothing else is 
-mandated by the framework. Therefore a component could be an elaborate spline based
-spine or it could equally just reparenting something or editing pre-existing objects.
 
-It is this approach which allows Aniseed to be incredibly flexible and allow riggers to
-produce rebuildable and deterministic rigs with an incredible amount of flexibility. 
-There is no need for "post scripts" or "special processes" as everything is just a 
-component on the stack which gets executed in order. 
+Aniseed is a modular rigging tool which prioritises flexibility. There is no preconception
+as to what a module (component) should do, one module might be an incredibly complex
+tentacle whilst another component might simply apply colours to controls based on names.
+Essentially each module can declare inputs and options, and once build it can also
+share its outputs.
+
+## How is this different?
+
+There are many modular rigging tools available. Some of them are more bespoke to 
+characters - making assumptions about what makes up a rig. Others are flexible in that
+they do not make assumptions about the compnents but they do make assumptions about
+what structure a component takes. 
+
+In many of these cases we end up with lots of half managed post-scripts executing 
+after a rig build in order to tail inter-module connections or to fit the rigging 
+process within a pipeline. 
+
+I wanted a rigging framework which does not assume that a component will construct 
+objects, or that we explicitely want guides. I did not want a framework where I would 
+have to manage lots of bespoke post scripts to manage RBF data or the applying of 
+skinning etc. 
+
+Aniseed avoids this situation because we can simply write a component/module to store
+or apply skin data. If we have to manage RBF data we can do that with a module too. In 
+this approach everything becomes consistent and re-usable. There is no concept of a post
+script because everything is just a module in the execution stack.
+
+## What modules are there?
+
+Out the box Aniseed comes with a variety of modules suited for bipeds and quadrupeds as 
+well as some more generalised modules for FK setups. On top of that there are a series
+of utility style modules (showing/hiding elements or applying and colouring controls etc).
+
+## Does Aniseed use Guides?
+
+Many of the more complex components (spines, legs, arm etc) use guides to help place
+the joints that are created. However not all modules create guides, and having guides
+is not a mandatory feature of an aniseed component. Therefore if you dislike guides 
+and are willing to author your own components then you can have an enitrely joint driven
+workflow too. 
+
+Flexibility is the key here. The components that aniseed ships with typically utilise
+guides where it makes sense, but that is the choice of each component/module and not 
+something forced by the framework. 
+
 
 
 ## Aniseed Out the Box
@@ -30,25 +65,6 @@ approach and anything in between! However, all the components which come with An
 out the box take a joint first approach - though some do allow you to generate guides
 to help manipulate them.
 
-By default Aniseed comes with an ever growing selection of limbs which include:
-
-* Spline Spine (including FK Control)
-* Arm
-* Leg
-* Tri Leg
-* Head
-* Eyes
-* Mouth
-* Simple Fk
-
-But beyond limbs it also includes a variety of components focused on utility:
-
-* Space Switch
-* Store/Apply Poses (good for A/T Pose pipelines)
-* Store/Apply Control Shapes
-* Colouring Controls
-* Hide By Type
-* Parenting/Deletion etc
 
 # Aniseed's Expectations
 
@@ -259,40 +275,7 @@ are:
 
 This area of the documentation is still to be completed. But there are some video walkthrough guides:
 
-Part00 Installing Aniseed :
-https://youtu.be/hMnltJR2OWE
-
-Part01 The Principals Of Aniseed :
-https://youtu.be/krWXOA1ZJwA
-
-Part02 Creating An Iterative Execution Stack :
-https://youtu.be/xXWkc2qq0YU
-
-Part03 Working With Joints PartA :
-https://youtu.be/tdYFYp4Ynvo
-
-Part03 Working With Joints PartB :
-https://youtu.be/7ZX-4sF7-wk
-
-Part04 Creating A Biped :
-https://youtu.be/Id81lMvX_RI
-
-Part05 Modelling And Rigging Poses :
-https://youtu.be/lawT3pwYmHs
-
-Part06 Space Switches :
-https://youtu.be/Ms6fq9Sw11I
-
-Part07 Saving And Loading Rigs :
-https://youtu.be/hnETOU7BY9g
-
-Part08 Writing Your Own Components :
-https://youtu.be/QdxxNme4GhQ
-
-Other Videos:
-
-Using Attribute Linking : https://www.youtube.com/watch?v=Dq4BQHALcEk&feature=youtu.be
-
+ADD VIDEO LINK
 
 # Coding With Aniseed
 

@@ -70,7 +70,7 @@ class ComponentEditor(QtWidgets.QWidget):
         self.inputs_widget.set_component(component)
         self.outputs_widget.set_component(component)
 
-        self.component = weakref.ref(component)
+        self.component = weakref.ref(component) if component else None
 
     # ----------------------------------------------------------------------------------
     def redraw(self):
@@ -472,7 +472,7 @@ class OutputWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def copy_link(self):
-        QtWidgets.qApp().clipboard().setText(
+        qtility.app.get().clipboard().setText(
             self._output_attribute.address()
         )
 

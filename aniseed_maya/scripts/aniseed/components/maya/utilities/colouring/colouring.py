@@ -64,16 +64,20 @@ class ColorControls(aniseed.RigComponent):
             if not color:
                 color = self.option("Middle Color").get()
 
-            nodes_to_colour = [node]
-            nodes_to_colour.extend(shapes)
-
-            for shape in shapes:
-                mc.setAttr(f"{shape}.overrideEnabled", True)
-                mc.setAttr(f"{shape}.overrideRGBColors", True)
-                mc.setAttr(f"{shape}.useOutlinerColor", True)
-
-                for idx, channel in enumerate(["R", "G", "B"]):
-                    mc.setAttr(f"{shape}.overrideColor{channel}", color[idx] / 255.0)
-                    mc.setAttr(f"{shape}.outlinerColor{channel}", color[idx] / 255.0)
+            aniseed_toolkit.shapes.apply_color(
+                node,
+                *color
+            )
+            # nodes_to_colour = [node]
+            # nodes_to_colour.extend(shapes)
+            #
+            # for shape in shapes:
+            #     mc.setAttr(f"{shape}.overrideEnabled", True)
+            #     mc.setAttr(f"{shape}.overrideRGBColors", True)
+            #     mc.setAttr(f"{shape}.useOutlinerColor", True)
+            #
+            #     for idx, channel in enumerate(["R", "G", "B"]):
+            #         mc.setAttr(f"{shape}.overrideColor{channel}", color[idx] / 255.0)
+            #         mc.setAttr(f"{shape}.outlinerColor{channel}", color[idx] / 255.0)
 
         return True

@@ -29,7 +29,8 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
 
         self.app_config = app_config
         self.stack: "xstack.Stack" = stack
-
+        
+        self.factor = 1.0
         self.item_size = self.app_config.item_size
         self.border_pen = QtGui.QPen(QtGui.QColor(*self.app_config.border_color))
         self.text_pen = QtGui.QPen(QtGui.QColor(*self.app_config.default_text_color))
@@ -120,49 +121,45 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
         # -- Draw the main entry name
         painter.drawText(
             start_point,
-            option.rect.y() + 25,
+            option.rect.y() + (25 * self.factor),
             f"{component.label()}"
         )
-        start_point += QtGui.QFontMetrics(self.text_font).horizontalAdvance(component.label())
-
-        version_info = ""
-
-        if component.forced_version():
-            version_info = f" v{component.forced_version()}"
+        start_point += (QtGui.QFontMetrics(self.text_font).horizontalAdvance(component.label()) * self.factor)
 
         painter.setPen(self.descriptive_pen)
         painter.drawText(
-            start_point + self.bfr,
-            option.rect.y() + 25,
-            f"({component.identifier}{version_info})"
+            start_point + (self.bfr * self.factor),
+            option.rect.y() + (25 * self.factor),
+            f"({component.identifier})"
         )
     # ----------------------------------------------------------------------------------
     def paint_icon(self, component, painter, option, index):
         """
         Paints the icon
         """
+        size = self.item_size * self.factor
         # -- Build the pixmap
         if component.icon and os.path.exists(component.icon):
             pixmap = QtGui.QPixmap(component.icon).scaled(
-                self.item_size,
-                self.item_size,
+                size,
+                size,
                 mode=QtCore.Qt.SmoothTransformation,
             )
 
         else:
             pixmap = self.icon_pixmap.scaled(
-                self.item_size,
-                self.item_size,
+                size,
+                size,
                 mode=QtCore.Qt.SmoothTransformation,
             )
 
         # -- Draw the icon
         painter.drawPixmap(
             QtCore.QRect(
-                option.rect.x() + self.STATUS_WIDTH + self.bfr,
+                option.rect.x() + self.STATUS_WIDTH + (self.bfr * self.factor),
                 option.rect.y(),
-                self.item_size,
-                self.item_size,
+                size,
+                size,
             ),
             pixmap,
         )
@@ -234,7 +231,7 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
             label =  f"{self.app_config.label} : {self.stack.label}"
 
         painter.drawText(
-            option.rect.x() + self.item_size + self.bfr + self.STATUS_WIDTH,
+            option.rect.x() + (self.item_size ) + self.bfr + self.STATUS_WIDTH,
             option.rect.y() + 25,
             label
         )
@@ -269,14 +266,17 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
 
         if not index.column() == 0:
             return
+        display_data = index.data(role=QtCore.Qt.DisplayRole)
+        component = self.stack.get_component_by_uuid(display_data)
 
-        component_uuid = index.data(role=QtCore.Qt.DisplayRole)
-        component = self.stack.component(component_uuid)
-
-        if not component:
+        if not component or isinstance(component, str):
             self.paint_stack_node(painter, option, index)
             return
 
+        # -- Calculate the factor
+        base_height = 2160
+        # self.factor =  self.app_config.screen_size / base_height
+        # print("factor : %s" % self.factor)
         self.paint_highlight(component, painter, option, index)
 
         self.paint_status(component, painter, option, index)
@@ -290,4 +290,4 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
         painter.setPen(self.drag_target_pen)
     # ----------------------------------------------------------------------------------
     def sizeHint(self, option, index):
-        return QtCore.QSize(1, self.item_size)
+        return QtCore.QSize(1, self.item_size * self.factor)

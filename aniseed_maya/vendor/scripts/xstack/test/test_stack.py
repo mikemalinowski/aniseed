@@ -138,10 +138,9 @@ class TestUnitStack(unittest.TestCase):
             component_type="RunTestComponent",
         )
 
-        stack.set_build_position(
-            component_a,
+        component_a.set_parent(
             parent=None,
-            index=1
+            child_index=1
         )
 
         stack.build()
@@ -175,10 +174,7 @@ class TestUnitStack(unittest.TestCase):
             component_type="RunTestComponent",
         )
 
-        stack.set_build_position(
-            component_a,
-            parent=component_b,
-        )
+        component_a.set_parent(parent=component_b)
 
         stack.build()
 

@@ -40,6 +40,9 @@ class AppConfig(xstack.app.AppConfig):
     # -- rig and application specific layers
     stack_class = Rig
 
+    # -- Colouring
+    default_text_color = [255, 255, 255]
+
     # -- Always add our own components folder to the component paths
     component_paths = [
         os.path.join(
@@ -183,6 +186,24 @@ class AppWidget(xstack.app.AppWidget):
             stack=rig
         )
         self._host = rig_host
+
+        # -- Hook up signals and slots for implementation notifiers
+        self.stack.component_added.connect(self.notify_component_added)
+        self.stack.component_removed.connect(self.notify_component_removed)
+        self.stack.build_started.connect(self.notify_build_started)
+        self.stack.build_completed.connect(self.notify_build_finished)
+
+    def notify_component_added(self, *args, **kwargs):
+        pass
+
+    def notify_component_removed(self, *args, **kwargs):
+        pass
+
+    def notify_build_started(self, *args, **kwargs):
+        pass
+
+    def notify_build_finished(self, *args, **kwargs):
+        pass
 
 
 # --------------------------------------------------------------------------------------

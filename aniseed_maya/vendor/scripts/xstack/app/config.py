@@ -1,3 +1,4 @@
+from Qt import QtCore, QtWidgets, QtGui
 import scribble
 from . import resources
 
@@ -39,6 +40,12 @@ class AppConfig:
     splash_image = resources.get("icon.png")
     stack_background = resources.get("stack_background.png")
 
+    # -- Different screens have different sizes which affect how our
+    # -- delegates draw etc. This property is dynamic and changes whenever
+    # -- the window moves - allowing it to display nicely on monitors with
+    # -- varying screen sizes
+    screen_size = 1024
+
     # -- This is the base class of the stack. This is useful if you are inheriting
     # -- and subclassing from xstack.Stack and want to ensure that when the app
     # -- creates a new stack it creates your base class
@@ -49,7 +56,7 @@ class AppConfig:
 
     drop_target_width = 5
     drag_target_color = [255, 255, 255]
-    default_text_color = [255, 255, 255]
+    default_text_color = [0, 0, 0]
     border_color = [0, 0, 0]
 
     status_success_color = [0, 255, 0]
@@ -103,3 +110,5 @@ class AppConfig:
         settings = cls.default_settings()
         settings.update(scribble.get(cls.settings_id))
         return settings
+
+

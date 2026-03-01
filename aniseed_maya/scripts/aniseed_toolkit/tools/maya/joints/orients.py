@@ -21,53 +21,7 @@ class MoveRotationsToOrients(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if isinstance(joints, str):
-            joints = [joints]
-
-        if not joints:
-            joints = mc.ls(sl=True)
-
-        if not joints:
-            return
-
-        for joint in joints:
-            # -- Store the world space matrix
-            ws_mat4 = mc.xform(
-                joint,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            )
-
-            # -- Zero the joint orients
-            for attr in ['jointOrientX', 'jointOrientY', 'jointOrientZ']:
-                mc.setAttr(
-                    f"{joint}.{attr}",
-                    0,
-                )
-
-            # -- Now we can restore the matrix
-            mc.xform(
-                joint,
-                matrix=ws_mat4,
-                worldSpace=True,
-            )
-
-            # -- Now we can shift the values from the rotation to the orient
-            # -- knowing that the world transform will be retained
-            for axis in ['X', 'Y', 'Z']:
-
-                mc.setAttr(
-                    f"{joint}.jointOrient{axis}",
-                    mc.getAttr(f"{joint}.rotate{axis}"),
-                )
-
-                mc.setAttr(
-                    f"{joint}.rotate{axis}",
-                    0,
-                )
-
-        return None
+        return aniseed_toolkit.joints.move_rotations_to_orients(joints)
 
 
 class MoveJointOrientsToRotation(aniseed_toolkit.Tool):
@@ -89,36 +43,4 @@ class MoveJointOrientsToRotation(aniseed_toolkit.Tool):
         Returns:
             None
         """
-
-        if isinstance(joints, str):
-            joints = [joints]
-
-        if not joints:
-            joints = mc.ls(sl=True)
-
-        if not joints:
-            return
-
-        for joint in joints:
-            # -- Store the world space matrix
-            ws_mat4 = mc.xform(
-                joint,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            )
-
-            # -- Zero the joint orients
-            for attr in ['jointOrientX', 'jointOrientY', 'jointOrientZ']:
-                mc.setAttr(
-                    f"{joint}.{attr}",
-                    0,
-                )
-
-            # -- Now we can restore the matrix
-            mc.xform(
-                joint,
-                matrix=ws_mat4,
-                worldSpace=True,
-            )
-
+        return aniseed_toolkit.joints.move_orients_to_rotation(joints)

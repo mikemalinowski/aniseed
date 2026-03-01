@@ -24,9 +24,6 @@ class Component:
     provide a unique identifier. Components are stored in a class factory thus the
     identifier is used to differentiate the different components.
 
-    Equally, if you have the same identifier in the components locations multiple
-    times the one with the highest version number will be utilised.
-
     Key things you should re-implement when subclassing a component:
 
     All the functions you may re-implement are at the top of this class. Please
@@ -35,11 +32,6 @@ class Component:
 
     # -- Please provide a unique identifier
     identifier = ""
-
-    # -- Versions allow for the same item to be in the libary multiple
-    # -- times, with the highest version always being the one which is
-    # -- returned. This is useful if you want to override a component
-    version = 1
 
     # -- This should resolve to an absolute path to a png file. If none is provide
     # -- then a default icon will be given.
@@ -112,6 +104,13 @@ class Component:
         return None
 
     # ----------------------------------------------------------------------------------
+    def on_add_to_stack(self):
+        """
+        Triggered when the component is first added to the stack
+        """
+        return None
+
+    # ----------------------------------------------------------------------------------
     def on_enter_stack(self):
         """
         This allows you to run any code when this is added to the stack
@@ -179,14 +178,52 @@ class Component:
         self._options: typing.List[Option] = list()
         self._outputs: typing.List[Output] = list()
         self._status: str = "not executed"
-        self._forced_version = None
         self._enabled = True
+
+        # -- Hierarchy attributes
+        self.parent = None
+        self.children = []
 
         # -- Declare our signals so that other mechanisms can tie into the events
         # -- of our component
         self.build_started = signalling.Signal()
         self.build_complete = signalling.Signal()
         self.changed = signalling.Signal()
+
+    def set_parent(self, parent=None, child_index=None):
+
+        # -- Ensure we're removed as a root component
+        if self in self.stack.root_components:
+            self.stack.root_components.remove(self)
+
+        # -- Remove ourself from our current parent if we have
+        # -- one
+        if self.parent:
+            self.parent.children.remove(self)
+
+        self.parent = parent
+        # -- If we're given a component to be a child of, then
+        # -- we perform our reparenting otherwise we add ourselves
+        # -- as a root component
+        if isinstance(parent, Component):
+            # -- Add ourself as a child of the component
+            if child_index is not None:
+                parent.children.insert(child_index, self)
+            else:
+                parent.children.append(self)
+        else:
+            if child_index is not None:
+                print("here")
+                self.stack.root_components.insert(child_index, self)
+                print(self.stack.root_components)
+            else:
+                self.stack.root_components.append(self)
+
+    def child_index(self):
+        if self.parent:
+            return self.parent.children.index(self)
+        else:
+            return self.stack.root_components.index(self)
 
     # ----------------------------------------------------------------------------------
     def wrapped_run(self) -> bool:
@@ -389,7 +426,7 @@ class Component:
         option.value_changed.connect(self.changed.emit)
 
     # ----------------------------------------------------------------------------------
-    def declare_output(self, name: str, description: str = "", group=None):
+    def declare_output(self, name: str, description: str = "", group=None, is_default=False):
         """
         An output is a guaranteed value that a component will fill in during its
         run, and can be looked up by other components.
@@ -401,6 +438,7 @@ class Component:
             name=name,
             description=description,
             component=self,
+            is_default=is_default,
         )
         self._outputs.append(output)
 
@@ -469,7 +507,7 @@ class Component:
         """
         This will print a nicely formatted output description of the component
         """
-        print(f"Component Type : {self.identifier} (Version : {self.version})")
+        print(f"Component Type : {self.identifier}")
         print(f"    Identifier : {self.uuid()}")
         print(f"    Options    :")
 
@@ -519,20 +557,28 @@ class Component:
         This will serialise down the complete state of the component into a dictionary
         format that is json serialisable
         """
+        option_data = dict()
+        input_data = dict()
+
+        for option in self.options():
+            serialised_data = option.serialise()
+            option_data[serialised_data["name"]] = serialised_data["value"]
+
+        for input_ in self.inputs():
+            serialised_data = input_.serialise()
+            input_data[serialised_data["name"]] = serialised_data["value"]
+
         return dict(
             component_type=self.identifier,
-            inputs=[
-                input_.serialise()
-                for input_ in self.inputs()
-            ],
-            options=[
-                option.serialise()
-                for option in self.options()
-            ],
+            inputs=input_data,
+            options=option_data,
             label=self.label(),
             uuid=self.uuid(),
             enabled=self.is_enabled(),
-            forced_version=self.forced_version(),
+            children=[
+                child.serialise()
+                for child in self.children
+            ],
         )
 
     # ----------------------------------------------------------------------------------
@@ -582,33 +628,38 @@ class Component:
         self.changed.emit()
 
     # ----------------------------------------------------------------------------------
-    def parent(self):
-        """
-        This will return the parent component of this component
-        Returns:
-
-        """
-        return self.stack.get_parent(self)
-
-    # ----------------------------------------------------------------------------------
-    def duplicate(self):
+    def duplicate(self, input_overrides=None, option_overrides=None):
         """
         This will create a duplicate of this component in the stack. It will not
         duplicate its children.
         """
+        # -- Instance the new component
         new_component = self.stack.add_component(
             component_type=self.identifier,
             label=self.label(),
+            supress_events=True,
         )
 
+        # -- Copy all the data
         new_component.copy(self)
 
-        self.stack.set_build_position(
-            new_component,
-            parent=self.parent()
+        # -- Apply any overrides
+        for name, value in (input_overrides or dict()).items():
+            new_component.input(name).set(value)
+        for name, value in (option_overrides or dict()).items():
+            new_component.option(name).set(value)
+
+        # -- Set the parenting of the component
+        new_component.set_parent(
+            parent=self.parent,
         )
 
-        new_component.changed.emit()
+        # -- Trigger its events
+        new_component.on_enter_stack()
+
+        self.stack.component_added.emit(new_component)
+
+        return new_component
 
     # ----------------------------------------------------------------------------------
     def copy(self, other_component):
@@ -640,31 +691,6 @@ class Component:
 
         self.set_label(copy.deepcopy(other_component.label()))
         self.set_enabled(copy.deepcopy(other_component.is_enabled()))
-
-    # ----------------------------------------------------------------------------------
-    def set_forced_version(self, version: int or None):
-        """
-        This allows you to specify that this component should always use a very
-        specific version.
-
-        Setting the version to None will ensure it always uses the latest available
-        version.
-
-        Args:
-            version: The value of the version that should be used. Setting this to None
-                will ensure it always uses the latest available version.
-
-        """
-        self._forced_version = version
-
-    # ----------------------------------------------------------------------------------
-    def forced_version(self):
-        """
-        This will return the version of the component that is expected to be used.
-
-        If no version is defined, then None will be returned.
-        """
-        return self._forced_version
 
     # ----------------------------------------------------------------------------------
     def documentation(self):

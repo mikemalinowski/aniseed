@@ -25,14 +25,4 @@ class SelectShapes(aniseed_toolkit.Tool):
             List of absolute paths to the json shape files
         """
         nodes = nodes or mc.ls(sl=True)
-        shapes = []
-
-        for node in nodes:
-            shapes.extend(
-                mc.listRelatives(
-                    node,
-                    shapes=True,
-                ) or list()
-            )
-
-        mc.select(shapes)
+        return aniseed_toolkit.shapes.select_shapes(nodes)

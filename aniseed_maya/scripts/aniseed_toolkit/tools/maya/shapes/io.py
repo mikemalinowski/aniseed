@@ -113,38 +113,7 @@ class ReadShapeFromNode(aniseed_toolkit.Tool):
         Returns:
             dictionary
         """
-        if mc.nodeType(node) == "transform" or mc.nodeType(node) == "joint":
-            shapes = mc.listRelatives(node, type="nurbsCurve")
-
-        else:
-            shapes = [node]
-        if not shapes:
-            print("no shapes found")
-            return {}
-
-        # -- Define out output data. Right now we"re only storing
-        # -- cv"s, but we wrap it in a dict so we can expand it
-        # -- later without compatibility issues.
-        data = dict(
-            node=node,
-            curves=list(),
-        )
-
-        # -- Cycle the shapes and store thm
-        for shape in shapes:
-            pointer = aniseed_toolkit.run("Get MObject", shape)
-            nurbs_fn = om.MFnNurbsCurve(pointer)
-
-            node_data = dict(
-                form=mc.getAttr(f"{shape}.form"),
-                degree=mc.getAttr(f"{shape}.degree"),
-                knots=[n for n in nurbs_fn.knots()],
-                cvs=[list(p)[:3] for p in nurbs_fn.cvPositions(om.MSpace.kObject)],
-            )
-
-            data["curves"].append(node_data)
-
-        return data
+        return aniseed_toolkit.shapes.shape_to_dict(node)
 
 
 class ReadShapeFromFile(aniseed_toolkit.Tool):
@@ -169,18 +138,7 @@ class ReadShapeFromFile(aniseed_toolkit.Tool):
         Returns:
             dict
         """
-        if not shape_file.endswith(".json"):
-            shape_file = shape_file + ".json"
-
-        if not os.path.exists(shape_file):
-            shape_file = aniseed_toolkit.resources.get("shapes/" + shape_file)
-
-        if not os.path.exists(shape_file):
-            print("could not find shape : %s" % shape_file)
-            return None
-
-        with open (shape_file, "r") as f:
-            return json.load(f)
+        return aniseed_toolkit.shapes.shape_data_from_file(shape_file)
 
 
 class SaveShape(aniseed_toolkit.Tool):
@@ -202,7 +160,7 @@ class SaveShape(aniseed_toolkit.Tool):
         Returns:
             Dict of the data stored in the filepath
         """
-        node = node or mc.ls(sl=True)[0]
+        node = node or mc.ls(selection=True)[0]
 
         if not filepath:
             filepath = qtility.request.filepath(
@@ -215,20 +173,7 @@ class SaveShape(aniseed_toolkit.Tool):
         if not filepath:
             return dict()
 
-        data = aniseed_toolkit.run("Read Shape From Node", node)
-
-        if not data:
-            return {}
-
-        with open(filepath, "w") as f:
-            json.dump(
-                data,
-                f,
-                indent=4,
-                sort_keys=True,
-            )
-
-        return data
+        return aniseed_toolkit.shapes.save_to_file(node, filepath)
 
 
 class ApplyShape(aniseed_toolkit.Tool):
@@ -276,56 +221,13 @@ class ApplyShape(aniseed_toolkit.Tool):
                 editable=False,
             )
 
-        if isinstance(data, str):
-            data = aniseed_toolkit.run("Read Shape From File", data)
-
-        if not data:
-            print("Could not find shape : %s" % data)
-            return []
-
-        if clear:
-            for curve in mc.listRelatives(node, type="nurbsCurve") or list():
-                mc.delete(curve)
-
-        # -- Define a list which we will collate all the shapes
-        # -- in
-        shape_list = list()
-
-        # -- Cycle over each curve element in the data
-        for curve_data in data["curves"]:
-            # -- Create a curve with the given cv"s
-            transform = mc.curve(
-                p=[
-                    p
-                    for p in curve_data["cvs"]
-                ],
-                d=curve_data["degree"],
-                k=curve_data["knots"],
-            )
-
-            # -- Parent the shape under the node
-            curve = mc.listRelatives(transform, type="nurbsCurve")[0]
-
-            aniseed_toolkit.run("Scale Shapes", curve, scale_by)
-
-            mc.parent(
-                curve,
-                node,
-                shape=True,
-                r=True,
-            )
-
-            # -- Delete the transform
-            mc.delete(transform)
-
-            shape_list.append(curve)
-
-        if color:
-            aniseed_toolkit.run("Apply Shape Color", node, *color)
-
-        mc.select(node)
-
-        return shape_list
+        return aniseed_toolkit.shapes.load_shape(
+            node=node,
+            data=data,
+            clear=clear,
+            color=color,
+            scale_by=scale_by,
+        )
 
 
 class SaveAllRigControlShapesToFile(aniseed_toolkit.Tool):

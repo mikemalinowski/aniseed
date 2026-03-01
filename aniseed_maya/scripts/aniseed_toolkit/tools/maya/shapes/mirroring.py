@@ -40,32 +40,7 @@ class MirrorShape(aniseed_toolkit.Tool):
         if not nodes:
             nodes = mc.ls(sl=True)
 
-        if isinstance(nodes, str):
-            nodes = [nodes]
-
-        if not axis:
-            axis = qtility.request.item(
-                items=AXIS,
-                title="Select Mirror Axis",
-                message="Select Mirror Axis.",
-            )
-
-        if not axis:
-            return
-
-        for node in nodes:
-            curves = mc.listRelatives(node, type="nurbsCurve")
-
-            if not curves:
-                return
-
-            scale = _get_mirror_array(axis)
-
-            for curve in curves:
-                mc.xform(
-                    f"{curve}.cv[:]",
-                    scale=scale,
-                )
+        return aniseed_toolkit.shapes.mirror(nodes, axis)
 
 
 class AutoMirrorShapes(aniseed_toolkit.Tool):
@@ -112,8 +87,8 @@ class MirrorAcross(aniseed_toolkit.Tool):
         to_node across the specified axis.
 
         Args:
-            from_node: What node should be the mirror from
-            to_node: What node should be the mirror to
+            from_nodes: What node should be the mirror from
+            to_nodes: What node should be the mirror to
             axis: What axis should be mirrored (x, y, z)
 
         Returns:
@@ -129,6 +104,7 @@ class MirrorAcross(aniseed_toolkit.Tool):
 
         if not to_nodes:
             to_nodes = []
+
         if not axis:
             axis = qtility.request.item(
                 items=AXIS,
@@ -164,63 +140,8 @@ class MirrorAcross(aniseed_toolkit.Tool):
         if not to_nodes:
             return
 
-        for idx, from_node in enumerate(from_nodes):
-
-            to_node = to_nodes[idx]
-            if not mc.objExists(to_node):
-                print("Could not find node with name : %s" % to_node)
-                continue
-
-
-            scale = _get_mirror_array(axis)
-
-            # -- Read the shape data from the current side
-            shape_data = aniseed_toolkit.run("Read Shape From Node", from_node)
-
-            # -- Clear the shapes on the other side
-            shapes_to_remove = mc.listRelatives(
-                to_node,
-                shapes=True,
-            ) or list()
-
-            for shape in shapes_to_remove:
-                mc.delete(shape)
-
-            # -- Apply the shapes to that side
-            aniseed_toolkit.run("Apply Shape", node=to_node, data=shape_data)
-
-            source_shapes = mc.listRelatives(from_node, shapes=True) or list()
-            target_shapes = mc.listRelatives(to_node, shapes=True) or list()
-
-            for shape_idx in range(len(source_shapes)):
-
-                source_shape = source_shapes[shape_idx]
-                target_shape = target_shapes[shape_idx]
-
-                source_dag = aniseed_toolkit.run("Get DagPath", source_shape)
-                target_dag = aniseed_toolkit.run("Get DagPath", target_shape)
-
-                source_nurbs_fn = om.MFnNurbsCurve(source_dag)
-                target_nurbs_fn = om.MFnNurbsCurve(target_dag)
-
-                for cv_idx in range(source_nurbs_fn.numCVs):
-
-                    source_worldspace_cv = source_nurbs_fn.cvPosition(cv_idx, om.MSpace.kWorld)
-
-                    worldspace_vector = om.MVector(source_worldspace_cv)
-
-                    worldspace_vector.x = worldspace_vector.x * scale[0]
-                    worldspace_vector.y = worldspace_vector.y * scale[1]
-                    worldspace_vector.z = worldspace_vector.z * scale[2]
-
-                    target_nurbs_fn.setCVPosition(
-                        cv_idx,
-                        om.MPoint(
-                            worldspace_vector.x,
-                            worldspace_vector.y,
-                            worldspace_vector.z,
-                        ),
-                        space=om.MSpace.kWorld,
-                    )
-
-                target_nurbs_fn.updateCurve()
+        return aniseed_toolkit.shapes.mirror_across(
+            from_nodes=from_nodes,
+            to_nodes=to_nodes,
+            axis=axis,
+        )

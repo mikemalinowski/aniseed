@@ -2,8 +2,7 @@ import os
 import typing
 import aniseed
 import aniseed_toolkit
-
-import maya.cmds as mc
+from maya import cmds
 
 
 class EyesComponent(aniseed.RigComponent):
@@ -86,7 +85,7 @@ class EyesComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Forward Axis",
-            value="X",
+            value="Z",
             group="Behaviour",
         )
 
@@ -134,6 +133,9 @@ class EyesComponent(aniseed.RigComponent):
             name="Central Aim Control",
         )
 
+    def on_enter_stack(self):
+        self.user_func_create_skeleton()
+
     def input_widget(self, requirement_name: str):
 
         object_attributes = [
@@ -147,9 +149,13 @@ class EyesComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def user_functions(self) -> typing.Dict[str, callable]:
-        return {
-            "Create Joints": self.create_joints,
-        }
+        menu = super(EyesComponent, self).user_functions()
+
+        if not self.input("Left Eye Joint").get():
+            menu["Create Joints"] = self.user_func_create_skeleton
+            return menu
+
+        return menu
 
     def run(self):
 
@@ -161,18 +167,15 @@ class EyesComponent(aniseed.RigComponent):
         lf_eye_component.run()
         rt_eye_component.run()
 
-        left_aim_control = aniseed_toolkit.run(
-            "Get Control",
+        left_aim_control =aniseed_toolkit.control.get(
             lf_eye_component.output("Aim Control").get(),
         )
-        right_aim_control = aniseed_toolkit.run(
-            "Get Control",
+        right_aim_control = aniseed_toolkit.control.get(
             rt_eye_component.output("Aim Control").get(),
         )
 
         # -- Create the control to act as the master aim
-        master_aim_control = aniseed_toolkit.run(
-            "Create Control",
+        master_aim_control = aniseed_toolkit.control.create(
             description=f"{self.option('Name').get()}AimMaster",
             location=self.config.middle,
             config=self.config,
@@ -181,36 +184,36 @@ class EyesComponent(aniseed.RigComponent):
             match_to=lf_eye_component.output("Aim Control").get(),
         )
 
-        ws_left = mc.xform(
+        ws_left = cmds.xform(
             left_aim_control.ctl,
             translation=True,
             query=True,
             worldSpace=True,
         )
 
-        ws_right = mc.xform(
+        ws_right = cmds.xform(
             right_aim_control.ctl,
             translation=True,
             query=True,
             worldSpace=True,
         )
 
-        mc.xform(
+        cmds.xform(
             master_aim_control.org,
-            translation=[
+            translation=(
                 (ws_left[0] + ws_right[0]) * 0.5,
                 (ws_left[1] + ws_right[1]) * 0.5,
                 (ws_left[2] + ws_right[2]) * 0.5,
-            ],
+            ),
             worldSpace=True,
         )
 
-        mc.parent(
+        cmds.parent(
             left_aim_control.org,
             master_aim_control.ctl,
         )
 
-        mc.parent(
+        cmds.parent(
             right_aim_control.org,
             master_aim_control.ctl,
         )
@@ -284,9 +287,9 @@ class EyesComponent(aniseed.RigComponent):
 
         return components
 
-    def create_joints(self):
+    def user_func_create_skeleton(self):
 
-        parent = mc.ls(sl=True)[0]
+        parent = cmds.ls(selection=True)[0]
         multipliers = [1, -1]
 
         # -- Work out the horizontal axis
@@ -307,22 +310,12 @@ class EyesComponent(aniseed.RigComponent):
         for idx, component in enumerate(components):
 
             label = labels[idx]
-            mc.select(clear=True)
+            cmds.select(clear=True)
 
-            root_joint = component.create_joints()
-
-            mc.xform(
-                root_joint,
-                translation=[
-                    axis_values[0] * multipliers[idx],
-                    axis_values[1] * multipliers[idx],
-                    axis_values[2] * multipliers[idx],
-                ]
-            )
-            # mc.setAttr(
-            #     f"{root_joint}.translate{cross_axis.upper()}",
-            #     (self.option("Aim Distance").get() * 0.2) * multipliers[idx],
-            # )
+            root_joint = component.user_func_create_skeleton()
+            
+            aniseed_toolkit.transformation.snap_position(root_joint, parent)
+            cmds.setAttr(f"{root_joint}.translate{cross_axis}", axis_values[0] * multipliers[idx])
 
             # -- Now set the side specific requirements
             self.input(f"{label} Eye Joint").set(
@@ -349,7 +342,7 @@ class EyesComponent(aniseed.RigComponent):
                 component.input("Upper Eye Lid Joint").get(),
             )
 
-            mc.parent(root_joint, parent)
+            cmds.parent(root_joint, parent)
 
 
 class EyeComponent(aniseed.RigComponent):
@@ -451,6 +444,9 @@ class EyeComponent(aniseed.RigComponent):
             name="Aim Control",
         )
 
+    def on_enter_stack(self):
+        self.user_func_create_skeleton()
+
     def input_widget(self, requirement_name: str):
 
         object_requirements = [
@@ -472,72 +468,42 @@ class EyeComponent(aniseed.RigComponent):
             return aniseed.widgets.AxisSelector()
 
     def user_functions(self) -> typing.Dict[str, callable]:
-        return {
-            "Create Joints": self.create_joints,
-        }
+        menu = super(EyeComponent, self).user_functions()
 
-    def create_joints(self):
+        if not self.input("Eye Joint").get():
+            menu["Create Joints"] = self.user_func_create_skeleton
+            return menu
 
-        try:
-            parent = mc.ls(sl=True)[0]
+    def user_func_create_skeleton(self):
 
-        except IndexError:
-            parent = None
+        # -- Determine the parent for the joints
+        parent = aniseed_toolkit.mutils.first_selected()
 
-        mc.select(clear=True)
-
-        eye_joint = mc.rename(
-            mc.joint(),
-            self.config.generate_name(
-                classification=self.config.joint,
-                description=self.option("Name").get(),
-                location=self.option("Location").get(),
-            ),
+        # -- Start by creating the eye
+        eye_joint = aniseed_toolkit.joints.create(
+            description=self.option("Name").get(),
+            location=self.option("Location").get(),
+            parent=parent,
+            config=self.config,
         )
-
         self.input("Eye Joint").set(eye_joint)
 
+        # -- Now create the eyelids
         for label in ["Lower", "Upper"]:
-            mc.select(eye_joint)
 
-            lid_joint = mc.rename(
-                mc.joint(),
-                self.config.generate_name(
-                    classification=self.config.joint,
-                    description=self.option("Name").get() + f"{label}Lid",
-                    location=self.option("Location").get(),
-                ),
+            lid_joint = aniseed_toolkit.joints.create(
+                description=self.option("Name").get() + f"{label}Lid",
+                location=self.option("Location").get(),
+                parent=eye_joint,
+                config=self.config,
             )
-
             self.input(f"{label} Eye Lid Joint").set(lid_joint)
 
         if parent:
-            mc.parent(
-                eye_joint,
-                parent,
-            )
-            mc.xform(
-                eye_joint,
-                matrix=mc.xform(
-                    parent,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-                worldSpace=True,
-            )
-        else:
-            mc.parent(
-                eye_joint,
-                world=True,
-            )
+            aniseed_toolkit.transformation.snap_position(eye_joint, parent)
 
-
-        mc.xform(
-            eye_joint,
-            rotation=[0, -90, 0],
-            worldSpace=True,
-        )
+        # -- Add our joints to a deformers set.
+        aniseed_toolkit.sets.add_to(eye_joint, set_name="deformers")
 
         return eye_joint
 
@@ -556,23 +522,16 @@ class EyeComponent(aniseed.RigComponent):
         align_to_world = self.option("Align Controls To World").get()
 
         # -- Create a node to place everything under
-        component_org = mc.rename(
-            mc.createNode("transform"),
-            self.config.generate_name(
-                classification=self.config.organisational,
-                description=description + "Component",
-                location=location,
-            ),
-        )
-
-        mc.parent(
-            component_org,
-            parent,
+        component_org = aniseed_toolkit.transforms.create(
+            classification=self.config.organisational,
+            description=description + "Component",
+            location=location,
+            parent=parent,
+            config=self.config,
         )
 
         # -- Create our eye control
-        direct_eye_control = aniseed_toolkit.run(
-            "Create Control",
+        direct_eye_control = aniseed_toolkit.control.create(
             description=description,
             location=location,
             parent=component_org,
@@ -582,8 +541,7 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         # -- Create our aim control and move it to the right place
-        aim_control = aniseed_toolkit.run(
-            "Create Control",
+        aim_control = aniseed_toolkit.control.create(
             description=f"{description}Aim",
             location=location,
             parent=direct_eye_control.ctl,
@@ -591,89 +549,63 @@ class EyeComponent(aniseed.RigComponent):
             shape="core_sphere",
             config=self.config,
         )
-
         self.output("Eye Control").set(direct_eye_control.ctl)
         self.output("Aim Control").set(aim_control.ctl)
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{aim_control.org}.translate{forward_axis}",
             aim_distance,
         )
 
         # -- Parent the aim to be a child of the component org
-        mc.parent(
+        cmds.parent(
             aim_control.org,
             component_org,
         )
 
         # -- Align the controls if we need to
         if align_to_world:
-
-            mc.xform(
+            cmds.xform(
                 direct_eye_control.org,
-                rotation=[0, 0, 0],
+                rotation=(0, 0, 0),
                 worldSpace=True,
             )
 
-            mc.xform(
+            cmds.xform(
                 aim_control.org,
-                rotation=[0, 0, 0],
+                rotation=(0, 0, 0),
                 worldSpace=True,
             )
 
         # -- Create the upvector
-        upvector = mc.rename(
-            mc.createNode("transform"),
-            self.config.generate_name(
-                classification="upv",
-                description=description + "AimStabilizer",
-                location=location,
-            ),
+        upvector = aniseed_toolkit.transforms.create(
+            classification="upv",
+            description=description + "AimStabilizer",
+            location=location,
+            config=self.config,
+            match_to=direct_eye_control.ctl,
+            parent=direct_eye_control.ctl,
         )
-
-        mc.xform(
-            upvector,
-            matrix=mc.xform(direct_eye_control.ctl, q=True, ws=True, m=True),
-            worldSpace=True,
-        )
-
-        mc.parent(
-            upvector,
-            direct_eye_control.ctl,
-        )
-
-        mc.setAttr(
+        cmds.setAttr(
             f"{upvector}.translate{up_axis}",
             10,
         )
-
-        mc.parent(
+        cmds.parent(
             upvector,
             component_org,
         )
 
         # -- Create the aim setup
-        aim_node = mc.rename(
-            mc.createNode("transform"),
-            self.config.generate_name(
-                classification="aim",
-                description=description,
-                location=location,
-            ),
+        aim_node = aniseed_toolkit.transforms.create(
+            classification="aim",
+            description=description,
+            location=location,
+            config=self.config,
+            parent=component_org,
+            match_to=direct_eye_control.ctl,
         )
 
-        mc.parent(
-            aim_node,
-            component_org,
-        )
-
-        mc.xform(
-            aim_node,
-            matrix=mc.xform(direct_eye_control.ctl, q=True, ws=True, m=True),
-            worldSpace=True,
-        )
-
-        aim_cns = mc.aimConstraint(
+        aim_cns = cmds.aimConstraint(
             aim_control.ctl,
             aim_node,
             worldUpType="object",
@@ -684,13 +616,13 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         # -- Constrain the joint
-        mc.parentConstraint(
+        cmds.parentConstraint(
             aim_node,
             direct_eye_control.org,
             maintainOffset=True,
         )
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             direct_eye_control.ctl,
             eye_joint,
             maintainOffset=True,
@@ -721,60 +653,59 @@ class EyeComponent(aniseed.RigComponent):
         all_axis.remove(up_axis)
         cross_axis = all_axis[0]
 
-
-        aniseed_toolkit.run("Add Separator Attribute", eye_control)
-        aniseed_toolkit.run("Add Separator Attribute", aim_control)
+        aniseed_toolkit.attributes.add_separator(eye_control)
+        aniseed_toolkit.attributes.add_separator(aim_control)
 
         # -- Add the attribute we will use to blend the behaviour out
-        mc.addAttr(
+        cmds.addAttr(
             eye_control,
             shortName="autoEyelids",
-            at="float",
-            dv=1,
-            k=True,
+            attributeType="float",
+            defaultValue=1,
+            keyable=True,
         )
-        aniseed_toolkit.run("Add Separator Attribute", eye_control)
+        aniseed_toolkit.attributes.add_separator(eye_control)
 
-        mc.addAttr(
+        cmds.addAttr(
             eye_control,
             shortName="upperLidFollow",
-            at="float",
-            dv=self.option("Default Upper Lid Follow").get(),
-            k=True,
+            attributeType="float",
+            defaultValue=self.option("Default Upper Lid Follow").get(),
+            keyable=True,
         )
-        mc.addAttr(
+        cmds.addAttr(
             aim_control,
             shortName="upperLidFollow",
             proxy=f"{eye_control}.upperLidFollow",
-            k=True,
+            keyable=True,
         )
 
-        mc.addAttr(
+        cmds.addAttr(
             eye_control,
             shortName="lowerLidFollow",
-            at="float",
-            dv=self.option("Default Lower Lid Follow").get(),
-            k=True,
+            attributeType="float",
+            defaultValue=self.option("Default Lower Lid Follow").get(),
+            keyable=True,
         )
-        mc.addAttr(
+        cmds.addAttr(
             aim_control,
             shortName="lowerLidFollow",
             proxy=f"{eye_control}.lowerLidFollow",
-            k=True,
+            keyable=True,
         )
 
-        mc.addAttr(
+        cmds.addAttr(
             eye_control,
             shortName="horizontalLidFollow",
-            at="float",
-            dv=self.option("Default Horizontal Follow").get(),
-            k=True,
+            attributeType="float",
+            defaultValue=self.option("Default Horizontal Follow").get(),
+            keyable=True,
         )
-        mc.addAttr(
+        cmds.addAttr(
             aim_control,
             shortName="horizontalLidFollow",
             proxy=f"{eye_control}.horizontalLidFollow",
-            k=True,
+            keyable=True,
         )
 
         labels = ["Lower", "Upper"]
@@ -795,130 +726,104 @@ class EyeComponent(aniseed.RigComponent):
             label = labels[idx]
             inversion = inversions[idx]
 
-            lid_driver_parent = mc.rename(
-                mc.createNode("transform"),
-                self.config.generate_name(
-                    classification="zro",
-                    description=f"{description}{label}LidDriver",
-                    location=location,
-                ),
+            lid_driver_parent = aniseed_toolkit.transforms.create(
+                classification="zro",
+                description=f"{description}{label}LidDriver",
+                location=location,
+                parent=component_org,
+                config=self.config,
+                match_to=eye_joint,
             )
 
-            lid_driver = mc.rename(
-                mc.createNode("transform"),
-                self.config.generate_name(
-                    classification="mech",
-                    description=f"{description}{label}LidDriver",
-                    location=location,
-                ),
+            lid_driver = aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=f"{description}{label}LidDriver",
+                location=location,
+                config=self.config,
+                parent=lid_driver_parent,
+                match_to=eye_joint,
             )
 
-            lid_tracker = mc.rename(
-                mc.createNode("transform"),
-                self.config.generate_name(
-                    classification="mech",
-                    description=f"{description}{label}LidTracker",
-                    location=location,
-                ),
+            lid_tracker = aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=f"{description}{label}LidTracker",
+                location=location,
+                config=self.config,
+                parent=lid_driver_parent,
+                match_to=eye_joint,
             )
 
-            mc.parent(
-                lid_driver_parent,
-                component_org,
-            )
-
-            mc.parent(
-                lid_driver,
-                lid_driver_parent,
-            )
-
-            mc.parent(
-                lid_tracker,
-                lid_driver_parent,
-            )
-            mc.xform(
-                lid_driver_parent,
-                matrix=mc.xform(
-                    eye_joint,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-                worldSpace=True,
-            )
-
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 eye_control,
                 lid_tracker,
                 maintainOffset=True,
             )
 
-            horizontal_multiplier = mc.createNode("floatMath")
-            vertical_multiplier = mc.createNode("floatMath")
-            blend_multiplier = mc.createNode("multiplyDivide")
+            horizontal_multiplier = cmds.createNode("floatMath")
+            vertical_multiplier = cmds.createNode("floatMath")
+            blend_multiplier = cmds.createNode("multiplyDivide")
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{horizontal_multiplier}.operation",
                 2,  # -- Multiply
             )
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{vertical_multiplier}.operation",
                 2,  # -- Multiply
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{lid_tracker}.rotate{up_axis}", # cross_axis
                 f"{horizontal_multiplier}.floatA",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{lid_tracker}.rotate{cross_axis}", # up_axis
                 f"{vertical_multiplier}.floatA",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 horizontal_mutlipliers[label],
                 f"{horizontal_multiplier}.floatB",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 vertical_mutlipliers[label],
                 f"{vertical_multiplier}.floatB",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{horizontal_multiplier}.outFloat",
                 f"{blend_multiplier}.input1X",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{vertical_multiplier}.outFloat",
                 f"{blend_multiplier}.input1Y",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{eye_control}.autoEyelids",
                 f"{blend_multiplier}.input2X",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{eye_control}.autoEyelids",
                 f"{blend_multiplier}.input2Y",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{blend_multiplier}.outputX",
                 f"{lid_driver}.rotate{up_axis}", # cross_axis
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{blend_multiplier}.outputY",
                 f"{lid_driver}.rotate{cross_axis}", # up_axis
             )
 
-            lid_control = aniseed_toolkit.run(
-                "Create Control",
+            lid_control = aniseed_toolkit.control.create(
                 description=f"{label}EyeLid",
                 location=location,
                 parent=lid_driver,
@@ -933,8 +838,7 @@ class EyeComponent(aniseed.RigComponent):
                 cross_axis.lower(): 0.5,
             }
 
-            aniseed_toolkit.run(
-                "Scale Shapes",
+            aniseed_toolkit.shapes.scale(
                 lid_control.ctl,
                 scale_by=1,
                 **kwargs
@@ -946,13 +850,12 @@ class EyeComponent(aniseed.RigComponent):
                 cross_axis.lower(): 0.0,
             }
 
-            aniseed_toolkit.run(
-                "Offset Shapes",
+            aniseed_toolkit.shapes.offset(
                 lid_control.ctl,
                 offset_by=1,
                 **kwargs
             )
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 lid_control.ctl, # lid_driver,
                 self.input(f"{label} Eye Lid Joint").get(),
                 maintainOffset=True,

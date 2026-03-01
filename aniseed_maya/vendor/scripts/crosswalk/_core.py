@@ -50,11 +50,9 @@ def resident_apps():
 def get_usable_app():
 
     for app_dir in resident_apps():
-        print("testing : %s" % app_dir)
         registration_file = get_registration_file(app_dir)
 
         if not os.path.exists(registration_file):
-            print("no reg file")
             continue
 
         try:
@@ -68,7 +66,6 @@ def get_usable_app():
             module_ = _import_from_filepath(f"crosswalk_{app_dir}", registration_file.replace("register.py", "__init__.py"))
 
             if module_:
-                print("got module : %s" % module_name)
                 return module_name
 
         except ImportError:

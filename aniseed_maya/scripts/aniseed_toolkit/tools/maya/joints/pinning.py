@@ -23,108 +23,7 @@ class CreatePinsTool(aniseed_toolkit.Tool):
         Returns:
             List of created pins.
         """
-        if not joints:
-            joints = mc.ls(sl=True)
-
-        pins = []
-
-        for joint in joints:
-
-            if mc.nodeType(joint) != "joint":
-                continue
-
-            pin_node = mc.rename(
-                mc.createNode("transform"),
-                f"PIN_{joint}",
-            )
-
-            mc.addAttr(
-                pin_node,
-                shortName="is_pin",
-                at="bool",
-                dv=True,
-            )
-
-            mc.addAttr(
-                pin_node,
-                shortName="pin_link",
-                at="message",
-            )
-
-            pin_offset = mc.rename(
-                mc.createNode("transform"),
-                f"PINOFFSET_{joint}",
-            )
-
-            mc.parent(
-                pin_offset,
-                pin_node,
-            )
-
-            aniseed_toolkit.run(
-                "Apply Shape",
-                pin_node,
-                "core_pin",
-            )
-
-            aniseed_toolkit.run(
-                "Scale Shapes",
-                pin_node,
-                mc.getAttr(f"{joint}.radius") * 8,
-            )
-
-            aniseed_toolkit.run(
-                "Apply Shape",
-                pin_offset,
-                "core_sphere",
-            )
-
-            aniseed_toolkit.run(
-                "Scale Shapes",
-                pin_offset,
-                mc.getAttr(f"{joint}.radius") * 3,
-            )
-
-            for node in [pin_node, pin_offset]:
-                aniseed_toolkit.run("Apply Shape Color", node, r=1, g=0, b=0)
-
-            mc.xform(
-                pin_node,
-                matrix=mc.xform(
-                    joint,
-                    query=True,
-                    worldSpace=True,
-                    matrix=True,
-                ),
-                worldSpace=True,
-            )
-
-            mc.connectAttr(
-                f"{joint}.message",
-                f"{pin_node}.pin_link",
-            )
-
-            mc.parentConstraint(
-                pin_offset,
-                joint,
-                maintainOffset=False,
-            )
-
-            mc.scaleConstraint(
-                pin_offset,
-                joint,
-                maintainOffset=False,
-            )
-
-            mc.setAttr(
-                f"{joint}.displayLocalAxis",
-                True,
-            )
-
-            mc.select(pin_node)
-            pins.append(pin_node)
-
-        return pins
+        return aniseed_toolkit.pinning.pin(joints or mc.ls(selection=True))
 
 
 class GetJointFromPinTool(aniseed_toolkit.Tool):
@@ -146,17 +45,7 @@ class GetJointFromPinTool(aniseed_toolkit.Tool):
         Returns:
             The joint being pinned (or None if no joint was found)
         """
-        if mc.nodeType(item) == "joint":
-            return item
-
-        if item.startswith("PINOFFSET_"):
-            item = mc.listRelatives(item, parent=True)[0]
-
-        for potential_result in mc.listConnections(f"{item}.pin_link") or list():
-            if mc.nodeType(potential_result) == "joint":
-                return potential_result
-
-        return None
+        return aniseed_toolkit.pinning.get_pinned_nodes(item or mc.ls(selection=True)[0])
 
 
 class GetPinFromNode(aniseed_toolkit.Tool):
@@ -179,19 +68,7 @@ class GetPinFromNode(aniseed_toolkit.Tool):
         Returns:
             The pin control
         """
-
-        if item.startswith("PIN_"):
-            return item
-
-        if mc.nodeType(item) == "joint":
-            for item in mc.listConnections(f"{item}.message") or list():
-                if item.startswith("PIN_"):
-                    return item
-
-        if item.startswith("PINOFFSET_"):
-            return mc.listRelatives(item, parent=True)[0]
-
-        return None
+        return aniseed_toolkit.pinning.get_pin(item or mc.ls(selection=True)[0])
 
 
 class IsPinnedTool(aniseed_toolkit.Tool):
@@ -213,14 +90,7 @@ class IsPinnedTool(aniseed_toolkit.Tool):
         Returns:
             True if the joint is pinned
         """
-        if not joint:
-            joint = mc.ls(sl=True)[0]
-
-        for item in mc.listConnections(f"{joint}.message") or list():
-            if item.startswith("PIN_"):
-                return True
-
-        return False
+        return aniseed_toolkit.pinning.is_pinned(joint or mc.ls(selection=True)[0])
 
 
 class RemovePinTool(aniseed_toolkit.Tool):
@@ -242,31 +112,7 @@ class RemovePinTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if not items:
-            items = mc.ls(sl=True)
-
-        for pin_or_joint in items:
-
-            joint = aniseed_toolkit.run("Get Joint From Pin", pin_or_joint)
-            pin = aniseed_toolkit.run("Get Pin From Node",pin_or_joint)
-
-            pre_xform = mc.xform(
-                joint,
-                matrix=True,
-                query=True,
-            )
-
-            mc.setAttr(
-                f"{joint}.displayLocalAxis",
-                False,
-            )
-
-            mc.delete(pin)
-
-            mc.xform(
-                joint,
-                matrix=pre_xform,
-            )
+        return aniseed_toolkit.pinning.remove_pins(items or mc.ls(selection=True))
 
 
 class RemoveAllPinsTool(aniseed_toolkit.Tool):
@@ -281,8 +127,7 @@ class RemoveAllPinsTool(aniseed_toolkit.Tool):
         """
         This will remove all pins in the entire scene
         """
-        for pin in mc.ls("*.pin_link", r=True, o=True):
-            aniseed_toolkit.run("Remove Pins", [pin])
+        return aniseed_toolkit.pinning.remove_all_pins()
 
 
 class PinHierarchy(aniseed_toolkit.Tool):
@@ -304,20 +149,4 @@ class PinHierarchy(aniseed_toolkit.Tool):
         Returns:
             List of created pin controls
         """
-        if not root:
-            root = mc.ls(sl=True)[0]
-
-        if not root:
-            return []
-
-        nodes = [root]
-
-        nodes.extend(
-            mc.listRelatives(
-                root,
-                allDescendents=True,
-                type="joint",
-            ),
-        )
-
-        return aniseed_toolkit.run("Create Pins", nodes)
+        return aniseed_toolkit.pinning.pin_hierarchy(root or mc.ls(selection=True)[0])

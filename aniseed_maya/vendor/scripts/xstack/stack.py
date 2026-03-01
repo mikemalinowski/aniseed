@@ -1,5 +1,4 @@
 import os
-import copy
 import json
 import typing
 import functools
@@ -8,6 +7,7 @@ import factories
 import signalling
 
 from . import constants
+from . import compat
 from . import address
 from .constants import Status
 from .component import Component
@@ -68,285 +68,66 @@ class Stack:
         # -- This is where our components should be sourced from
         self.component_paths: typing.List = component_paths or list()
 
-        # -- These are where we store a mapping of uuid's to compnents. The build
-        # -- order is then a list, where each element is a dict containing the uuid
-        # -- and a list of children
-        self._components = dict()
-        self._build_order = list()
+        # -- Components is a dictionary where the key is a uuid and the
+        # -- value is a component instance
+
+        # -- The build hierarchy is a nested dictionary of uuid's
+        self.root_components = list()
 
         # -- Declare our signals. These are useful for other classes
         # -- to bind into
         self.component_added = signalling.Signal()
         self.component_removed = signalling.Signal()
-        self.build_order_changed = signalling.Signal()
+        self.hierarchy_changed = signalling.Signal()
         self.changed = signalling.Signal()
 
         self.build_started = signalling.Signal()
         self.build_progressed = signalling.Signal()
         self.build_completed = signalling.Signal()
 
-    def component_data(self):
+    @functools.cached_property
+    def component_library(self) -> factories.Factory:
         """
-        Returns the raw component data
-        """
-        return self._components
+        This will return a factory class giving access to all the available components.
 
-    # ----------------------------------------------------------------------------------
-    def serialise(self) -> typing.Dict:
+        Note that it is a cached property, as we do not want to re-instance the factory
+        each time it is called.
         """
-        This will serialise the stack down to a json format from which it can later
-        be deserialised.
 
-        :return: dict
-        """
-        data = dict(
-            label=self.label,
-            components=dict(),
-            build_order=self._build_order,
+        # -- Get a copy of our component path list
+        paths = self.component_paths[:]
+
+        # -- Add in any paths given to us by our environment
+        paths.extend(
+            os.environ.get(constants.COMPONENT_PATHS_ENVVAR, "").split(",")
         )
 
-        for uuid, component in self._components.items():
-            data["components"][component.uuid()] = component.serialise()
-            build_order_entry = self._get_build_order_dict(component.uuid())
-            build_order_entry["label"] = component.label()
+        # -- Remove any null entries
+        paths = [
+            p
+            for p in paths
+            if p
+        ]
 
-        return data
-
-    # ----------------------------------------------------------------------------------
-    def validate_stack_data(self, data: typing.Dict):
-        """
-        This will check that all component types in the given dict data are valid
-        and return a list of any invalid components
-        """
-    # ----------------------------------------------------------------------------------
-    def deserialize(self, data: typing.Dict):
-        """
-        This will take in a dictionary (of the format provided by the serialise
-        method. The class will then be populated by all the data in that dictionary.
-
-        Args:
-            data: The dictionary of data to read the component list from
-
-        :return:
-        """
-        self.label = data.get("label", "stack")
-
-        # -- Add in the components
-        for uuid, component_data in data.get("components", dict()).items():
-
-            # -- Pull out the inputs and option data so we can format it in
-            # -- a way we can pass through
-            inputs = dict()
-            options = dict()
-
-            # -- We have switched from "requirements" to inputs. We will always save
-            # -- new data from now on using inputs, but this fallback is to allow
-            # -- us to read older data too.
-            for input_data in component_data.get("inputs", component_data.get("requirements")):
-                inputs[input_data["name"]] = input_data["value"]
-
-            for option_data in component_data["options"]:
-                options[option_data["name"]] = option_data["value"]
-
-            # -- Ad the component. Note that we specifically set the _serialise to
-            # -- False during this call, because we do not want to change the serialised
-            # -- data whilst initialising.
-            new_component = self.add_component(
-                component_data["component_type"],
-                component_data["label"],
-                inputs=inputs,
-                options=options,
-                force_uuid=uuid,
-                forced_version=component_data.get("forced_version", None),
-                _serialise=False,
-            )
-
-            if not component_data.get("enabled", True):
-                new_component.set_enabled(False)
-
-        # -- Pull out any stored build order data
-        self._build_order = copy.deepcopy(data.get("build_order", list()))
-
-
-    # ----------------------------------------------------------------------------------
-    # noinspection PyBroadException
-    def build(
-            self,
-            build_up_to: str = None,
-            build_only: str = None,
-            build_below: str = None,
-            validate_only: bool = False
-    ) -> bool:
-        """
-        This is the main function for building/executing the stack. You can choose to build
-        up to a certain point in the build hierarchy or choose to build only a
-        specific component.
-
-        If neither are specified then all components will be built within the defined
-        build order.
-        """
-
-        if isinstance(build_up_to, Component):
-            build_up_to = build_up_to.uuid()
-
-        if isinstance(build_below, Component):
-            build_below = build_below.uuid()
-
-        if build_only:
-
-            if not isinstance(build_only, list):
-                build_only = [build_only]
-
-            for idx, item in enumerate(build_only):
-                if isinstance(item, Component):
-                    build_only[idx] = item.uuid()
-
-        self.build_started.emit()
-
-        # -- Before doing any thing, ensure we have set every component
-        # -- to not executed.
-        for component in self.components():
-            component.set_status(
-                Status.NotExecuted,
-            )
-
-        # -- Our build order is fundamentally hierarchical. However, we can process
-        # -- that down to a flat execution list.
-        build_order = self._flattened_build_order(
-            build_up_to,
-            build_only,
-            build_below,
+        # -- Instance the factory
+        lib = factories.Factory(
+            abstract=self.component_base_class,
+            paths=paths,
+            plugin_identifier="identifier",
         )
 
-        # -- Lets be positive and assume everything is ok until we're told
-        # -- otherwise.
-        invalid_result = False
+        return lib
 
-        # -- Cycle the build order. Notice that we're not given the component
-        # -- themselves but the uuid to retrieve the component. Note that we
-        # -- are not building at this point, we are doing a full pass over all the
-        # -- components and checking they are valid.
-        # -- If there are invalid components, we still continue, but we log the
-        # -- fact and set the status.
-        for uuid_ in build_order:
-
-            # -- Get the component via the uuid
-            component_instance: Component = self._components.get(uuid_)
-
-            # -- We're executing third party code at this point, so we cannot
-            # -- gaurantee the quality of execution. Therefore we wrap it in
-            # -- a try, to ensure a failure in the third party code does not
-            # -- cause a failure at the stackx level
-            try:
-
-                print("-" * 100)
-                print(f"About to Validate : {component_instance.label()} ")
-
-                if not component_instance.is_valid():
-                    component_instance.set_status(
-                        Status.Invalid,
-                    )
-
-                    print(f"    {component_instance.label()} FAILED its is_valid test")
-                    invalid_result = True
-
-                for input_ in component_instance.inputs():
-                    if input_.requires_validation() and not input_.validate():
-                        print(f"    {input_.name()} for {component_instance.label()} is not set")
-                        invalid_result = True
-
-                        component_instance.set_status(
-                            Status.Invalid,
-                        )
-
-            except:
-                print(f"{component_instance.label()} failed during validation check")
-                print(traceback.print_exc())
-                component_instance.set_status(
-                    Status.Failed,
-                )
-                invalid_result = True
-
-        if invalid_result:
-            print("Validation failed - please see output for details")
-            print("-" * 100)
-            return False
-
-        # -- If we only wanted to perform validation, we can exit at this point
-        if validate_only:
-            return not invalid_result
-
-        # -- Run the pre-build events
-        self.run_events(build_order, "on_build_started")
-
-        # -- We now re-cycle over the build order but this time we will trigger the build
-        uuid_count = len(build_order)
-        for idx, uuid_ in enumerate(build_order):
-
-            # -- Emit a progression signal
-            percentage = (float(idx) / uuid_count) * 100
-            self.build_progressed.emit(percentage)
-
-            # -- Get the component for the given uuid
-            component_instance = self._components.get(uuid_)
-
-            if not component_instance:
-                print(f"Could not find component with id : {uuid_}")
-                self.run_events(build_order, "on_build_finished", False)
-                return False
-
-            # -- Just as during the validation, we're executing third party code, so
-            # -- we wrap this process in a broad exception
-            # noinspection PyBroadException
-            try:
-                print("-" * 100)
-                print(f"About to Build : {component_instance.label()} ")
-                component_instance.describe()
-                result = component_instance.wrapped_run()
-                component_instance.describe_outputs()
-                print(f"Component Build Status : {component_instance.status()}")
-
-            except:
-
-                print("Build failed. Please see the script editor for a traceback.")
-                print(traceback.print_exc())
-                self.run_events(build_order, "on_build_finished", False)
-                return False
-
-            if not result:
-                self.run_events(build_order, "on_build_finished", False)
-                return False
-
-        # -- Emit our completion
-        self.run_events(build_order, "on_build_finished", True)
-        print("Build Succeeded.")
-        self.build_progressed.emit(100)
-        self.build_completed.emit()
-
-        return True
-
-    def run_events(self, build_order, event_name, *args, **kwargs):
-        for uuid_ in build_order:
-            # -- Get the component via the uuid
-            component_instance: Component = self._components.get(uuid_)
-            try:
-                func_ = getattr(component_instance, event_name)
-                func_(*args, **kwargs)
-
-            except:
-                print(f"{component_instance.label()} failed during its pre build")
-                print(traceback.print_exc())
-
-    # ----------------------------------------------------------------------------------
     def add_component(
             self,
             component_type: str,
             label: str,
             inputs: typing.Dict = None,
             options: typing.Dict = None,
-            forced_version: int or None = None,
             parent: Component = None,
+            child_index=None,
             force_uuid: str = None,
+            supress_events: bool = False,
             _serialise: bool = True,
 
     ) -> Component or None:
@@ -365,7 +146,6 @@ class Stack:
         of initialisation rather than one being generated. This is typically only used
         when loading from pre-defined data.
         """
-
         # -- Check we can access this component type
         if component_type not in self.component_library.identifiers():
             print(f"{component_type} is not recognised")
@@ -377,7 +157,6 @@ class Stack:
         try:
             component_instance: Component = self.component_library.request(
                 component_type,
-                version=forced_version,
             )(
                 label=label,
                 stack=self,
@@ -388,9 +167,6 @@ class Stack:
             print(f"Failed to initialise component:  {component_type}")
             print(traceback.print_exc())
             return None
-
-        if forced_version:
-            component_instance.set_forced_version(forced_version)
 
         # -- If we're given a parent, inherit any attributes that are flagged
         # -- as expecting inheritence
@@ -428,22 +204,12 @@ class Stack:
                 )
 
         # -- Whenever we have value changes, ensure we save the result
-        component_instance.changed.connect(self.serialise)
-
-        # -- Store the component
-        self._components[component_instance.uuid()] = component_instance
-
-        # -- Set the build position as per the parent. Note that if the parent
-        # -- is None, then this component will just be added to the end of the build
-        # -- list
-        self.set_build_position(
-            component_instance,
-            parent,
-            _serialise=False,
-        )
+        component_instance.changed.connect(self.changed.emit)
+        component_instance.set_parent(parent, child_index=child_index)
 
         # -- Call the enter stack feature
-        component_instance.on_enter_stack()
+        if not supress_events:
+            component_instance.on_enter_stack()
 
         # -- Emit the fact that we have added the component and the
         # -- state has changed
@@ -452,295 +218,98 @@ class Stack:
 
         return component_instance
 
-    def set_parent(self, component, parent):
-        pass
-
-    def add_child(self, parent, child):
-        pass
-
-    # ----------------------------------------------------------------------------------
-    def get_parent(self, component):
-
-        def recursive_inner_(current_uuid, search_for_uuid, sub_data):
-            for item in sub_data:
-                if item["uuid"] == search_for_uuid:
-                    return current_uuid
-
-                result = recursive_inner_(item["uuid"], search_for_uuid,
-                                          item["children"])
-
-                if result:
-                    return result
-
-        parent_uuid = recursive_inner_(None, component.uuid(), self.build_order())
-
-        if parent_uuid:
-            return self.component(parent_uuid)
-
-    # ----------------------------------------------------------------------------------
-    def get_children(self, component):
-
-        def recursive_inner_(current_uuid, search_for_uuid, sub_data):
-            for item in sub_data:
-                if item["uuid"] == search_for_uuid:
-                    return [
-                        self.component(c["uuid"])
-                        for c in item["children"]
-                    ]
-
-                result = recursive_inner_(
-                    item["uuid"],
-                    search_for_uuid,
-                    item["children"]
-                )
-
-                if result:
-                    return result
-
-        return recursive_inner_(None, component.uuid(), self.build_order())
-
-    # ----------------------------------------------------------------------------------
-    def get_index(self, component):
-
-        def recursive_inner_(current_uuid, search_for_uuid, sub_data):
-            for idx, item in enumerate(sub_data):
-                if item["uuid"] == search_for_uuid:
-                    return idx
-
-                result = recursive_inner_(
-                    item["uuid"],
-                    search_for_uuid,
-                    item["children"],
-                )
-
-                if result is not None:
-                    return result
-
-        return recursive_inner_(
-            None,
-            component.uuid(),
-            self.build_order(),
-        )
-
-    # ----------------------------------------------------------------------------------
-    def switch_component_version(self, component, version):
-        """
-        Instances a new component of the desired version in place of the
-        previous one.
-        """
-        inputs = dict()
-        options = dict()
-
-
-        for input_ in component.inputs():
-            inputs[input_.name()] = input_.get()
-
-        for option in component.options():
-            options[option.name()] = option.get()
-
-        parent = self.get_parent(component)
-        placement_index = self.get_index(component)
-        children = self.get_children(component)
-
-        # -- Start by moving the children to the root so they do not
-        # -- get removed with the component
-        for child in children or list():
-            self.set_build_position(
-                child,
-                parent=None,
-            )
-
-        self.remove_component(component)
-
-        new_component = self.add_component(
-            component_type=component.identifier,
-            label=component.label(),
-            inputs=inputs,
-            options=options,
-            forced_version=version,
-            force_uuid=component.uuid(),
-        )
-
-        self.set_build_position(
-            new_component,
-            parent=parent,
-            index=placement_index,
-        )
-
-        for child in children or list():
-            self.set_build_position(
-                child,
-                parent=new_component,
-            )
-        return None
-
-    # ----------------------------------------------------------------------------------
-    def set_build_position(
-            self,
-            component: Component,
-            parent: Component = None,
-            index: int = None,
-            _serialise: bool = True
-    ):
-        """
-        This sets where in the stack this component should be placed. You should specify
-        a parent (if none is given then it will go to the end of the list).
-
-        If an index is given then it will be added at that point in the parents child
-        list.
-        """
-
-        # -- Start by removing the component from the build order
-        removed_component_data = self._remove_from_build_order(
-            component.uuid(),
-        )
-
-        # -- If we could not remove it, then the component must not be
-        # -- added yet, so lets create a data set to add it
-        if not removed_component_data:
-            removed_component_data = {
-                "uuid": component.uuid(),
-                "label": component.label(),
-                "type": component.identifier,
-                "children": [],
-            }
-
-        # -- Get the uuid of the parent if we were given one
-        parent_uuid = parent.uuid() if parent else None
-
-        # -- Inset the build order data into our build order
-        # -- variable
-        self._insert_build_order_data(
-            removed_component_data,
-            parent_uuid,
-            index,
-        )
-
-        # -- Emit the fact that the builder order has changed
-        self.build_order_changed.emit()
-        self.changed.emit()
-
-    # ----------------------------------------------------------------------------------
     def remove_component(self, component: Component) -> bool:
         """
         This will remove the given component from the stack and the build order.
         """
-        # -- We're removing the component from the dictionary, but we're
-        # -- also executing third-party code, so we wrap this process in
-        # -- a broad exception
-        try:
-            uuid_ = component.uuid()
-
-            if uuid_ in self._components:
-                del self._components[uuid_]
-
-            self._remove_from_build_order(
-                uuid_,
-            )
-
-            # -- Ensure we clear any connection signals
-            component.changed.disconnect()
-
-        except (KeyError, Exception):
-            print(f"Could not remove {component}")
-            print(traceback.print_exc())
-            return False
+        # -- To remove we simply need to remove it from our hierarchy at
+        # -- which point it will be garbage collected as soon as there
+        # -- are no references.
+        component.set_parent(None)
+        self.root_components.remove(component)
 
         # -- Call the removed feature
-        component.on_removed_from_stack()
+        try:
+            component.on_removed_from_stack()
+        except:
+            traceback.print_exc()
 
         self.component_removed.emit()
         self.changed.emit()
 
         return True
 
-    # ----------------------------------------------------------------------------------
-    def build_order(self) -> typing.List:
+    def serialise(self) -> typing.Dict:
         """
-        Returns the build order dictionary
+        This will serialise the stack down to a json format from which it can later
+        be deserialised.
+
+        :return: dict
         """
-        return self._build_order
-
-    # ----------------------------------------------------------------------------------
-    def component(self, uuid_: str) -> Component or None:
-        """
-        This will return the component within the rig with the given uuid
-        """
-        return self._components.get(uuid_, None)
-
-    # ----------------------------------------------------------------------------------
-    def components(self, of_type=None) -> typing.List[Component]:
-        """
-        THis will return a list of all the components in the rig
-        """
-        results = list()
-
-        for component in self._components.values():
-            if of_type and component.identifier != of_type:
-                continue
-
-            results.append(component)
-
-        return results
-
-    # ----------------------------------------------------------------------------------
-    def clear_components(self):
-        self._components = dict()
-        self._build_order = list()
-
-        self.changed.emit()
-
-    # ----------------------------------------------------------------------------------
-    def lookup_attribute(self, attribute_address):
-        return address.get_attribute(
-            attribute_address,
-            stack=self,
+        return dict(
+            label=self.label,
+            tree=[
+                root.serialise()
+                for root in self.root_components
+            ],
+            format="galaxy"
         )
 
-    # ----------------------------------------------------------------------------------
-    @classmethod
-    def load(cls, data: str or typing.Dict,
-             component_paths: typing.List or None = None):
+    def deserialize(self, data: typing.Dict):
         """
-        Given a filepath or a dictionary of data, this will populate the stack
-        based on that data. Note that if its a filepath that is given the contents
-        of that filepath are expected to be a dictionary of a structure that conforms
-        to the serialise method.
+        This will take in a dictionary (of the format provided by the serialise
+        method. The class will then be populated by all the data in that dictionary.
 
         Args:
-            data: This may be a dictionary or a json file
+            data: The dictionary of data to read the component list from
 
         :return:
         """
-        if isinstance(data, str):
-            if not data or not os.path.exists(data):
-                print("%s does not exist" % data)
-                return
+        # -- Ensure any legacy data format is converted
+        # -- to the latest data format
+        data = compat.to_latest(data)
+        self.label = data.get("label", "stack")
 
-            with open(data, "r") as f:
-                data = json.load(f)
+        for root_data in data.get("tree", []):
+            root_component = self.add_component(
+                root_data["component_type"],
+                root_data["label"],
+                inputs=root_data["inputs"],
+                options=root_data["options"],
+                force_uuid=root_data["uuid"],
+                parent=None,
+                supress_events=True,
+                _serialise=False,
+            )
+            if not root_data.get("enabled", True):
+                root_component.set_enabled(False)
+            self._add_child_components(parent=root_component, child_list=root_data["children"])
 
-        stack = cls(
-            label=data["label"],
-            component_paths=component_paths or list(),
-        )
+    def _add_child_components(self, parent, child_list):
+        for child_data in child_list:
+            created_component = self.add_component(
+                child_data["component_type"],
+                child_data["label"],
+                inputs=child_data["inputs"],
+                options=child_data["options"],
+                force_uuid=child_data["uuid"],
+                supress_events=True,
+                _serialise=False,
+                parent=parent,
+            )
+            # -- If the component was marked as disabled, then we disable it
+            # -- now
+            if not child_data.get("enabled", True):
+                created_component.set_enabled(False)
 
-        # -- Clear the stack before we deserialise
-        stack.clear_components()
+            # -- Create any children
+            self._add_child_components(created_component, child_data["children"])
 
-        # -- Now we have the data in the right format, we can deserialise
-        # -- from it
-        stack.deserialize(data)
-
-        return stack
-
-    # ----------------------------------------------------------------------------------
-    def save(self, filepath: str, additional_data: typing.Dict or None = None):
+    def save(self, filepath, additional_data=None):
         """
-        This will serialise the stack to a dictionary, including any additional data
-        you may want to stored with it, and then saved to the given filepath
+        Saves the serialised data to a filepath, including any additional
+        data.
         """
-
         if not filepath:
             print("No filepath given to save to")
             return
@@ -757,174 +326,294 @@ class Stack:
                 indent=4,
             )
 
-    # ----------------------------------------------------------------------------------
-    def _remove_from_build_order(self, uuid_: str) -> typing.Dict:
+    def clear(self):
         """
-        This will traverse all the build order data and remove the entry with the
-        given uuid.
-
-        It will return the removed data.
+        Removes all reference to all components and clears out
         """
+        self.root_components = []
+        self.changed.emit()
 
-        def recursive_inner_(identifier, sub_data):
-            for item in sub_data:
-                if item["uuid"] == identifier:
-                    sub_data.remove(item)
-                    return item
+    @classmethod
+    def open(cls, data: str or typing.Dict, component_paths: typing.List or None = None):
 
-                result = recursive_inner_(identifier, item["children"])
+        if isinstance(data, str):
+            if not data or not os.path.exists(data):
+                print("%s does not exist" % data)
+                return
 
-                if result:
-                    return result
+            with open(data, "r") as f:
+                data = json.load(f)
 
-        removed_data = recursive_inner_(uuid_, self.build_order())
+        stack = cls(
+            label=data["label"],
+            component_paths=component_paths or list(),
+        )
 
-        return removed_data
+        # -- Clear the stack before we deserialise
+        stack.clear()
 
-    # ----------------------------------------------------------------------------------
-    def _get_build_order_dict(
+        # -- Now we have the data in the right format, we can deserialise
+        # -- from it
+        stack.deserialize(data)
+
+        return stack
+
+    def components(self, from_component=None):
+        """
+        Returns a list of all components used in the active stack. This is always
+        returned in build order.
+        """
+        # -- Declare our list of components
+        all_components = []
+
+        # -- This function will cycle children (in order) and add those too
+        def process_children(sub_component):
+            for child in sub_component.children:
+                all_components.append(child)
+                process_children(child)
+
+        start_points = [from_component] if from_component else self.root_components
+        for component in start_points:
+            all_components.append(component)
+            process_children(component)
+
+        return all_components
+
+    def get_component_by_uuid(self, uuid_: str) -> Component or None:
+        """
+        This will cycle the hierarchy and search it for a component
+        with the given uuid.
+        """
+        for component in self.components():
+            if component.uuid() == uuid_:
+                return component
+
+        return None
+
+    def get_component_by_label(self, label, of_type=None) -> Component or None:
+        """
+        This will cycle the hierarchy and search it for a component
+        with the given uuid.
+        """
+        for component in self.components():
+
+            # -- If we're specifically looking for a particular
+            # -- type then ignore anything which is not of that
+            # -- type.
+            if of_type and not component.identifier == of_type:
+                continue
+
+            if component.label() == label:
+                return component
+
+        return None
+
+    def _get_components_to_build(
             self,
-            uuid_: str,
-            sub_data: typing.List = None,
-    ) -> typing.Dict or None:
-        """
-        The build order is a list containing dictionaries, where each dictionary is a
-        description of the component (uuid, label and children).
-
-        This method will return that dictionary description for the given uuid.
-
-        Note, this is a recursive function, the sub_data is the point from which you
-        want to search from. If None is provided then it will search from the top of
-        the build order data.
-        """
-        if not uuid_:
-            return None
-
-        result = None
-
-        if sub_data is None:
-            sub_data = self.build_order()
-
-        for item in sub_data:
-            if item["uuid"] == uuid_:
-                return item
-
-        for item in sub_data:
-            result = self._get_build_order_dict(uuid_, item["children"])
-
-            if result:
-                return result
-
-        return result
-
-    # ----------------------------------------------------------------------------------
-    def _insert_build_order_data(
-            self,
-            data_to_insert: typing.Dict,
-            parent_uuid: str,
-            index: int = None,
-    ):
-        """
-        Private function to inject the given data into the build order structure
-        """
-        items_build_dict = self._get_build_order_dict(uuid_=parent_uuid)
-
-        if not items_build_dict or not parent_uuid:
-            self._build_order.append(data_to_insert)
-            return
-
-        if items_build_dict is not None:
-
-            if index is None:
-                index = len(items_build_dict["children"])
-
-            items_build_dict["children"].insert(index, data_to_insert)
-
-    # ----------------------------------------------------------------------------------
-    def _flattened_build_order(
-            self,
-            build_up_to: str = None,
-            build_only: str = None,
-            build_below: str = None,
-    ) -> typing.List[str]:
-        """
-        The build order is hierarchical which makes sense from a user experience
-        perspective, but we ultimately will execute it in a sequential list. This
-        function flattens the hierarchy into a one dimensional build order where the
-        entries in the list are the uuid's for the components.
-        """
-        build_list = list()
-
-        def inner_(sub_data):
-            for item_ in sub_data:
-                if self.component(item_["uuid"]).is_enabled():
-                    build_list.append(item_["uuid"])
-                    inner_(item_["children"])
+            build_up_to: Component = None,
+            build_only: Component = None,
+            build_below: Component = None,):
+        components = []
 
         if build_below:
-            if self.component(build_below).is_enabled():
-                build_list.append(build_below)
-                inner_(
-                    self._get_build_order_dict(
-                        build_below,
-                    )["children"],
+            return self.components(from_component=build_below)
+
+        for component in self.components():
+
+            if not component.is_enabled():
+                continue
+
+            if build_only and component != build_only:
+                continue
+
+            # -- This is where we need to perform the build.
+            components.append(component)
+
+            # -- End of the build
+            if build_up_to and component == build_up_to:
+                break
+        return components
+
+    def build(
+            self,
+            build_up_to: Component = None,
+            build_only: Component = None,
+            build_below: Component = None,
+            validate_only: bool = False
+    ) -> bool:
+        """
+        This is the main function for building/executing the stack. You can choose to build
+        up to a certain point in the build hierarchy or choose to build only a
+        specific component.
+
+        If neither are specified then all components will be built within the defined
+        build order.
+        """
+        self.build_started.emit()
+
+        # -- Before doing any thing, ensure we have set every component
+        # -- to not executed.
+        for component in self.components():
+            component.set_status(
+                Status.NotExecuted,
+            )
+
+        components_to_build = self._get_components_to_build(
+            build_up_to=build_up_to,
+            build_only=build_only,
+            build_below=build_below,
+        )
+
+        # -- Lets be positive and assume everything is ok until we're told
+        # -- otherwise.
+        invalid_result = False
+
+        # -- Cycle the build order. Notice that we're not given the component
+        # -- themselves but the uuid to retrieve the component. Note that we
+        # -- are not building at this point, we are doing a full pass over all the
+        # -- components and checking they are valid.
+        # -- If there are invalid components, we still continue, but we log the
+        # -- fact and set the status.
+        for component in components_to_build:
+
+            # -- We're executing third party code at this point, so we cannot
+            # -- gaurantee the quality of execution. Therefore we wrap it in
+            # -- a try, to ensure a failure in the third party code does not
+            # -- cause a failure at the stackx level
+            try:
+
+                print("-" * 100)
+                print(f"About to Validate : {component.label()} ")
+
+                if not component.is_valid():
+                    component.set_status(
+                        Status.Invalid,
+                    )
+
+                    print(f"    {component.label()} FAILED its is_valid test")
+                    invalid_result = True
+
+                for input_ in component.inputs():
+                    if input_.requires_validation() and not input_.validate():
+                        print(f"    {input_.name()} for {component.label()} is not set")
+                        invalid_result = True
+
+                        component.set_status(Status.Invalid)
+
+            except:
+                print(f"{component.label()} failed during validation check")
+                print(traceback.print_exc())
+                component.set_status(
+                    Status.Failed,
                 )
+                invalid_result = True
 
-        else:
-            inner_(self.build_order())
+        if invalid_result:
+            print("Validation failed - please see output for details")
+            print("-" * 100)
+            return False
 
-        if build_up_to:
-            _build_list = []
+        # -- If we only wanted to perform validation, we can exit at this point
+        if validate_only:
+            return not invalid_result
 
-            for item in build_list:
-                _build_list.append(item)
-                if item == build_up_to:
-                    return _build_list
+        # -- Run the pre-build events
+        self.run_events(components_to_build, "on_build_started")
 
-        if build_only:
-            print(f"Build only value : {build_only}")
-            if not isinstance(build_only, list):
-                build_only = [build_only]
+        # -- We now re-cycle over the build order but this time we will trigger the build
+        for idx, component in enumerate(components_to_build):
 
-            return [
-                item
-                for item in build_list
-                if item in build_only
-            ]
+            # -- Emit a progression signal
+            percentage = (float(idx) / len(components_to_build)) * 100
+            self.build_progressed.emit(percentage)
 
-        return build_list
+            # -- Just as during the validation, we're executing third party code, so
+            # -- we wrap this process in a broad exception
+            # noinspection PyBroadException
+            try:
+                print("-" * 100)
+                print(f"About to Build : {component.label()} ")
+                component.describe()
+                result = component.wrapped_run()
+                component.describe_outputs()
+                print(f"Component Build Status : {component.status()}")
 
-    # --------------------------------------------------------------------------------------
-    @functools.cached_property
-    def component_library(self) -> factories.Factory:
-        """
-        This will return a factory class giving access to all the available components.
+            except:
 
-        Note that it is a cached property, as we do not want to re-instance the factory
-        each time it is called.
-        """
+                print("Build failed. Please see the script editor for a traceback.")
+                print(traceback.print_exc())
+                self.run_events(components_to_build, "on_build_finished", False)
+                return False
 
-        # -- Get a copy of our component path list
-        paths = self.component_paths[:]
+            if not result:
+                self.run_events(components_to_build, "on_build_finished", False)
+                return False
 
-        # -- Add in any paths given to us by our environment
-        paths.extend(
-            os.environ.get(constants.COMPONENT_PATHS_ENVVAR, "").split(",")
+        # -- Emit our completion
+        self.run_events(components_to_build, "on_build_finished", True)
+        print("Build Succeeded.")
+        self.build_progressed.emit(100)
+        self.build_completed.emit()
+
+        return True
+
+    def run_events(self, components, event_name, *args, **kwargs):
+        for component in components:
+            try:
+                func_ = getattr(component, event_name)
+                func_(*args, **kwargs)
+
+            except:
+                print(f"{component.label()} failed during its pre build")
+                print(traceback.print_exc())
+
+    # ----------------------------------------------------------------------------------
+    def resolve_attribute(self, attribute_address):
+        return address.get_attribute(
+            attribute_address,
+            stack=self,
         )
 
-        # -- Remove any null entries
-        paths = [
-            p
-            for p in paths
-            if p
-        ]
+    def replace_component(self, component: "xstack.Component", new_component_type: str):
+        """
+        This will replace the given component with a new component of the given
+        component type.
 
-        # -- Instance the factory
-        lib = factories.Factory(
-            abstract=self.component_base_class,
-            paths=paths,
-            plugin_identifier="identifier",
-            versioning_identifier="version",
+        Where options or inputs match the data will be carried over. All children
+        will also be carried over.
+        """
+        component_parent = component.parent
+        component_child_index = component.child_index()
+
+        new_component = self.add_component(
+            component_type=new_component_type,
+            label=component.label(),
+            parent=None,
         )
+        new_component.set_parent(component_parent, component_child_index)
 
-        return lib
+        # -- Propogate any matching option data
+        for option in component.options():
+            if new_component.option(option.name()):
+                new_component.option(option.name()).set(option.get(resolved=False))
+
+        # -- Propogate any matching inputs
+        for input_ in component.inputs():
+            if new_component.input(input_.name()):
+                new_component.input(input_.name()).set(input_.get(resolved=False))
+
+        # -- Make all the children of the component become
+        # -- children of the new component instead
+        indices = dict()
+        for child in component.children[:]:
+            indices[child] = child.child_index()
+
+        for child, child_index in indices.items():
+            print("got child : %s" % child.label())
+            child.set_parent(new_component, child_index=child_index)
+
+        # -- Now we can remove the component
+        self.remove_component(component)
+        self.hierarchy_changed.emit()
+
+        return new_component

@@ -14,6 +14,7 @@ to use crosswalk at all. It is only used at the framwork level because the amoun
 of interaction is minimal.
 """
 from .rig import Rig
+from .rig import get_rig
 from .host import EmbeddedHost
 from .component import RigComponent
 from .config import RigConfiguration
@@ -27,4 +28,4 @@ from . import constants
 from . import resources
 from . import environment
 
-__version__ = "2.0.2"
+__version__ = "3.0.1"

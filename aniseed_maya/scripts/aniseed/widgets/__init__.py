@@ -3,6 +3,7 @@ from .items import LocationSelector
 from .items import AxisSelector
 
 from .numbers import LimitedInteger
+from .numbers import VectorWidget
 from .functional import ButtonWidget
 from .color_picker import ColorPicker
 
