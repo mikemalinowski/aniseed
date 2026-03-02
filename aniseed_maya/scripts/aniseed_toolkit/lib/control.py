@@ -107,7 +107,8 @@ class Control:
             match_to: str = None,
             shape_scale: float = 1.0,
             rotate_shape=None,
-            classification_override=None
+            classification_override=None,
+            counter=1
     ) -> "Control":
         """
         This will create a control structure. It is not mandatory to use this within the
@@ -155,6 +156,7 @@ class Control:
                     classification=name_classification,
                     description=description,
                     location=location,
+                    counter=counter,
                 ),
             )
 
@@ -262,7 +264,8 @@ def create(
         match_to: str = None,
         shape_scale: float = 1.0,
         rotate_shape=None,
-        classification_override=None
+        classification_override=None,
+        counter=1,
 ) -> "Control":
     """
     This will create a control structure. It is not mandatory to use this within the
@@ -296,6 +299,7 @@ def create(
         shape_scale=shape_scale,
         rotate_shape=rotate_shape,
         classification_override=classification_override,
+        counter=counter,
     )
 
 

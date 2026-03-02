@@ -1,14 +1,9 @@
 import os
 import typing
-
-from moverlay.mayaFeedbackDemo import description
-
 import aniseed
 import aniseed_toolkit
+from maya import cmds
 
-import maya.cmds as mc
-
-from fbxtra.node import create
 
 
 class StickyPatchComponent(aniseed.RigComponent):
@@ -98,6 +93,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         menu["Match Patch Surface to Joint"] = self.user_func_match_patch_surface_to_joint
         menu["Skin Patch To Skeleton"] = self.user_func_skin_patch_to_skeleton
+        menu["Select Joint"] = self.user_func_select_joint
 
         return menu
 
@@ -105,13 +101,13 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         xform = self.input("Geometry Patch").get()
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{xform}.inheritsTransform",
             False
         )
         # -- Re-get the surface, as we're not working with a polyPlane any longer
         # -- but instead a mesh shape
-        surface = mc.listRelatives(
+        surface = cmds.listRelatives(
             xform,
             shapes=True,
         )[0]
@@ -119,21 +115,21 @@ class StickyPatchComponent(aniseed.RigComponent):
         # -- Now create the follicle
         follicle = self.create_follicle()
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{follicle}.visibility",
             False,
         )
 
         # -- Get the transform so we can properly bind
-        follicle_xfo = mc.listRelatives(follicle, parent=True)[0]
-        mc.setAttr(
+        follicle_xfo = cmds.listRelatives(follicle, parent=True)[0]
+        cmds.setAttr(
             f"{follicle_xfo}.inheritsTransform",
             False,
         )
 
         # -- Scale constraint the node so that any rig scaling still comes through
-        mc.scaleConstraint(
-            mc.listRelatives(follicle_xfo, parent=True)[0],
+        cmds.scaleConstraint(
+            cmds.listRelatives(follicle_xfo, parent=True)[0],
             follicle_xfo,
         )
 
@@ -143,10 +139,10 @@ class StickyPatchComponent(aniseed.RigComponent):
             parent=follicle_xfo,
             shape="core_cube",
             config=self.config,
-            match_to=follicle_xfo,
+            match_to=self.input("Joint To Drive").get(),
         )
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             control.ctl,
             self.input("Joint To Drive").get(),
             maintainOffset=True,
@@ -164,8 +160,8 @@ class StickyPatchComponent(aniseed.RigComponent):
 
     def create_follicle(self):
 
-        follicle = mc.rename(
-            mc.createNode('follicle'),
+        follicle = cmds.rename(
+            cmds.createNode('follicle'),
             self.config.generate_name(
                 classification="foll",
                 description=self.option("Descriptive Prefix").get() + "Follicle",
@@ -174,45 +170,45 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
         patch_xform = self.input("Geometry Patch").get()
-        patch_shape = mc.listRelatives(
+        patch_shape = cmds.listRelatives(
             patch_xform,
             shapes=True,
         )[0]
 
-        mc.parent(
+        cmds.parent(
             follicle,
             self.input("Parent").get(),
         )
 
-        mc.connectAttr(
+        cmds.connectAttr(
             f"{patch_shape}.local",
             f"{follicle}.inputSurface",
         )
 
         # -- Hook up the transform input
-        mc.connectAttr(
+        cmds.connectAttr(
             f"{patch_shape}.worldMatrix[0]",
             f"{follicle}.inputWorldMatrix",
         )
 
-        follicle_parent = mc.listRelatives(follicle, parent=True)[0]
+        follicle_parent = cmds.listRelatives(follicle, parent=True)[0]
 
-        mc.connectAttr(
+        cmds.connectAttr(
             f"{follicle}.outTranslate",
             f"{follicle_parent}.translate",
         )
 
-        mc.connectAttr(
+        cmds.connectAttr(
             f"{follicle}.outRotate",
             f"{follicle_parent}.rotate",
         )
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{follicle}.parameterU",
             0.5,
         )
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{follicle}.parameterV",
             0.5,
         )
@@ -237,7 +233,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
     def user_func_create_patch(self, joint_to_drive=None):
 
-        xform, _ = mc.nurbsPlane(
+        xform, _ = cmds.nurbsPlane(
             pivot=(0, 0, 0),
             axis=(0, 0, 1),
             width=1,
@@ -249,14 +245,14 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
         # -- Clear all history
-        mc.delete(xform, constructionHistory=True)
+        cmds.delete(xform, constructionHistory=True)
 
         joint_to_drive = joint_to_drive or self.input("Joint To Drive").get()
 
         if joint_to_drive:
-            mc.xform(
+            cmds.xform(
                 xform,
-                matrix=mc.xform(
+                matrix=cmds.xform(
                     joint_to_drive,
                     query=True,
                     matrix=True,
@@ -264,6 +260,9 @@ class StickyPatchComponent(aniseed.RigComponent):
                 ),
                 worldSpace=True,
             )
+        
+            # -- Rename the mesh
+            xform = cmds.rename(xform, f"MESH_{xform}")
 
         self.input("Geometry Patch").set(
             xform,
@@ -272,7 +271,7 @@ class StickyPatchComponent(aniseed.RigComponent):
     def user_func_match_patch_surface_to_joint(self):
 
         surface_node = self.input("Geometry Patch").get()
-        surface_shape = mc.listRelatives(
+        surface_shape = cmds.listRelatives(
             surface_node,
             shapes=True,
         )[0]
@@ -282,7 +281,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             return
 
         has_skin = len(
-            mc.listConnections(
+            cmds.listConnections(
                 surface_shape,
                 source=True,
                 type="skinCluster",
@@ -293,9 +292,9 @@ class StickyPatchComponent(aniseed.RigComponent):
             print("Cannot match transform when the patch has a skin")
             return
 
-        mc.xform(
+        cmds.xform(
             surface_node,
-            matrix=mc.xform(
+            matrix=cmds.xform(
                 self.input("Joint To Drive").get(),
                 query=True,
                 matrix=True,
@@ -303,6 +302,11 @@ class StickyPatchComponent(aniseed.RigComponent):
             ),
             worldSpace=True,
         )
+
+    def user_func_select_joint(self):
+        joint = self.input("Joint To Drive").get()
+        if joint:
+            cmds.select(joint)
 
     def user_func_skin_patch_to_skeleton(self):
 
@@ -318,10 +322,10 @@ class StickyPatchComponent(aniseed.RigComponent):
             return
 
         joint_root = None
-        long_name = mc.ls(joint, long=True)[0]
+        long_name = cmds.ls(joint, long=True)[0]
 
         for parent in long_name.split("|"):
-            if parent and mc.nodeType(parent) == "joint":
+            if parent and cmds.nodeType(parent) == "joint":
                 joint_root = parent
                 break
 
@@ -331,7 +335,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         joints_to_omit = [joint]
         joints_to_omit.extend(
-            mc.listRelatives(
+            cmds.listRelatives(
                 joint,
                 allDescendents=True,
                 type="joint",
@@ -340,7 +344,7 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         joints_to_skin_to = [joint_root]
         joints_to_skin_to.extend(
-            mc.listRelatives(
+            cmds.listRelatives(
                 parent,
                 allDescendents=True,
             ),
@@ -352,7 +356,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             if joint not in joints_to_omit
         ]
 
-        mc.skinCluster(
+        cmds.skinCluster(
             joints_to_skin_to,
             surface_node,
             toSelectedBones=True,

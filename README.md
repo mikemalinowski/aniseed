@@ -42,6 +42,8 @@ script because everything is just a module in the execution stack.
 
 ## What modules are there?
 
+![Rig Image](aniseed_maya/documentation/images/hammerhead.png)
+
 Out the box Aniseed comes with a variety of modules suited for bipeds and quadrupeds as 
 well as some more generalised modules for FK setups. On top of that there are a series
 of utility style modules (showing/hiding elements or applying and colouring controls etc).
@@ -53,6 +55,8 @@ the joints that are created. However not all modules create guides, and having g
 is not a mandatory feature of an aniseed component. Therefore if you dislike guides 
 and are willing to author your own components then you can have an enitrely joint driven
 workflow too. 
+
+![Rig Image](aniseed_maya/documentation/images/guides.png)
 
 Flexibility is the key here. The components that aniseed ships with typically utilise
 guides where it makes sense, but that is the choice of each component/module and not 
