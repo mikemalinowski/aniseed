@@ -1,5 +1,3 @@
-from pygments.styles.dracula import selection
-
 import aniseed_toolkit
 from maya import cmds
 import maya.api.OpenMaya as om
