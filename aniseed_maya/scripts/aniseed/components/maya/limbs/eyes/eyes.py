@@ -96,6 +96,12 @@ class EyesComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Include Eye Lids",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Default Upper Lid Follow",
             value=0.5,
             group="Defaults",
@@ -419,6 +425,12 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Include Eye Lids",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Default Upper Lid Follow",
             value=0.5,
             group="Defaults",
@@ -487,17 +499,18 @@ class EyeComponent(aniseed.RigComponent):
             config=self.config,
         )
         self.input("Eye Joint").set(eye_joint)
-
-        # -- Now create the eyelids
-        for label in ["Lower", "Upper"]:
-
-            lid_joint = aniseed_toolkit.joints.create(
-                description=self.option("Name").get() + f"{label}Lid",
-                location=self.option("Location").get(),
-                parent=eye_joint,
-                config=self.config,
-            )
-            self.input(f"{label} Eye Lid Joint").set(lid_joint)
+        
+        if self.option("Include Eye Lids").get():
+            # -- Now create the eyelids
+            for label in ["Lower", "Upper"]:
+    
+                lid_joint = aniseed_toolkit.joints.create(
+                    description=self.option("Name").get() + f"{label}Lid",
+                    location=self.option("Location").get(),
+                    parent=eye_joint,
+                    config=self.config,
+                )
+                self.input(f"{label} Eye Lid Joint").set(lid_joint)
 
         if parent:
             aniseed_toolkit.transformation.snap_position(eye_joint, parent)
@@ -628,11 +641,12 @@ class EyeComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
-        self.create_eyelid_behaviour(
-            component_org=component_org,
-            eye_control=direct_eye_control.ctl,
-            aim_control=aim_control.ctl,
-        )
+        if self.option("Include Eye Lids").get():
+            self.create_eyelid_behaviour(
+                component_org=component_org,
+                eye_control=direct_eye_control.ctl,
+                aim_control=aim_control.ctl,
+            )
 
     def create_eyelid_behaviour(self, component_org, eye_control, aim_control):
 
