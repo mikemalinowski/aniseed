@@ -2,6 +2,8 @@ import mref
 from maya import cmds
 from maya.api import OpenMaya as om
 
+from mref.traits import constraint
+
 
 class DagNode(mref.Trait):
 
@@ -116,3 +118,12 @@ class DagNode(mref.Trait):
             return mref.get(cmds.listRelatives(self.full_name(), shapes=True)[0])
         except IndexError:
             return None
+
+    def constraints(self):
+        results = []
+
+        for child in self.children():
+            if "constraint" in cmds.nodeType(child.full_name()).lower():
+                results.append(child)
+
+        return results
