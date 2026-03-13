@@ -1037,8 +1037,8 @@ class TriLegComponent(aniseed.RigComponent):
         leg_joints = aniseed_toolkit.joints.get_between(root_joint, toe_joint)
 
         # -- Include the twisters
-        upper_twists = self.input("Upper Twist Joints").get()
-        lower_twists = self.input("Lower Twist Joints").get()
+        upper_twists = self.input("Upper Twist Joints").get() or []
+        lower_twists = self.input("Lower Twist Joints").get() or []
         all_joints = leg_joints + upper_twists + lower_twists
 
         return [joint for joint in all_joints if joint]
