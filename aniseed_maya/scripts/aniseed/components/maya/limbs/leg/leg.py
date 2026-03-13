@@ -102,6 +102,12 @@ class LegComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
+        self.declare_option(
+            name="Upvector Distance Multiplier",
+            value=1,
+            group="Behaviour",
+        )
+
         # -- These options are hidden and for intialisation only
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Lower Twist Count", value=2, pre_expose=True)
@@ -337,7 +343,7 @@ class LegComponent(aniseed.RigComponent):
                 point_a=self.leg_joints[0],
                 point_b=self.leg_joints[1],
                 point_c=self.leg_joints[2],
-                length=1,
+                length=self.option("Upvector Distance Multiplier").get(),
             ),
             worldSpace=True,
         )
@@ -509,7 +515,14 @@ class LegComponent(aniseed.RigComponent):
 
         if self.option("Apply Soft Ik").get():
 
-            root_marker = cmds.createNode("transform")
+            root_marker = cmds.createNode(
+                "transform",
+                name=self.config.generate_name(
+                    classification="mech",
+                    description=f"{self.prefix}LegIKMarker",
+                    location=self.location,
+                )
+            )
 
             cmds.parent(
                 root_marker,
@@ -1133,8 +1146,8 @@ class LegComponent(aniseed.RigComponent):
         leg_joints = aniseed_toolkit.joints.get_between(root_joint, toe_joint)
 
         # -- Include the twisters
-        upper_twists = self.input("Upper Twist Joints").get()
-        lower_twists = self.input("Lower Twist Joints").get()
+        upper_twists = self.input("Upper Twist Joints").get() or []
+        lower_twists = self.input("Lower Twist Joints").get() or []
         all_joints = leg_joints + upper_twists + lower_twists
 
         return [joint for joint in all_joints if joint]
