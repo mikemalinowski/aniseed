@@ -115,7 +115,7 @@ def create(root, target, second_joint, third_joint, host=None):
     )
 
     max_len_attr = add(
-        default_upper_len_attr,
+        add(add(default_upper_len_attr, upper_addition_attr), lower_addition_attr),
         default_lower_len_attr,
     )
 
@@ -241,6 +241,12 @@ def create(root, target, second_joint, third_joint, host=None):
         default_upper_len_attr,
     )
 
+    ##
+    upper_attr = add(
+        upper_attr,
+        upper_addition_attr,
+    )
+
     lower_attr = multiply(
         default_lower_len_attr,
         scale,
@@ -259,6 +265,12 @@ def create(root, target, second_joint, third_joint, host=None):
     lower_attr = add(
         lower_attr,
         default_lower_len_attr,
+    )
+
+    ##
+    lower_attr = add(
+        lower_attr,
+        lower_addition_attr,
     )
 
     if facing_direction == facing_direction.NegativeX:
