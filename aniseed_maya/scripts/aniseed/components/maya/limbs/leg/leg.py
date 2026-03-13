@@ -457,11 +457,22 @@ class LegComponent(aniseed.RigComponent):
         """
         This creates the IK solving for the leg
         """
+
+        # -- Create the ik root control
+        ik_root_control = aniseed_toolkit.control.create(
+            description=f"{self.prefix}IKRoot",
+            location=self.location,
+            shape="core_cube",
+            parent=self.org,
+            match_to=self.leg_joints[0],
+            config=self.config,
+        )
+
         replicated_joints = aniseed_toolkit.run(
             "Replicate Chain",
             from_this=self.leg_joints[0],
             to_this=self.leg_joints[2],
-            parent=self.org,
+            parent=ik_root_control.ctl,
         )
 
         # -- Rename the ik joints
@@ -526,7 +537,7 @@ class LegComponent(aniseed.RigComponent):
 
             cmds.parent(
                 root_marker,
-                self.org,
+                ik_root_control.ctl,
             )
 
             cmds.xform(
