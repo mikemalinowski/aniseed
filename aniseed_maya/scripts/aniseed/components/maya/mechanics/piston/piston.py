@@ -41,6 +41,12 @@ class PistonComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Upvector Axis",
+            value="X",
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Location",
             value="md",
             group="Naming",
@@ -66,6 +72,9 @@ class PistonComponent(aniseed.RigComponent):
     def option_widget(self, option_name: str):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
+
+        if option_name == "Upvector Axis":
+            return aniseed.widgets.AxisSelector()
 
     def run(self) -> bool:
 
@@ -119,8 +128,9 @@ class PistonComponent(aniseed.RigComponent):
             match_to=piston_root_ctl.ctl,
         )
 
+        upvector_axis = self.option("Upvector Axis").get().upper()
         mc.setAttr(
-            f"{upvector}.translateZ",
+            f"{upvector}.translate{upvector_axis}",
             10,
         )
 
