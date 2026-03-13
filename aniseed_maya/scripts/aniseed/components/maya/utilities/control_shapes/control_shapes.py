@@ -1,8 +1,8 @@
 import os
+import json
 import aniseed
 import qtility
 import functools
-import traceback
 import aniseed_toolkit
 
 import maya.cmds as mc
@@ -10,9 +10,13 @@ import maya.cmds as mc
 
 # noinspection PyUnresolvedReferences
 class StoreControlShapes(aniseed.RigComponent):
-
+    """
+    Deprecated : Do not continue to use this component. The Apply Shape Data component
+    now has functionality to snapshot and hold the shape data it applies.
+    """
     identifier = "Utility : Store Control Shapes"
     icon = os.path.join(os.path.dirname(__file__), "store_shapes.png")
+
 
     def __init__(self, *args, **kwargs):
         super(StoreControlShapes, self).__init__(*args, **kwargs)
@@ -39,82 +43,8 @@ class StoreControlShapes(aniseed.RigComponent):
             value=None,
         )
 
-    def option_widget(self, option_name):
-        if option_name == "_Clear Shapes":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Clear Shape Data",
-                func=functools.partial(
-                    self._clear_shapes,
-                    self,
-                ),
-            )
-
     def run(self) -> bool:
-
-        if not self.option("Store Data").get():
-            return True
-
-        nodes = mc.controller(
-            allControllers=True,
-            query=True,
-        )
-
-        shape_data = list()
-        read = list()
-
-        for node in nodes:
-
-            # -- Ensure we're only looking at controls which are part
-            # -- of our rig
-            if not self.rig.label in mc.ls(node, long=True)[0]:
-                continue
-
-            shape_nodes = mc.listRelatives(node, type="nurbsCurve")
-
-            if not shape_nodes:
-                continue
-
-            shape_data.append(
-                aniseed_toolkit.run(
-                    "Read Shape From Node",
-                    node,
-                ),
-            )
-            read.append(node)
-
-        for existing_data in self.option("Shape Data").get() or list():
-            if existing_data["node"] not in read:
-                shape_data.append(existing_data)
-
-        self.option("Transient Shape Data").set(
-            shape_data,
-        )
-
         return True
-
-    def on_build_finished(self, successful: bool) -> None:
-
-        if successful and self.option("Store Data").get():
-            self.option("Shape Data").set(
-                self.option("Transient Shape Data").get(),
-            )
-            self.option("Transient Shape Data").set(list())
-
-    @staticmethod
-    def _clear_shapes(component):
-
-        confirmation = qtility.request.confirmation(
-            title="Clear Shapes",
-            message="Are you sure you want to clear the shape data?",
-            parent=None,
-        )
-
-        if not confirmation:
-            return
-
-        component.option("Shape Data").set(
-            list(),
-        )
 
 
 # noinspection PyUnresolvedReferences
@@ -137,29 +67,77 @@ class ApplyControlShapes(aniseed.RigComponent):
             hidden=False,
         )
 
+        self.declare_option(
+            name="Shape Data",
+            value=list(),
+            hidden=True,
+        )
+
+        self.declare_option(
+            name="Snapshot Shape Data",
+            value=None,
+        )
+
+        self.declare_option(
+            name="Clear Shape Data",
+            value=None,
+        )
+
+        self.declare_option(
+            name="Save Shape Data File",
+            value=None,
+        )
+
+        self.declare_option(
+            name="Load Shape Data File",
+            value=None,
+        )
+
     def option_widget(self, option_name):
         if option_name == "Skip Nodes":
             return aniseed.widgets.ObjectList()
+
+        if option_name == "Snapshot Shape Data":
+            return aniseed.widgets.ButtonWidget(
+                button_name="Snapshot Shape Data",
+                func=functools.partial(
+                    self.snapshot_shape_data,
+                ),
+            )
+
+        if option_name == "Save Shape Data File":
+            return aniseed.widgets.ButtonWidget(
+                button_name="Save Shape Data File",
+                func=functools.partial(
+                    self.save_shape_data_file,
+                ),
+            )
+
+        if option_name == "Load Shape Data File":
+            return aniseed.widgets.ButtonWidget(
+                button_name="Load Shape Data File",
+                func=functools.partial(
+                    self.load_shape_file,
+                ),
+            )
+
+        if option_name == "Clear Shape Data":
+            return aniseed.widgets.ButtonWidget(
+                button_name="Clear Shape Data",
+                func=functools.partial(
+                    self.clear_shape_data,
+                ),
+            )
+
+        return None
 
     def run(self) -> bool:
 
         if not self.option("Apply Data").get():
             return True
 
-        stored_shape_data = list()
-
-        # -- Find the store component so we can extract the data
-        for component in self.rig.components():
-            if isinstance(component, StoreControlShapes):
-                option_name = "Shape Data"
-                if component.option("Transient Shape Data").get():
-                    option_name = "Transient Shape Data"
-                stored_shape_data: list = component.option(option_name).get()
-
-        if not stored_shape_data:
-            return True
-
         skip_nodes = self.option("Skip Nodes").get()
+        stored_shape_data = self.option("Shape Data").get() or self.get_legacy_data()
 
         for shape_data in stored_shape_data:
 
@@ -205,3 +183,92 @@ class ApplyControlShapes(aniseed.RigComponent):
 
 
         return True
+
+    def clear_shape_data(self):
+        confirmation = qtility.request.confirmation(
+            title="Clear Shape Data",
+            message="Are you sure you want to clear the shape data?",
+        )
+        if not confirmation:
+            return
+
+        self.option("Shape Data").set(dict())
+
+    def snapshot_shape_data(self):
+        data = self.get_shape_data()
+        self.option("Shape Data").set(data)
+
+    def save_shape_data_file(self):
+
+        filepath = qtility.request.filepath(
+            title="Save Shape Data File",
+            path=os.path.dirname(mc.file(query=True, sceneName=True)),
+            save=True,
+        )
+
+        if not filepath:
+            return
+
+        with open(filepath, "w") as f:
+            print("shape data : %s" % self.get_shape_data())
+            json.dump(self.get_shape_data(), f, sort_keys=True, indent=4)
+
+    def load_shape_file(self):
+
+        filepath = qtility.request.filepath(
+            title="Load Shape Data File",
+            path=os.path.dirname(mc.file(query=True, sceneName=True)),
+            save=False,
+        )
+
+        if not filepath:
+            return
+
+        with open(filepath, "r") as f:
+            self.option("Shape Data").set(json.load(f))
+
+    def get_shape_data(self):
+
+        nodes = mc.controller(
+            allControllers=True,
+            query=True,
+        )
+
+        shape_data = list()
+        read = list()
+
+        for node in nodes:
+
+            # -- Ensure we're only looking at controls which are part
+            # -- of our rig
+            if not self.rig.label in mc.ls(node, long=True)[0]:
+                continue
+
+            shape_nodes = mc.listRelatives(node, type="nurbsCurve")
+
+            if not shape_nodes:
+                continue
+
+            shape_data.append(
+                aniseed_toolkit.run(
+                    "Read Shape From Node",
+                    node,
+                ),
+            )
+            read.append(node)
+
+        return shape_data
+
+    def get_legacy_data(self):
+
+        stored_shape_data = list()
+
+        # -- Find the store component so we can extract the data
+        for component in self.rig.components():
+            if isinstance(component, StoreControlShapes):
+                option_name = "Shape Data"
+                if component.option("Transient Shape Data").get():
+                    option_name = "Transient Shape Data"
+                stored_shape_data: list = component.option(option_name).get()
+
+        return stored_shape_data

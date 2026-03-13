@@ -87,19 +87,13 @@ class MayaConfigStandard(aniseed.RigConfiguration):
             parent=make_editable,
         )
 
-        store_shapes = self.rig.add_component(
-            component_type="Utility : Store Control Shapes",
-            label="Store Shapes",
-            parent=make_editable,
-        )
-
         self.rig.add_component(
             component_type="Utility : Delete Children",
             label="Clear Control Rig",
             inputs={
                 "Node": control_org_name,
             },
-            parent=store_shapes,
+            parent=make_editable,
         )
 
         self.rig.add_component(
