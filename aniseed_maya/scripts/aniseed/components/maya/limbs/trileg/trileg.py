@@ -463,12 +463,23 @@ class TriLegComponent(aniseed.RigComponent):
             end=tip_joint,
         )
 
+        # -- Create the ik root control
+        ik_root_control = aniseed_toolkit.control.create(
+            description=f"{prefix}IKRoot",
+            location=location,
+            shape="core_cube",
+            parent=parent,
+            match_to=joint_chain[0],
+            config=self.config,
+        )
+
         # -- Create the ik spring chain that will span the whole leg
         upper_to_foot_chain = aniseed_toolkit.joints.replicate_chain(
             from_this=joint_chain[self.INDEX_UPPER_LEG],
             to_this=joint_chain[self.INDEX_FOOT],
-            parent=parent,
+            parent=ik_root_control.ctl,
         )
+
         upper_to_foot_chain = self._apply_mechanism_name(
             upper_to_foot_chain,
             description="FullSolve"
@@ -520,7 +531,7 @@ class TriLegComponent(aniseed.RigComponent):
         upper_two_bone_ik = aniseed_toolkit.joints.replicate_chain(
             from_this=joint_chain[self.INDEX_UPPER_LEG],
             to_this=joint_chain[self.INDEX_LOWER_LEG],
-            parent=parent,
+            parent=ik_root_control.ctl,
         )
         upper_two_bone_ik = self._apply_mechanism_name(
             upper_two_bone_ik,
