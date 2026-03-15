@@ -2,6 +2,8 @@ from Qt import QtCore, QtWidgets, QtGui
 import scribble
 from . import resources
 
+from .. import stack
+
 
 # --------------------------------------------------------------------------------------
 class AppConfig:
@@ -49,7 +51,7 @@ class AppConfig:
     # -- This is the base class of the stack. This is useful if you are inheriting
     # -- and subclassing from xstack.Stack and want to ensure that when the app
     # -- creates a new stack it creates your base class
-    stack_class: "xstack.Stack" = None
+    stack_class: "xstack.Stack" = stack.Stack
 
     # -- These allow you to tailor exactly how the tree will will visually
     item_highlight_color = [255, 0, 255]

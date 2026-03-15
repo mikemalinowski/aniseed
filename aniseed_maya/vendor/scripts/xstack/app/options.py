@@ -26,9 +26,17 @@ class ComponentEditor(QtWidgets.QWidget):
         )
         self.component = None
 
+        # -- We are hosting an unknown amount of widgets, so lets create
+        # -- a scrollable area to place the tabs within.
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.scroll_area.setWidgetResizable(True)
+        self.layout().addWidget(self.scroll_area)
+
         # -- Now start populating the content
         self.tab_widget = QtWidgets.QTabWidget()
-        self.layout().addWidget(self.tab_widget)
+        self.scroll_area.setWidget(self.tab_widget)
 
         self.options_widget = OptionsWidget()
         self.inputs_widget = InputsWidget(parent=self)
