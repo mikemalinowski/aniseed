@@ -209,7 +209,7 @@ class TreeMenu(QtWidgets.QMenu):
         build_just_this.triggered.connect(
             functools.partial(
                 self.app.build,
-                build_up_to=self.component,
+                build_only=self.component,
             ),
         )
         build_menu.addAction(build_just_this)

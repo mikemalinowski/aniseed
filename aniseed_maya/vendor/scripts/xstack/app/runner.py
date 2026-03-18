@@ -11,10 +11,12 @@ class ThreadedRun(QtCore.QThread):
     # -- progresses through its build
     build_progressed = QtCore.Signal(float)
 
-    def __init__(self, stack, build_below=None, validate_only=False, *args, **kwargs):
+    def __init__(self, stack, build_up_to=None, build_below=None, build_only=None, validate_only=False, *args, **kwargs):
         super(ThreadedRun, self).__init__(*args, **kwargs)
         self.stack = stack
+        self.build_up_to = build_up_to
         self.build_below = build_below
+        self.build_only = build_only
         self.validate_only = validate_only
 
         self.finished.connect(self.disconnect_signals)
@@ -23,7 +25,9 @@ class ThreadedRun(QtCore.QThread):
         self.stack.build_progressed.connect(self.build_progressed.emit)
 
         result = self.stack.build(
+            build_up_to=self.build_up_to,
             build_below=self.build_below,
+            build_only=self.build_only,
             validate_only=self.validate_only,
         )
         return result

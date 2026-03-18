@@ -67,7 +67,7 @@ class AppWidget(QtWidgets.QWidget):
         self.build_started.connect(self.on_build_started)
         self.build_complete.connect(self.on_build_complete)
 
-    def build(self, build_below=None, validate_only=False):
+    def build(self, build_up_to=None,  build_only=None, build_below=None, validate_only=False):
         """
         This will trigger a threaded build of the stack
 
@@ -80,7 +80,9 @@ class AppWidget(QtWidgets.QWidget):
         if self.allow_threading:
             self.run_thread = runner.ThreadedRun(
                 stack=self.stack,
+                build_up_to=build_up_to,
                 build_below=build_below,
+                build_only=build_only,
                 validate_only=validate_only,
             )
             self.run_thread.build_progressed.connect(self.update_progressbar)
@@ -90,7 +92,9 @@ class AppWidget(QtWidgets.QWidget):
         else:
             self.stack.build_progressed.connect(self.update_progressbar)
             self.stack.build(
+                build_up_to=build_up_to,
                 build_below=build_below,
+                build_only=build_only,
                 validate_only=validate_only,
             )
             self.build_complete.emit() # CRASH
