@@ -578,6 +578,24 @@ class TriLegComponent(aniseed.RigComponent):
                 worldSpace=True,
             )
 
+        # -- Apply the spring solve ik bias
+        cmds.setAttr(f"{upper_to_foot_ikh}.springAngleBias[0].springAngleBias_Position", lock=False)
+        cmds.setAttr(f"{upper_to_foot_ikh}.springAngleBias[1].springAngleBias_Position", lock=False)
+        mref_control = mref.get(foot_control.ctl)
+        mref_control.add_attribute(
+            "ik_bias",
+            value=0.5,
+            attribute_type="float",
+            keyable=True,
+            min=0,
+            max=1,
+            defaultValue=0.5,
+        )
+        inverse_node = mref.create("reverse")
+        mref_control.attr("ik_bias").connect(inverse_node.attr("inputX"))
+        mref_control.attr("ik_bias").connect(f"{upper_to_foot_ikh}.springAngleBias[0].springAngleBias_FloatValue")
+        inverse_node.attr("outputX").connect(f"{upper_to_foot_ikh}.springAngleBias[1].springAngleBias_FloatValue")
+
         # -- Create the foot pivot setup
         foot_pivot_tip, pivot_controls = self._setup_ik_pivot_behaviour(
             foot_control=foot_control,
@@ -938,8 +956,9 @@ class TriLegComponent(aniseed.RigComponent):
             joint_data=joint_data,
             location=location,
             config=self.config,
-            parent=parent,
+            parent=None,
         )
+        cmds.parent(all_joints[0], parent)
         
         # -- Set our inputs
         self.input("Leg Root").set(all_joints[0])
