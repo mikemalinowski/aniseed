@@ -608,6 +608,7 @@ class SplineSpine(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
+        cmds.select(guides[0])
         return guides
 
     def create_guide_controls(self, guide_org, spline_setup):
