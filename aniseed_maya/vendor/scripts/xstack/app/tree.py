@@ -240,7 +240,10 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             app=self.app,
             parent=self,
         )
-        context_menu.exec(QtGui.QCursor().pos())
+        if hasattr(context_menu, "exec_"):
+            context_menu.exec_(QtGui.QCursor().pos())
+        else:
+            context_menu.exec(QtGui.QCursor().pos())
 
     # ----------------------------------------------------------------------------------
     def save_component_settings(self, item):

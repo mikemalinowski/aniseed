@@ -334,12 +334,16 @@ class SpaceSwitchComponent(aniseed.RigComponent):
     def add_space(self, space_data):
 
         uuid_ = space_data["uuid_"]
+        uuids = self.get_uuids()
 
-        if uuid_ in self.get_uuids():
+        index_at = -1
+
+        if uuid_ in uuids:
+            index_at = uuids.index(uuid_)
             self.remove_space(uuid_)
 
         data = self.get_data()
-        data["spaces"].append(space_data)
+        data["spaces"].insert(index_at, space_data)
         self.option("_Data").set(data)
         return data
 

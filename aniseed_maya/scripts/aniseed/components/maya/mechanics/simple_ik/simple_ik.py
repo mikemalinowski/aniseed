@@ -292,7 +292,7 @@ class SimpleIKComponent(aniseed.RigComponent):
 
         # -- Apply the upvector constraint
         mc.poleVectorConstraint(
-            upvector,
+            upvector.ctl,
             handle,
             weight=1,
         )
@@ -347,7 +347,7 @@ class SimpleIKComponent(aniseed.RigComponent):
             aniseed_toolkit.run(
                 "Create Soft Ik",
                 n,
-                ik_control,
+                ik_control.ctl,
                 ik_joints[-2],
                 ik_joints[-1],
                 host=ik_control.ctl,
@@ -476,7 +476,7 @@ class SimpleIKComponent(aniseed.RigComponent):
             reverse_node = mc.createNode("reverse")
 
             mc.connectAttr(
-                f"{config_control}.{proxies['ik_fk']}",
+                f"{config_control.ctl}.{proxies['ik_fk']}",
                 f"{reverse_node}.inputX",
             )
 
@@ -486,12 +486,12 @@ class SimpleIKComponent(aniseed.RigComponent):
             )
 
             mc.connectAttr(
-                f"{config_control}.{proxies['ik_fk']}",
+                f"{config_control.ctl}.{proxies['ik_fk']}",
                 f"{cns}.{fk_driven}",
             )
 
             mc.connectAttr(
-                f"{config_control}.{proxies['show_fk']}",
+                f"{config_control.ctl}.{proxies['show_fk']}",
                 f"{fk_node}.visibility",
             )
 

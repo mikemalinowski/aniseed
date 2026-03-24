@@ -358,7 +358,7 @@ class Stack:
 
         return stack
 
-    def components(self, from_component=None):
+    def components(self, from_component=None, of_type=None):
         """
         Returns a list of all components used in the active stack. This is always
         returned in build order.
@@ -376,6 +376,13 @@ class Stack:
         for component in start_points:
             all_components.append(component)
             process_children(component)
+
+        if of_type:
+            all_components = [
+                component
+                for component in all_components
+                if component.identifier == of_type
+            ]
 
         return all_components
 

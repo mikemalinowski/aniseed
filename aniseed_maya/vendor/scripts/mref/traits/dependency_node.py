@@ -107,4 +107,4 @@ class DependencyNode(mref.Trait):
         return attribute
 
     def node_type(self):
-        return cmds.nodeType(self.full_name())
+        return cmds.nodeType(self.item.full_name())

@@ -1,5 +1,4 @@
 import types
-import traceback
 import os
 import inspect
 import factories
@@ -153,5 +152,24 @@ def create(*args, **kwargs):
 def selected():
     return [
         get(node)
-        for node in cmds.ls(sl=True)
+        for node in cmds.ls(selection=True, long=True)
     ]
+
+
+def find(search_string, **kwargs):
+    # -- Long is a forced argument
+    if "long" in kwargs:
+        kwargs.pop("long")
+
+    return [
+        get(node)
+        for node in cmds.ls(search_string, long=True, **kwargs)
+    ]
+
+
+def select(nodes):
+    if not isinstance(nodes, list):
+        nodes = [nodes]
+
+    nodes = [node.full_name() if isinstance(node, ReferencedItem) else node for node in nodes]
+    cmds.select(nodes)

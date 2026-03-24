@@ -1,7 +1,4 @@
 import os
-
-from pygments.lexers import q
-
 import mref
 import qtility
 import aniseed
@@ -10,7 +7,6 @@ from maya import cmds
 
 
 class HandComponent(aniseed.RigComponent):
-
     identifier = "Limb : Hand"
     icon = os.path.join(
         os.path.dirname(__file__),
@@ -84,7 +80,7 @@ class HandComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
             description="If True, the component will assume that there is an additional bone which acts as the metacarpals.",
-            pre_expose = True,
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -92,7 +88,7 @@ class HandComponent(aniseed.RigComponent):
             value=3,
             group="Behaviour",
             description="How many joints (excluding the metacarpal) make up the finger.",
-            pre_expose = True,
+            pre_expose=True,
         )
         self.declare_option(
             name="Expose Attributes To Nodes",
@@ -325,6 +321,11 @@ class HandComponent(aniseed.RigComponent):
             # -- Check whether we need to assume there are metacarpal bones. These
             # -- are bones that are parents of the fingers and give functionality
             # -- like spreading and cupping.
+            # -- Check if this finger has a metacarpal
+            finger_root_parent = cmds.listRelatives(finger_root, parent=True)[0]
+            assume_metacarpals = False
+            if finger_root_parent != hand_joint:
+                assume_metacarpals = True
             metacarpal = None
             if assume_metacarpals:
                 metacarpal_joint = mref.get(finger_root).parent().full_name()
@@ -345,7 +346,7 @@ class HandComponent(aniseed.RigComponent):
 
             # -- We're now going to create the fk hierarchy - so start by defining
             # -- the hand as the parent, and we will update this as we go.
-            control_parent = metacarpal.ctl or hand.ctl
+            control_parent = metacarpal.ctl if metacarpal else hand.ctl
             finger_controls = []
 
             # -- The ranged value gives us a float denoting how much influence
@@ -464,7 +465,7 @@ class HandComponent(aniseed.RigComponent):
         spread = 5.0
 
         # -- Track all the finger tips we create
-        
+
         for finger_index, label in enumerate([thumb_label] + finger_labels):
             ranged_value = self._get_ranged_value(finger_index, finger_labels)
 
@@ -494,7 +495,7 @@ class HandComponent(aniseed.RigComponent):
 
             # -- Now we can start building our digits
             for digit_index in range(digit_count):
-                
+
                 digit = aniseed_toolkit.joints.create(
                     description=f"{prefix}_finger_{label}",
                     location=location,
@@ -517,7 +518,7 @@ class HandComponent(aniseed.RigComponent):
                     cmds.setAttr(f"{digit}.rotateX", 90)
 
                 if digit_index == 0:
-                    if finger_index == 0: # -- First thumb
+                    if finger_index == 0:  # -- First thumb
                         cmds.setAttr(f"{digit}.translateX", length / 2.0)
                         cmds.setAttr(f"{digit}.translateZ", planar_offset * 1.6)
                         cmds.setAttr(f"{digit}.translateY", -length * 0.25)

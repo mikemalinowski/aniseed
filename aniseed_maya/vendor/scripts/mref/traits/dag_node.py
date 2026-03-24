@@ -110,7 +110,7 @@ class DagNode(mref.Trait):
     def shapes(self):
         return [
             mref.get(shape)
-            for shape in cmds.listRelatives(self.full_name(), shapes=True) or []
+            for shape in cmds.listRelatives(self.full_name(), shapes=True, fullPath=True) or []
         ]
 
     def shape(self):
