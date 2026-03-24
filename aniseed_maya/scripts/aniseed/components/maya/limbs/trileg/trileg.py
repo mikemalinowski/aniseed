@@ -127,6 +127,11 @@ class TriLegComponent(aniseed.RigComponent):
             value=1.0,
             group="Behaviour",
         )
+        self.declare_option(
+            name="Apply Soft Ik",
+            value=True,
+            group="Behaviour",
+        )
 
         # -- These options are hidden and for intialisation only
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
@@ -596,6 +601,19 @@ class TriLegComponent(aniseed.RigComponent):
         mref_control.attr("ik_bias").connect(f"{upper_to_foot_ikh}.springAngleBias[0].springAngleBias_FloatValue")
         inverse_node.attr("outputX").connect(f"{upper_to_foot_ikh}.springAngleBias[1].springAngleBias_FloatValue")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
         # -- Create the foot pivot setup
         foot_pivot_tip, pivot_controls = self._setup_ik_pivot_behaviour(
             foot_control=foot_control,
@@ -664,6 +682,12 @@ class TriLegComponent(aniseed.RigComponent):
                 translation=True,
                 worldSpace=True,
             ),
+        )
+        cmds.parentConstraint(
+            foot_control.ctl,
+            ankle_control.ctl,
+            skipRotate=["x", "y", "z"],
+            maintainOffset=True,
         )
 
         # -- Now we have our controls we can start to parent the IK
@@ -755,6 +779,72 @@ class TriLegComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
+        if self.option("Apply Soft Ik").get():
+            print("applying soft ik")
+            root_marker = cmds.createNode(
+                "transform",
+                name=self.config.generate_name(
+                    classification="mech",
+                    description=f"{prefix}LegIKRootMarker",
+                    location=location,
+                )
+            )
+
+            cmds.parent(
+                root_marker,
+                ik_root_control.ctl,
+            )
+
+            cmds.xform(
+                root_marker,
+                matrix=cmds.xform(
+                    upper_to_foot_chain[0],
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
+
+            tip_marker = cmds.createNode(
+                "transform",
+                name=self.config.generate_name(
+                    classification="mech",
+                    description=f"{prefix}LegIKTipMarker",
+                    location=location,
+                )
+            )
+
+            cmds.parent(
+                tip_marker,
+                foot_pivot_tip,
+            )
+
+            cmds.xform(
+                tip_marker,
+                matrix=cmds.xform(
+                    upper_to_foot_chain[-1],
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
+            aniseed_toolkit.run(
+                "Create Multi Bone Soft Ik",
+                root_target=root_marker,
+                end_target=tip_marker,
+                root_joint=upper_to_foot_chain[0],
+                end_joint=upper_to_foot_chain[-1],
+                host=foot_control.ctl,
+            )
+
+            for i in [1, 2]:
+                cmds.connectAttr(
+                    f"{upper_to_foot_chain[i]}.translateX",
+                    f"{upper_two_bone_ik[i]}.translateX",
+                )
+
         ik_controls = pivot_controls[:]
         ik_controls.append(foot_control.ctl)
         ik_controls.append(ankle_control.ctl)
@@ -780,6 +870,10 @@ class TriLegComponent(aniseed.RigComponent):
             translation=True,
             worldSpace=True,
         )
+        pre_distance = aniseed_toolkit.transformation.distance_between(
+            check_node,
+            polevector_target,
+        )
 
         cmds.poleVectorConstraint(
             polevector_target,
@@ -793,11 +887,19 @@ class TriLegComponent(aniseed.RigComponent):
             translation=True,
             worldSpace=True,
         )
+        post_distance = aniseed_toolkit.transformation.distance_between(
+            check_node,
+            polevector_target,
+        )
 
-        for idx, axis in enumerate(["X", "Y", "Z"]):
-            if abs(pre_position[idx] - post_position[idx]) > 0.1:
-                cmds.setAttr(f"{ik_handle}.twist", 180)
-                return
+        if abs(post_distance - pre_distance) > 0.1:
+            cmds.setAttr(f"{ik_handle}.twist", 180)
+            print("preventing flip")
+        #
+        # for idx, axis in enumerate(["X", "Y", "Z"]):
+        #     if abs(pre_position[idx] - post_position[idx]) > 0.1:
+        #         cmds.setAttr(f"{ik_handle}.twist", 180)
+        #         return
 
     def create_twists(self, nk_chain, parent):
 
