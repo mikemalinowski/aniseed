@@ -31,7 +31,7 @@ class Rig(xstack.Stack):
     """
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, label="", host=None, component_paths: typing.List or None = None):
+    def __init__(self, label="", host=None, configuration: str = None, component_paths: typing.List or None = None):
 
         # -- Ensure we're adding our default path locations
         component_paths = component_paths or []
@@ -89,6 +89,14 @@ class Rig(xstack.Stack):
             self.serialise,
         )
 
+        # -- If we're given a config and there are not other components
+        # -- in the stack, then we add it.
+        if not self.components() and configuration:
+            self.add_component(
+                component_type=configuration,
+                label="Configuration",
+            )
+
     # ----------------------------------------------------------------------------------
     def host(self):
         return self._host
@@ -115,7 +123,7 @@ class Rig(xstack.Stack):
         This will return the rig configuration class for the rig
         """
         for component_instance in self.components():
-            if component_instance.identifier.startswith("Rig Configuration :"):
+            if component_instance.identifier.startswith("Rig Configuration"):
                 return component_instance
 
         print("could not locate configuration component")
@@ -253,6 +261,14 @@ class Rig(xstack.Stack):
             filepath,
             additional_data,
         )
+
+    def execute_block(self, block_name):
+        """
+        This will execute an execution block by its label
+        """
+        for execute_block in self.components(of_type="Stack : Execution Block"):
+            if execute_block.label() == block_name:
+                return self.build(build_below=execute_block)
 
 
 def get_rig(node):

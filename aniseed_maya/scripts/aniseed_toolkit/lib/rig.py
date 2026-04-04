@@ -60,7 +60,7 @@ def opposing_controls(controls: list[str] or None = None) -> list[str]:
             rig_config = rig_instance.config()
 
         # -- Get the location of the control
-        name_decomposition = rig_config.decompose_name(node.ctl)
+        name_decomposition = rig_config.decomposition(node.ctl)
 
         # -- Now use the rig's config
         side = rig_config.left

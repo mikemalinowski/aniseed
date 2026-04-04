@@ -353,7 +353,7 @@ class AppWidget(QtWidgets.QWidget):
             self.splitter.setOrientation(QtCore.Qt.Vertical)
 
     # ----------------------------------------------------------------------------------
-    def create_new_stack(self):
+    def create_new_stack(self, **kwargs):
         """
         This will take the user through the flow of generating a new stack
 
@@ -373,6 +373,7 @@ class AppWidget(QtWidgets.QWidget):
         new_stack = self.app_config.stack_class(
             label=name,
             component_paths=self.app_config.component_paths,
+            **kwargs
         )
 
         self.set_active_stack(new_stack)

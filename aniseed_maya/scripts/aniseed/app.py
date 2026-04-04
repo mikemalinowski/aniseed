@@ -10,6 +10,7 @@ from Qt import QtWidgets, QtCore, QtGui
 
 from . import Rig
 from . import host
+from . import config
 from . import resources
 
 
@@ -59,7 +60,7 @@ class AppConfig(xstack.app.AppConfig):
 
     additional_settings = {
         "auto_generate_rig_config": True,
-        "rig_config_to_generate": "Rig Configuration : Standard",
+        "default_rig_config": "Rig Configuration : Standard",
     }
 
 
@@ -111,7 +112,7 @@ class AppWidget(xstack.app.AppWidget):
         self.layout().insertWidget(2, self.buttons)
         self.layout().setStretch(0, 1)
         self.layout().setStretch(2, 0)
-
+    #
     # ----------------------------------------------------------------------------------
     def create_new_stack(self):
         """
@@ -120,13 +121,33 @@ class AppWidget(xstack.app.AppWidget):
         """
         stack = super(AppWidget, self).create_new_stack()
 
-        # -- Attempt to add the default configuration if its a new rig
-        if self.app_config.get_setting("auto_generate_rig_config"):
+        default_config = self.app_config.get_setting(
+            "default_rig_config",
+        )
 
-            stack.add_component(
-                component_type=self.app_config.get_setting("rig_config_to_generate"),
-                label=self.app_config.get_setting("rig_config_to_generate")
-            )
+        available_configs = [
+            configuration.identifier
+            for configuration in stack.component_library.plugins()
+            if "Rig Configuration" in configuration.identifier and configuration.identifier != "Rig Configuration"
+        ]
+
+        configuration = qtility.request.item(
+            items=available_configs,
+            current=available_configs.index(default_config),
+            title="Select Rig Configuration",
+            message="Select a configuration to use",
+            editable=False,
+            parent=self,
+        )
+
+        if not configuration:
+            return
+
+        stack.add_component(
+            component_type=configuration,
+            label="Configuration",
+        )
+        self.app_config.store_setting("default_rig_config", configuration)
 
     # ----------------------------------------------------------------------------------
     def additional_menus(self) -> typing.List:

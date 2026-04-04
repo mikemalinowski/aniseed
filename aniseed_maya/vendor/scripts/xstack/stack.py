@@ -185,23 +185,14 @@ class Stack:
                 component_instance.option(option_name).set(value)
 
             except AttributeError:
-                traceback.print_exc()
-                print(component_instance.options())
-                print(
-                    f"{option_name} does not exist as an "
-                    f"option for {component_type}"
-                )
-
+                pass
         # -- Set any input values we were given
         for input_name, value in (inputs or dict()).items():
             try:
                 component_instance.input(input_name).set(value)
 
             except AttributeError:
-                print(
-                    f"{input_name} does not exist as a "
-                    f"input for {component_type}"
-                )
+                pass
 
         # -- Whenever we have value changes, ensure we save the result
         component_instance.changed.connect(self.changed.emit)
