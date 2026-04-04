@@ -3,7 +3,7 @@ import typing
 import aniseed
 import qtility
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class FKSpineComponent(aniseed.RigComponent):
@@ -52,7 +52,7 @@ class FKSpineComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Location",
-            value="lf",
+            value=self.config.middle,
             group="Naming",
             should_inherit=True,
             pre_expose=True,
@@ -63,9 +63,32 @@ class FKSpineComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
         )
+        
+        self.declare_option(
+            name="Joint Count", 
+            value=4, 
+            hidden=False, 
+            pre_expose=True,
+        )
 
         self.declare_output(name="Hip")
         self.declare_output(name="Chest")
+
+    def on_enter_stack(self):
+        # -- Now that we have used the joint count option we dont want
+        # -- the user to see it again so we hide it. We also mark the
+        # -- initialisation step as having run (so it never gets run again).
+        self.option("Joint Count").set_hidden(True)
+
+        # -- Providing the number of joints was not zero then we build
+        # -- the joints and guide (the create guide is called from within
+        # -- the create skeleton function.
+        joint_count = self.option("Joint Count").get()
+        if joint_count:
+            self.user_func_create_skeleton(joint_count=joint_count)
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def option_widget(self, option_name: str):
         if option_name == "Location":
@@ -77,7 +100,7 @@ class FKSpineComponent(aniseed.RigComponent):
 
     def user_functions(self) -> typing.Dict[str, callable]:
         return {
-            "Create Joints": self.user_func_build_skeleton,
+            "Create Joints": self.user_func_create_skeleton,
         }
 
     def is_valid(self):
@@ -85,11 +108,11 @@ class FKSpineComponent(aniseed.RigComponent):
         hip = self.input("Hip").get()
         chest = self.input("Chest").get()
 
-        if not mc.objExists(hip):
+        if not cmds.objExists(hip):
             print(f"{hip} does not exist")
             return False
 
-        if not mc.objExists(chest):
+        if not cmds.objExists(chest):
             print(f"{chest} does not exist")
             return False
 
@@ -117,7 +140,7 @@ class FKSpineComponent(aniseed.RigComponent):
         next_joint = chest_bone
 
         # -- Get all the joints that make up part of the continuous hierarchy
-        long_name = mc.ls(chest_bone, long=True)[0]
+        long_name = cmds.ls(chest_bone, long=True)[0]
         chain = long_name.split("|")
         joints = chain[chain.index(hip_bone):]
 
@@ -141,7 +164,7 @@ class FKSpineComponent(aniseed.RigComponent):
         self._align_control(hip_control, align_to_world)
 
         # -- Store the output
-        self.output("Hip").set(hip_control)
+        self.output("Hip").set(hip_control.ctl)
 
         sway_control = aniseed_toolkit.run(
             "Create Control",
@@ -154,13 +177,13 @@ class FKSpineComponent(aniseed.RigComponent):
         )
         self._align_control(sway_control, align_to_world)
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             sway_control.ctl,
             hip_bone,
             maintainOffset=True,
         )
 
-        mc.scaleConstraint(
+        cmds.scaleConstraint(
             sway_control.ctl,
             hip_bone,
             maintainOffset=True,
@@ -181,13 +204,13 @@ class FKSpineComponent(aniseed.RigComponent):
             )
             self._align_control(spine_control, align_to_world)
 
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 spine_control.ctl,
                 joint,
                 maintainOffset=True,
             )
 
-            mc.scaleConstraint(
+            cmds.scaleConstraint(
                 spine_control.ctl,
                 joint,
                 maintainOffset=True,
@@ -209,13 +232,13 @@ class FKSpineComponent(aniseed.RigComponent):
         # -- Store the chest output
         self.output("Chest").set(chest_control.ctl)
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             chest_control.ctl,
             chest_bone,
             maintainOffset=True,
         )
 
-        mc.scaleConstraint(
+        cmds.scaleConstraint(
             chest_control.ctl,
             chest_bone,
             maintainOffset=True,
@@ -228,7 +251,7 @@ class FKSpineComponent(aniseed.RigComponent):
         if not perform_align_controlment:
             return
 
-        mc.xform(
+        cmds.xform(
             control.org,
             rotation=[0, 0, 0],
             worldSpace=True,
@@ -242,7 +265,7 @@ class FKSpineComponent(aniseed.RigComponent):
             z=90,
         )
 
-    def user_func_build_skeleton(self, joint_count=None):
+    def user_func_create_skeleton(self, joint_count=None):
 
         if not joint_count:
             joint_count = qtility.request.text(
@@ -256,7 +279,7 @@ class FKSpineComponent(aniseed.RigComponent):
             joint_count = int(joint_count)
 
         try:
-            parent = mc.ls(sl=True)[0]
+            parent = cmds.ls(sl=True)[0]
 
         except:
             parent = None
@@ -275,7 +298,7 @@ class FKSpineComponent(aniseed.RigComponent):
         self.input("Hip").set(hip_joint)
         all_joints.append(hip_joint)
 
-        mc.xform(
+        cmds.xform(
             hip_joint,
             rotation=[-90, 0, 90],
             translation=[0, 105, 0],
@@ -294,7 +317,7 @@ class FKSpineComponent(aniseed.RigComponent):
                 config=self.config
             )
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{spine_joint}.translateX",
                 increment
             )
@@ -312,12 +335,9 @@ class FKSpineComponent(aniseed.RigComponent):
         self.input("Chest").set(chest_joint)
         all_joints.append(chest_joint)
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{chest_joint}.translateX",
             increment
         )
+        cmds.select(hip_joint)
 
-        mc.select(hip_joint)
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to(all_joints, set_name="deformers")

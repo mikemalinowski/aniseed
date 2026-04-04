@@ -78,6 +78,10 @@ class SimpleIKComponent(aniseed.RigComponent):
             name="Blended Tip",
         )
 
+    def on_enter_stack(self):
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
+
     def option_widget(self, option_name: str):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)

@@ -91,16 +91,16 @@ class LocalisedSkinCopy(object):
     @classmethod
     def snapshot_vertices(cls):
 
-        LocalisedSkinCopy._STORED_MESH = cmds.selected(o=True)[0]
+        LocalisedSkinCopy._STORED_MESH = cmds.ls(selection=True, o=True)[0]
         LocalisedSkinCopy._STORED_VERTICES = list()
 
-        for vtx in cmds.selected(flatten=True):
-            LocalisedSkinCopy._STORED_VERTICES.append(vtx.index())
+        for vtx in cmds.ls(selection=True, flatten=True):
+            LocalisedSkinCopy._STORED_VERTICES.append(vtx.split("[")[-1].split("]")[0])
 
     @classmethod
     def copy_skinweights(cls):
 
-        if not cmds.selected():
+        if not cmds.ls(selection=True):
             print('No mesh to copy weights from')
 
         if not LocalisedSkinCopy._STORED_MESH:
@@ -109,7 +109,7 @@ class LocalisedSkinCopy(object):
         if not LocalisedSkinCopy._STORED_VERTICES:
             print('No vertices to copy to')
 
-        source_mesh = cmds.selected()[0]
+        source_mesh = cmds.ls(selection=True)[0]
         cmds.select(clear=True)
 
         # -- Duplicate the mesh
@@ -118,7 +118,7 @@ class LocalisedSkinCopy(object):
         # -- Copy the skin weights
         copy_skin_to_unbound_meshes(
             skinned_mesh=str(source_mesh),
-            unskinned_meshes=[str(new_mesh)],
+            unbound_meshes=[str(new_mesh)],
         )
 
         # -- Now we need to copy the weights of the stored vertices
@@ -126,12 +126,12 @@ class LocalisedSkinCopy(object):
         for vtx_id in LocalisedSkinCopy._STORED_VERTICES:
 
             cmds.select('%s.vtx[%s]' % (new_mesh, vtx_id))
-            mel.CopyVertexWeights()
-            mel.artAttrSkinWeightCopy()
+            mel.eval("CopyVertexWeights;")
+            mel.eval("artAttrSkinWeightCopy;")
 
             cmds.select('%s.vtx[%s]' % (cls._STORED_MESH, vtx_id))
-            mel.PasteVertexWeights()
-            mel.artAttrSkinWeightPaste()
+            mel.eval("PasteVertexWeights;")
+            mel.eval("artAttrSkinWeightPaste;")
 
         cmds.delete(new_mesh)
 

@@ -88,6 +88,7 @@ from .core import get
 from .core import snap
 from .core import snappable
 from .core import groups
+from .core import groups_in_namespace
 from .core import members
 
 from . app import launch

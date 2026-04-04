@@ -6,46 +6,7 @@ import aniseed_toolkit
 import maya.cmds as mc
 
 
-class CreateMultiBoneSoftIkSetup(aniseed_toolkit.Tool):
-
-    identifier = "Create Multi Bone Soft Ik"
-    classification = "Rigging"
-    categories = [
-        "Rigging",
-    ]
-
-    def run(
-        self,
-        root_target: str = "",
-        end_target: str = "",
-        root_joint: str = "",
-        end_joint: str = "",
-        host: str = "",
-    ):
-        """
-        This will create a Soft IK setup to a pre-existing n-bone IK setup.
-
-        Args:
-            root_target: A node to represent the roots transform
-            end_target: A node which we can track for distances (typically whatever
-                is driving the pre-existing ik handle
-            root_joint: The first joint in the chain
-            end_joint: The last joint in the chain
-            host: The node which all the attributes should be added to
-
-        Returns:
-            None
-        """
-        return create(
-            root_target,
-            end_target,
-            root_joint,
-            end_joint,
-            host,
-        )
-
-
-def create(root_target, end_target, root_joint, end_joint, host=None):
+def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, host=None):
     """
     This will create a Soft IK setup to a pre-existing n-bone IK setup.
 
@@ -261,20 +222,24 @@ def create(root_target, end_target, root_joint, end_joint, host=None):
             float_attrs["Joint%sAddition" % idx],
         )
 
-        if facing_direction == facing_direction.NegativeX:
-            upper_attr = multiply(
-                upper_attr,
-                1, #-1,
-            )
-
         mc.connectAttr(
             upper_attr,
             f"{conditions[idx]}.colorIfTrueR",
         )
 
+        multiplier = 1
+
+        if facing_direction == facing_direction.NegativeX:
+            multiplier = -1
+
+        final_mul = multiply(
+            f"{conditions[idx]}.outColorR",
+            multiplier,
+        )
+
         # -- Finally, conect the attributes to the joints
         mc.connectAttr(
-            f"{conditions[idx]}.outColorR",
+            final_mul, #f"{conditions[idx]}.outColorR",
             f"{full_chain[idx + 1]}.translateX",
             force=True,
         )

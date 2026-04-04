@@ -72,6 +72,7 @@ class AppWidget(xstack.app.AppWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
+        self.buttons = None
         super(AppWidget, self).__init__(*args, **kwargs)
 
         self._host = ""
@@ -82,6 +83,34 @@ class AppWidget(xstack.app.AppWidget):
         # -- If we have any rigs, use the first one as the active rig by default
         if rigs:
             self.switch_rig(rigs[0])
+
+    # ----------------------------------------------------------------------------------
+    def set_active_stack(self, stack: "xstack.Stack" or None):
+        super(AppWidget, self).set_active_stack(stack)
+
+        # -- We dynamically show a button for each execution block component
+        # -- in the stack.
+        self.create_buttons()
+
+    # ----------------------------------------------------------------------------------
+    def create_buttons(self):
+        """
+        This creates a button widget which shows a button for each execution component
+        in the stack
+        """
+        if self.buttons:
+            self.buttons.setParent(None)
+            self.buttons.deleteLater()
+
+        if not self.stack:
+            return
+
+        # -- Add the button layout
+        self.buttons = ButtonWidget(app_widget=self)
+        self.stack.changed.connect(self.buttons.populate)
+        self.layout().insertWidget(2, self.buttons)
+        self.layout().setStretch(0, 1)
+        self.layout().setStretch(2, 0)
 
     # ----------------------------------------------------------------------------------
     def create_new_stack(self):
@@ -206,18 +235,45 @@ class AppWidget(xstack.app.AppWidget):
         pass
 
 
+class ButtonWidget(QtWidgets.QWidget):
+
+    def __init__(self, app_widget, *args, **kwargs):
+        super(ButtonWidget, self).__init__(*args, **kwargs)
+
+        self.app_widget = app_widget
+
+        self.setLayout(QtWidgets.QHBoxLayout())
+
+        self.populate()
+
+    def populate(self):
+        qtility.layouts.empty(self.layout())
+
+        if not self.app_widget.stack:
+            return
+        execution_blocks = self.app_widget.stack.components(
+            of_type="Stack : Execution Block")
+
+        for execution_block in execution_blocks:
+            button = QtWidgets.QPushButton(execution_block.label())
+            button.clicked.connect(
+                functools.partial(
+                    self.app_widget.build,
+                    build_below=execution_block,
+                ),
+            )
+            self.layout().addWidget(button)
+
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
-class AppWindow(QtWidgets.QMainWindow):
+class AppWindow(qtility.windows.MemorableWindow):
     """
     This is the dockable window wrapper which defines the window and allows
     it to dock in maya
     """
 
-    OBJECT_NAME = "xstackBuilderWindow"
-
     def __init__(self, app_config=AppConfig, allow_threading=True, *args, **kwargs):
-        super(AppWindow, self).__init__(*args, **kwargs)
+        super(AppWindow, self).__init__(storage_identifier=f"aniseed_{qtility.windows.host()}", *args, **kwargs)
 
         self.app_config = app_config
 

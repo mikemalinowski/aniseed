@@ -66,9 +66,8 @@ class ArmComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Location",
-            value="lf",
+            value=self.config.left,
             group="Naming",
-            should_inherit=True,
             pre_expose=True,
         )
 
@@ -101,7 +100,6 @@ class ArmComponent(aniseed.RigComponent):
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Lower Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Build Skeleton", value=True, pre_expose=True)
-        self.declare_option(name="LinkedGuide", value="", hidden=True)
         
         # -- Declare our outputs so other components can access them
         self.declare_output(
@@ -114,13 +112,12 @@ class ArmComponent(aniseed.RigComponent):
 
         self.declare_output(
             name="Blended Hand",
-        )
-        self.declare_output(
-            name="Aligned Hand",
+            is_default=True,
         )
 
         self.declare_output("Upvector")
         self.declare_output("Ik Hand")
+        self.declare_output("Shoulder")
 
         # -- Declare our build properties - this is only required because i have
         # -- chosen within this component to break up the long build script
@@ -146,14 +143,6 @@ class ArmComponent(aniseed.RigComponent):
         self.nk_joints: list[str] = []
         self.shape_rotation = [90, 0, 0]
 
-    def on_build_started(self) -> None:
-        """
-        When the build starts, lets ensure we dont have a guide still 
-        """
-        linked_guide = self.option("LinkedGuide").get()
-        if linked_guide and cmds.objExists(linked_guide):
-            self.user_func_remove_guide()
-    
     def on_enter_stack(self):
         """
         When this enters the stack we can build the skeleton structure
@@ -185,15 +174,15 @@ class ArmComponent(aniseed.RigComponent):
             lower_twist_count=lower_twist_count.get(),
         )
 
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent(tags=["fk tip", "chest", "tip"])
+
     def on_removed_from_stack(self):
         """
         This is triggered when we remove the item from the stack, so we take
         a moment to clear the joints and reparent any joints from outside
         the component.
         """
-        # -- Remove the guide
-        self.user_func_remove_guide()
-
         # -- Remove the joints (re-parenting any children)
         new_parent = mref.get(self.input("Shoulder").get()).parent()
         aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
@@ -206,7 +195,7 @@ class ArmComponent(aniseed.RigComponent):
         This allows us to provide dedicate widgets for specific options
         """
         if option_name == "Location":
-            return aniseed.widgets.LocationSelector(self.config)
+            return aniseed.widgets.LocationSelector(self.config, self.option(option_name).get())
 
     def input_widget(self, requirement_name):
         """
@@ -242,15 +231,6 @@ class ArmComponent(aniseed.RigComponent):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
             return menu
 
-        linked_guide = self.option("LinkedGuide").get()
-        if linked_guide and cmds.objExists(linked_guide):
-            # -- Depending on whether we have a guide or not, change what we show
-            # -- in the actions menu
-            menu["Remove Guide"] = functools.partial(self.user_func_remove_guide)
-            menu["Toggle Joint Selectability"] = functools.partial(self.user_func_toggle_joint_selectability)
-        else:
-            menu["Create Guide"] = functools.partial(self.user_func_create_guide)
-
         menu["Create Mirrored Component"] = functools.partial(self.user_func_create_mirror)
         return menu
 
@@ -259,14 +239,12 @@ class ArmComponent(aniseed.RigComponent):
         This gives us the chance to validate the skeleton
         before we commit to building.
         """
-        arm_joints = aniseed_toolkit.run(
-            "Get Joints Between",
+        arm_joints = aniseed_toolkit.joints.get_between(
             self.input("Shoulder").get(),
             self.input("Hand").get(),
         )[1:]
 
-        direction = aniseed_toolkit.run(
-            "Get Chain Facing Direction",
+        direction = aniseed_toolkit.direction.get_chain_facing_direction(
             arm_joints[0],
             arm_joints[-1],
         )
@@ -300,8 +278,7 @@ class ArmComponent(aniseed.RigComponent):
         )
         self._create_controls()
 
-        ikfk_setup = aniseed_toolkit.run(
-            "Create Two Bone IKFK",
+        ikfk_setup = aniseed_toolkit.rigging.create_two_bone_ikfk(
             parent=self.shoulder_control.ctl,
             root_joint=self.arm_joints[1],
             end_joint=self.arm_joints[-1],
@@ -309,32 +286,40 @@ class ArmComponent(aniseed.RigComponent):
             attribute_name="ikfk",
             constrain=True,
             soft_ik=self.option("Apply Soft Ik").get(),
+            soft_ik_host=self.ik_hand_control.ctl,
         )
-        for node in ikfk_setup.all_nodes:
-            cmds.rename(
-                node,
+
+        # -- Create the guide line
+        aniseed_toolkit.guide.link(
+            self.upvector_control.ctl,
+            ikfk_setup.ik_chain[1].name(),
+        )
+
+        for node in ikfk_setup.all_nodes():
+            node.rename(
                 self.config.generate_name(
                     classification="mech",
-                    description=f"{self.prefix}Arm{node}",
+                    description=f"{self.prefix}Arm{node.name()}",
                     location=self.location,
                 ),
             )
 
+
         cmds.parentConstraint(
             self.ik_hand_control.ctl,
-            ikfk_setup.out_ik_target,
+            ikfk_setup.ik_target.name(),
             maintainOffset=True,
         )
         cmds.parentConstraint(
             self.upvector_control.ctl,
-            ikfk_setup.out_ik_upvector,
+            ikfk_setup.ik_upvector.name(),
             maintainOffset=False,
         )
 
-        for idx, fk_marker in enumerate(ikfk_setup.out_fk_joints):
+        for idx, fk_marker in enumerate(ikfk_setup.fk_chain):
             cmds.parentConstraint(
                 self.fk_controls[idx],
-                fk_marker,
+                fk_marker.name(),
                 maintainOffset=True,
             )
 
@@ -361,10 +346,7 @@ class ArmComponent(aniseed.RigComponent):
         fk_visibility_attribute = f"{self.config_control.ctl}.show_fk"
 
         for ik_control in self.ik_controls:
-            ik_control = aniseed_toolkit.run(
-                "Get Control",
-                ik_control,
-            )
+            ik_control = aniseed_toolkit.control.get(ik_control)
             cmds.connectAttr(
                 f"{self.config_control.ctl}.show_ik",
                 f"{ik_control.off}.visibility",
@@ -372,17 +354,14 @@ class ArmComponent(aniseed.RigComponent):
             )
 
         for fk_control in self.fk_controls:
-            fk_control = aniseed_toolkit.run(
-                "Get Control",
-                fk_control,
-            )
+            fk_control = aniseed_toolkit.control.get(fk_control)
             cmds.connectAttr(
                 f"{self.config_control.ctl}.show_fk",
                 f"{fk_control.off}.visibility",
                 force=True,
             )
 
-        self.nk_joints = ikfk_setup.out_blend_joints
+        self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
         self._create_twist_setup()
         self._set_outputs()
@@ -509,8 +488,7 @@ class ArmComponent(aniseed.RigComponent):
         self.ik_controls.append(self.upvector_control.ctl)
         cmds.xform(
             self.upvector_control.org,
-            translation=aniseed_toolkit.run(
-                "Calculate Upvector Position",
+            translation=aniseed_toolkit.transformation.calculate_upvector_position(
                 point_a=self.arm_joints[1],
                 point_b=self.arm_joints[2],
                 point_c=self.arm_joints[3],
@@ -526,7 +504,7 @@ class ArmComponent(aniseed.RigComponent):
             )
 
     def _create_snap(self):
-        group = "Arm_%s_%s" % (
+        group = "IKFK_Arm_%s_%s" % (
             self.prefix,
             self.location,
         )
@@ -585,8 +563,7 @@ class ArmComponent(aniseed.RigComponent):
             twist_component.run()
 
             for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.run(
-                    "Rotate Shapes",
+                aniseed_toolkit.shapes.rotate(
                     twist,
                     *self.shape_rotation,
                 )
@@ -611,8 +588,7 @@ class ArmComponent(aniseed.RigComponent):
             twist_component.run()
 
             for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.run(
-                    "Rotate Shapes",
+                aniseed_toolkit.shapes.rotate(
                     twist,
                     *self.shape_rotation,
                 )
@@ -625,6 +601,7 @@ class ArmComponent(aniseed.RigComponent):
         self.output("Blended Upper Arm").set(self.nk_joints[0])
         self.output("Blended Lower Arm").set(self.nk_joints[1])
         self.output("Blended Hand").set(self.nk_joints[2])
+        self.output("Shoulder").set(self.shoulder_control.ctl)
 
     def user_func_create_skeleton(self, parent=None, upper_twist_count=None, lower_twist_count=None):
         """
@@ -696,153 +673,17 @@ class ArmComponent(aniseed.RigComponent):
             )
             self.input("Lower Twist Joints").set(lower_twists)
 
-        # -- Immediately enter guide mode
-        guides = self.user_func_create_guide()
-
-        # -- If we have a parent, then match the translation to it, this
-        # -- just makes the riggers life a little easier as the component
-        # -- will show in a contextually relevant locaiton.
-        aniseed_toolkit.transformation.snap_position(guides[0], parent)
-
-        # -- Add our joints to a deformers set. If we're given twists, then we
-        # -- use them + the hand. Otherwise we use the arm joints themselves.
-        deformers = all_joints
-        if upper_twist_count:
-            deformers = upper_twists + lower_twists + [all_joints[3]]
-        aniseed_toolkit.sets.add_to(deformers, set_name="deformers")
-
-    def user_func_create_guide(self):
-        """
-        This will generate a guide, making it easier to manipulate the
-        skeleton.
-        """
-        # -- Check if the guide already exists first
-        if self.has_guide():
-            return []
-
-        guide_org = mref.create("transform", name="arm_guide", parent=None)
-
-        # -- Create the guides for the joints (replicate chain and apply ik?)
-        root_joint = self.input("Shoulder").get()
-        hand_joint = self.input("Hand").get()
-        arm_joints = aniseed_toolkit.joints.get_between(root_joint, hand_joint)
-
-        # -- Create the shoulder guide
-        shoulder_guide = aniseed_toolkit.guide.create(
-            root_joint,
-            parent=guide_org.full_name()
-        )
-        # -- Scale the shape of the first guide (its always easier for the rigger
-        # -- if the first guide of a component is larger)
-        aniseed_toolkit.shapes.scale(shoulder_guide, scale_by=1.5)
-
-        # -- Create the guide setup for the ik
-        ik_org, guides = aniseed_toolkit.guide.create_ik_guide(
-            start=arm_joints[1],
-            end=arm_joints[3],
-            parent=shoulder_guide,
-            constrain_end_orientation=True,
-            link_to=shoulder_guide,
-        )
-
-        # -- Insert the shoulder guide
-        guides.insert(0, shoulder_guide)
-
-        # -- Ensure the twisters are tweened
-        aniseed_toolkit.guide.create_tweens(
-            drive_these=self.input("Upper Twist Joints").get(),
-            from_this=guides[1],
-            to_this=guides[2],
-            parent=guide_org.full_name(),
-        )
-        aniseed_toolkit.guide.create_tweens(
-            drive_these=self.input("Lower Twist Joints").get(),
-            from_this=guides[2],
-            to_this=guides[3],
-            parent=guide_org.full_name(),
-        )
-        # -- Finally make the joints unselectable
-        aniseed_toolkit.joints.make_referenced(self.all_joints())
-
-        self.option("LinkedGuide").set(guide_org.name())
-
-        # -- If there is a parent of the root then we constrain our
-        # -- setup to that
-        root_joint = mref.get(root_joint)
-        if root_joint.parent():
-            cmds.parentConstraint(
-                root_joint.parent().full_name(),
-                guide_org.full_name(),
-                maintainOffset=True,
-            )
-
-        return guides
-
-    def user_func_remove_guide(self):
-        """
-        This will remove the guide from the scene
-        """
-        if not self.has_guide():
-            return
-
-        # -- Make sure all joints are selectable
-        aniseed_toolkit.joints.unreference(self.all_joints())
-
-        linked_guide = self.option("LinkedGuide").get()
-
-        if linked_guide and cmds.objExists(linked_guide):
-            with aniseed_toolkit.joints.HeldTransforms(self.all_joints()):
-                cmds.delete(linked_guide)
-            self.option("LinkedGuide").set(None)
-
-    def user_func_toggle_joint_selectability(self):
-        """
-        This will make all the joints either unselectable or selectable
-        """
-        joints = self.all_joints()
-        if aniseed_toolkit.joints.is_referenced(joints[0]):
-            aniseed_toolkit.joints.unreference(joints)
-        else:
-            aniseed_toolkit.joints.make_referenced(joints)
-
     def user_func_create_mirror(self):
         """
         This will create a mirrored version of the component
         """
-        location = self.option("Location").get()
-
-        if location not in [self.config.left, self.config.right]:
-            print("You can only mirror if the component is left or right")
-            return
-
-        # -- Get the opposite location
-        location = self.config.left if location == self.config.right else self.config.right
-
-        # -- Select the parent joint and duplicate ourselves (setting hte label so
-        # -- we know its mirrored
-        cmds.select(cmds.listRelatives(self.input("Shoulder").get(), parent=True)[0])
-        mirrored_component = self.duplicate(
+        aniseed_toolkit.component.mirror(
+            component_instance=self,
+            transforms=self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Shoulder").get()).parent().name(),
             input_overrides={"Shoulder": ""},
-            option_overrides={"Location": location, "LinkedGuide": ""},
-        )
-        mirrored_component.set_label(f"{self.label()} (Mirrored)")
-
-        # -- Get the two guides, as we need to match them
-        this_guide = self.option("LinkedGuide").get()
-        mirrored_guide = mirrored_component.option("LinkedGuide").get()
-
-        # -- Get all the guide elements
-        guides_from_this_component = aniseed_toolkit.tagging.all_children(this_guide, "guide")
-        guides_from_mirrored_component = aniseed_toolkit.tagging.all_children(mirrored_guide, "guide")
-
-        # -- Perform the match
-        for guide, mirrored_guide in zip(guides_from_this_component, guides_from_mirrored_component):
-            mref.get(mirrored_guide).match_to(mref.get(guide))
-
-        # -- Now we do an in-place mirror
-        aniseed_toolkit.mirror.global_mirror(
-            transforms=guides_from_mirrored_component,
-            name_replacement={},
         )
 
     def all_joints(self):
@@ -866,13 +707,3 @@ class ArmComponent(aniseed.RigComponent):
         all_joints = arm_joints + upper_twists + lower_twists
 
         return [joint for joint in all_joints if joint]
-
-    def has_guide(self):
-        """
-        Checks whether this has a valid guide or not
-        """
-        # -- Check if the guide already exists first
-        guide = self.option("LinkedGuide").get()
-        if guide and cmds.objExists(guide):
-            return True
-        return False

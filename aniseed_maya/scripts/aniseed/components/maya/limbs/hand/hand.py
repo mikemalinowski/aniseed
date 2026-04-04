@@ -1,6 +1,5 @@
 import os
 import mref
-import qtility
 import aniseed
 import aniseed_toolkit
 from maya import cmds
@@ -110,12 +109,7 @@ class HandComponent(aniseed.RigComponent):
             group="Creation",
         )
 
-        self.declare_option(
-            name="LinkedGuide",
-            value="",
-            hidden=True,
-        )
-        self.declare_output("Hand")
+        self.declare_output("Hand", is_default=True)
 
     def on_enter_stack(self):
         """
@@ -128,9 +122,21 @@ class HandComponent(aniseed.RigComponent):
         self.option("Omit Hand Joint").set_hidden(True)
         self.option("Create Joints").set_hidden(True)
 
-    def on_build_started(self) -> None:
-        if self.guide():
-            self.user_func_remove_guide()
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
+
+    def on_removed_from_stack(self):
+        """
+        When the component is removed from the stack we need to remove the
+        guide and bones too.
+        """
+        # -- Remove the joints (re-parenting any children)
+        new_parent = mref.get(self.input("Hand Joint").get()).parent()
+        aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
+
+        # -- Now delete our leg chain and joints
+        cmds.delete(self.all_joints())
+
 
     def input_widget(self, requirement_name: str):
         """
@@ -165,12 +171,7 @@ class HandComponent(aniseed.RigComponent):
             menu["Create Joints"] = self.user_func_create_skeleton
             return menu
 
-        if self.guide():
-            menu["Remove Guide"] = self.user_func_remove_guide
-            menu["Toggle Joint Selectability"] = self.user_func_toggle_joint_selectability
-        else:
-            menu["Create Guide"] = self.user_func_create_guide
-
+        menu["Create Mirror"] = self.user_func_create_mirror
         return menu
 
     def is_valid(self):
@@ -561,11 +562,15 @@ class HandComponent(aniseed.RigComponent):
         # -- Now we set our inputs
         self.input("Hand Joint").set(output_hand)
 
-        # -- Finally, we build the guide
-        self.user_func_create_guide()
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to(all_joints, set_name="deformers")
+    def user_func_create_mirror(self):
+        aniseed_toolkit.component.mirror(
+            component_instance=self,
+            transforms=self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Hand Joint").get()).parent().name(),
+            input_overrides={"Hand Joint": "", "Finger Tips": []},
+        )
 
     @classmethod
     def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None):
@@ -631,104 +636,6 @@ class HandComponent(aniseed.RigComponent):
         v = ((idx + 1) / (len(items) - 1)) - increment
         v = 1.0 - (v * 2.0)
         return v
-
-    def user_func_create_guide(self):
-
-        # -- If the guide already exists, then we do not need to do anything
-        # -- more.
-        if self.guide():
-            return
-
-        # -- Read our option data
-        hand_joint = self.input("Hand Joint").get()
-        digit_count = self.option("Digit Count").get()
-        use_metacarpals = self.option("Use Metacarpals").get()
-        finger_tips = self.input("Finger Tips").get()
-        thumb_tip = self.input("Thumb Tip").get()
-        omit_hand_joint = self.option("Omit Hand Joint").get()
-
-        # -- Create the org node
-        org = mref.create("transform", name="hand_guide").full_name()
-
-        # -- Create the hand guide
-        hand_guide = aniseed_toolkit.guide.create(
-            joint=self.input("Hand Joint").get(),
-            parent=org,
-            scale=1.25,
-            constrain=not self.option("Omit Hand Joint").get(),
-        )
-
-        for idx, finger_tip in enumerate([thumb_tip] + finger_tips):
-            finger_root = self.get_parent(finger_tip, digit_count - 1)
-            metacarpal = self.get_parent(finger_tip, digit_count)
-            other_digits = aniseed_toolkit.joints.get_between(finger_root, finger_tip)[1:]
-
-            guide_parent = hand_guide
-
-            if idx and use_metacarpals:
-                metacarpal_guide = aniseed_toolkit.guide.create(
-                    joint=metacarpal,
-                    parent=guide_parent,
-                    scale=0.5,
-                    link_to=guide_parent,
-                )
-                guide_parent = metacarpal_guide
-
-            finger_root_guide = aniseed_toolkit.guide.create(
-                joint=finger_root,
-                parent=guide_parent,
-                scale=1,
-                link_to=guide_parent,
-            )
-            guide_parent = finger_root_guide
-
-            for digit in other_digits:
-                digit_guide = aniseed_toolkit.guide.create(
-                    joint=digit,
-                    parent=guide_parent,
-                    scale=0.5,
-                    link_to=guide_parent,
-                )
-                guide_parent = digit_guide
-
-        self.option("LinkedGuide").set(org)
-        aniseed_toolkit.joints.make_referenced(self.all_joints())
-
-        # -- If there is a parent of the root then we constrain our
-        # -- setup to that
-        root_joint = mref.get(hand_joint)
-        if root_joint.parent():
-            cmds.parentConstraint(
-                root_joint.parent().full_name(),
-                org,
-                maintainOffset=True,
-            )
-
-    def user_func_remove_guide(self):
-
-        if not self.guide():
-            return
-
-        with aniseed_toolkit.joints.HeldTransforms(self.all_joints()):
-            cmds.delete(self.guide())
-
-        aniseed_toolkit.joints.unreference(self.all_joints())
-
-    def guide(self):
-        guide = self.option("LinkedGuide").get()
-        if guide and cmds.objExists(guide):
-            return guide
-        return None
-
-    def user_func_toggle_joint_selectability(self):
-        """
-        This will make all the joints either unselectable or selectable
-        """
-        joints = self.all_joints()
-        if aniseed_toolkit.joints.is_referenced(joints[0]):
-            aniseed_toolkit.joints.unreference(joints)
-        else:
-            aniseed_toolkit.joints.make_referenced(joints)
 
     def all_joints(self):
         """

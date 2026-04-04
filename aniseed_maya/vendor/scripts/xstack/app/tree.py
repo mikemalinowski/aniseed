@@ -151,7 +151,6 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             return None
 
         if not hasattr(selected_item, "component"):
-            print(f"{selected_item} has no component")
             return None
 
         return selected_item.component
@@ -215,7 +214,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         else:
             index = None
-        former_parent = child_component.parent
+
         child_component.set_parent(parent_component, child_index=index)
         self.populate()
 

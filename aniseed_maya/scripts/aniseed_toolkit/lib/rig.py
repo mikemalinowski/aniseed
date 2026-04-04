@@ -3,13 +3,14 @@ from maya import cmds
 from . import control
 
 
-def all_controls():
+def all_controls(namespace: str = "") -> list[str]:
     controls = []
 
     for control_node in cmds.controller(query=True, allControllers=True):
-        print("control node : %s" % control_node)
+        if namespace and not control_node.startswith(namespace):
+            continue
+
         root_node = cmds.ls(control_node, long=True)[0].split("|")[1]
-        print("    root node : %s" % root_node)
         if cmds.objExists(f"{root_node}.aniseed_rig"):
             controls.append(control_node)
 

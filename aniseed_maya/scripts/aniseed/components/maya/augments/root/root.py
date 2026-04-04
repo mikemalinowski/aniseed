@@ -40,7 +40,8 @@ class GlobalControlRoot(aniseed.RigComponent):
 
         self.declare_output(
             name="Main Control",
-            description="The main control that the rest of the rig will move with"
+            description="The main control that the rest of the rig will move with",
+            is_default=True,
         )
 
         self.declare_output(

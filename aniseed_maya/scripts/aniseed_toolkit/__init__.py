@@ -6,6 +6,7 @@ from .core import Tool
 from .core import ToolBox
 from .core import run
 from .lib import *
+from .lib import rigging
 
 from . import resources
 from .app.widgets import launch

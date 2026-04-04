@@ -33,7 +33,6 @@ class CustomLineEdit(QtWidgets.QLineEdit):
         last_menu = menu
 
         while parent:
-
             submenu = QtWidgets.QMenu(parent.label())
 
             for output in parent.outputs():
@@ -56,7 +55,7 @@ class CustomLineEdit(QtWidgets.QLineEdit):
             parent = parent.parent
 
             # -- The last parent is the rig, so dont add that
-            if not parent or parent.parent:
+            if not parent:
                 break
 
             last_menu = submenu

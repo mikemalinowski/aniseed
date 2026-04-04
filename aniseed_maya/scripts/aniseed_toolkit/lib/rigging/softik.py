@@ -3,54 +3,11 @@ import aniseed_toolkit
 import maya.cmds as mc
 
 
-class CreateSoftIkSetup(aniseed_toolkit.Tool):
+def create_two_bone_soft_ik(root, target, second_joint, third_joint, host=None):
 
-    identifier = "Create Soft Ik"
-    classification = "Rigging"
-    categories = [
-        "Rigging",
-    ]
-
-    @classmethod
-    def ui_elements(cls, keyword_name):
-        if keyword_name in ["root", "target", "second_joint", "third_joint"]:
-            return aniseed.widgets.ObjectSelector()
-
-    def run(
-        self,
-        root: str = "",
-        target: str = "",
-        second_joint: str = "",
-        third_joint: str = "",
-        host: str = "",
-    ):
-        """
-        This will create a Soft IK setup to a pre-existing three bone IK setup.
-
-        Args:
-            root: The starting root of the joint in the three bone setup
-            target: A node which we can track for distances (typically whatever
-                is driving the pre-existing ik handle
-            second_joint: The second joint in the three bone setup
-            third_joint: The third joint in the three bone setup
-            host: The node which all the attributes should be added to
-
-        Returns:
-            None
-        """
-        return create(
-            root,
-            target,
-            second_joint,
-            third_joint,
-            host,
-        )
-
-
-def create(root, target, second_joint, third_joint, host=None):
-
-    facing_direction = aniseed_toolkit.run(
-        "Get Chain Facing Direction",
+    print(second_joint)
+    print(third_joint)
+    facing_direction = aniseed_toolkit.direction.get_chain_facing_direction(
         second_joint,
         third_joint,
     )

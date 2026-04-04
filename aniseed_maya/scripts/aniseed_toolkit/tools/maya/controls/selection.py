@@ -12,14 +12,19 @@ class SelectControls(aniseed_toolkit.Tool):
         "Controls",
     ]
 
-    def run(self):
+    def run(self, namespace: str = ""):
         """
         This will select all the controls for the given rig (if there is a selection
         or all the controls in all rigs if there is not a selection).
         """
+        namespace = ""
+        if mc.ls(selection=True):
+            namespace = mc.ls(selection=True)[0].split(":")[0]
+
         mc.select(
             aniseed_toolkit.run(
                 "Get Controls",
+                namespace,
             ),
         )
 
@@ -66,7 +71,7 @@ class ZeroRig(aniseed_toolkit.Tool):
         "Controls",
     ]
 
-    def run(self, key_on_reset: bool = False):
+    def run(self, key_on_reset: bool = False, namespace: str = ""):
         """
         This will zero out all the animatable channels for the selected
         controls.
@@ -78,8 +83,11 @@ class ZeroRig(aniseed_toolkit.Tool):
         Returns:
             None
         """
+        namespace = ""
+        if mc.ls(selection=True):
+            namespace = mc.ls(selection=True)[0].split(":")[0]
 
-        for control in aniseed_toolkit.run("Get Controls"):
+        for control in aniseed_toolkit.run("Get Controls", namespace):
             aniseed_toolkit.run("Zero Control", control)
 
             if key_on_reset:
@@ -100,6 +108,7 @@ class SelectOpposite(aniseed_toolkit.Tool):
         """
         This will select controls of the opposing location (side)
         """
+
         mc.select(
             aniseed_toolkit.run("Get Opposites"),
         )

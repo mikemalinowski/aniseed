@@ -15,42 +15,6 @@ class StandaloneHost(aniseed.EmbeddedHost):
 
     priority = 0
 
-    def launch(self):
-        """
-        This is responsible for launching the application within the
-        current host.
-        """
-        if DockableMayaApp.instance():
-            DockableMayaApp.instance().show()
-            return
-
-        DockableMayaApp.remove_workspace_control(
-            DockableMayaApp.OBJECT_NAME + "WorkspaceControl"
-        )
-
-        # -- Instance the tool
-        window = DockableMayaApp(
-            parent=qtility.windows.application(),
-        )
-
-        # -- Ensure its correctly docked in the ui
-        window.show(
-            dockable=True,
-            area='right',
-            floating=False,
-            # retain=False,
-        )
-
-        cmds.workspaceControl(
-            f'{window.objectName()}WorkspaceControl',
-            e=True,
-            ttc=["AttributeEditor", -1],
-            wp="preferred",
-            mw=150,
-        )
-        return True
-
-
     def environment_initialization(self):
         """
         This should hold any functionality required to be triggered when
@@ -76,11 +40,13 @@ class StandaloneHost(aniseed.EmbeddedHost):
             "Get Joint Writer Supported Types",
         )
 
-        nodes = [
-            n
-            for n in nodes
-            if cmds.nodeType(n) in supported_types
-        ]
+        resolved_nodes = []
+
+        for node in nodes:
+            try:
+                if cmds.nodeType(node) in supported_types:
+                    resolved_nodes.append(node)
+            except RuntimeError: pass
 
         return dict(
             hierarchy=aniseed_toolkit.run(
@@ -113,6 +79,7 @@ class MenuBuilder:
         "xstack",
         "xstack_app",
         "crosswalk",
+        "mref",
     ]
 
     # noinspection PyUnresolvedReferences
@@ -200,7 +167,7 @@ class MenuBuilder:
     # noinspection PyUnresolvedReferences
     @classmethod
     def _launch_app(cls, *args, **kwargs):
-        cmds.evalDeferred("import aniseed;print(aniseed.__file__);aniseed.app.launch()")
+        cmds.evalDeferred("import aniseed;aniseed.app.launch()")
 
 
     # noinspection PyUnresolvedReferences
@@ -218,12 +185,8 @@ class MenuBuilder:
     # noinspection PyUnresolvedReferences
     @classmethod
     def _menu_reload(cls, *args, **kwargs):
-
-
         for package in cls.CRITICAL_MODULES:
             blackout.drop(package)
-
-        cmds.evalDeferred("import aniseed;aniseed.app.launch()")
 
     @classmethod
     def _menu_show_version_data(cls, *args, **kwargs):

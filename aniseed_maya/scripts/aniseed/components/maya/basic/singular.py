@@ -1,6 +1,6 @@
+import mref
 import aniseed
 import aniseed_toolkit
-import mref
 from maya import cmds
 
 
@@ -62,7 +62,7 @@ class Singular(aniseed.RigComponent):
             group="Behaviour",
         )
 
-        self.declare_output(name="Control")
+        self.declare_output(name="Control", is_default=True)
 
     def suggested_label(self):
         return self.option("Description").get()
@@ -87,6 +87,7 @@ class Singular(aniseed.RigComponent):
         parent = selection[0] if selection else None
 
         joint = mref.create("joint", parent=parent)
+        joint.set_parent(parent)
         joint.rename(
             self.config.generate_name(
                 classification=self.config.joint,
@@ -98,6 +99,9 @@ class Singular(aniseed.RigComponent):
             joint.match_to(parent)
 
         self.input("Joint").set(joint.name())
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def is_valid(self) -> bool:
         if not self.input("Parent").get(resolved=False):

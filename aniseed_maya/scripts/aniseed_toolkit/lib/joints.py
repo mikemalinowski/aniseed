@@ -235,7 +235,7 @@ def get_between(
     # -- Get all the joints that make up part of the continuous hierarchy
     long_name = cmds.ls(end, long=True)[0]
     chain = long_name.split("|")
-    joints = chain[chain.index(start):]
+    joints = chain[chain.index(start.split("|")[-1]):]
     return joints
 
 
@@ -726,9 +726,12 @@ def create_twist_joints(start, end, twist_count, description, location, config, 
     """
     parent = start
 
-    upper_increment = cmds.getAttr(
-        f"{end}.translate{down_bone_axis.title()}",
-    ) / (twist_count - 1)
+    if twist_count > 1:
+        upper_increment = cmds.getAttr(
+            f"{end}.translate{down_bone_axis.title()}",
+        ) / (twist_count - 1)
+    else:
+        upper_increment = cmds.getAttr(f"{end}.translate{down_bone_axis.title()}")
 
     twist_joints = list()
 

@@ -66,6 +66,10 @@ class SimpleFkComponent(aniseed.RigComponent):
         self.declare_output("Root Control")
         self.declare_output("Tip Control")
 
+    def on_enter_stack(self):
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
+
     def option_widget(self, option_name):
 
         # -- We can use this function to tailor how we visualise certain options.

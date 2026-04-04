@@ -1,4 +1,5 @@
 import mref
+import typing
 from maya import cmds
 from maya.api import OpenMaya as om
 
@@ -8,19 +9,6 @@ class Attribute(mref.Trait):
     This trait will bind and represent attributes.
     """
 
-    complex_types = [
-        "string",
-        "matrix",
-        "doubleArray",
-        "Int32Array",
-        "vectorArray",
-        "pointArray",
-        "componentList",
-        "stringArray",
-        "mesh",
-        "nurbsCurve",
-    ]
-
     def __init__(self, *args, **kwargs):
         super(Attribute, self).__init__(*args, **kwargs)
 
@@ -29,27 +17,46 @@ class Attribute(mref.Trait):
         self._attribute_type = cmds.getAttr(self.name(include_node=True), type=True)
 
     @classmethod
-    def can_bind(cls, pointer):
+    def can_bind(cls, pointer: om.MObject) -> bool:
+        """
+        This determines whether this trait can be bound to the given object
+        """
         if isinstance(pointer, om.MPlug):
             return True
+        return False
 
-    def node(self):
+    def node(self) -> mref.ReferencedItem:
         """
-        This will return the mref
+        This will return the mref.ReferencedItem object which this attribute
+        belongs to.
         """
         return self._node
 
-    def name(self, include_node=False):
+    def name(self, include_node: bool = False) -> str:
+        """
+        Returns the name of the attribute.
+
+        :param include_node: If True, will return the fully qualified name of the attribute.
+        """
         if include_node:
             return f"{self.node().name()}.{self._m_plug.partialName(useLongNames=True)}"
         else:
             return self._m_plug.partialName(useLongNames=True)
 
-    def path(self):
+    def path(self) -> str:
+        """
+        This will return the hierarchical path of the attribute (i.e, the objects full name
+        prefixing the attribute).
+        """
         return f"{self.node().full_name()}.{self._m_plug.partialName(useLongNames=True)}"
 
-    def set(self, *args, **kwargs):
-        if self._attribute_type in self.complex_types and "type" not in kwargs:
+    def set(self, *args, **kwargs) -> None:
+        """
+        This will set the value of the attribute. If the type is not declared
+        then the type will attempted to be resolved automatically using the value
+        type.
+        """
+        if self._attribute_type in mref.constants.complex_attribute_types and "type" not in kwargs:
             kwargs["type"] = self._attribute_type
 
         cmds.setAttr(
@@ -58,16 +65,27 @@ class Attribute(mref.Trait):
             **kwargs
         )
 
-    def get(self, **kwargs):
+    def get(self, **kwargs) -> typing.Any:
+        """
+        This will return the attribute value. The value type is determined by
+        the attribute type.
+        """
         return cmds.getAttr(
             self.path(),
             **kwargs
         )
 
-    def get_type(self):
+    def get_type(self) -> str:
+        """
+        Returns the data type of this attribute
+        """
         return self._attribute_type
 
-    def connect(self, attribute, force=False, **kwargs):
+    def connect(self, attribute: mref.ReferencedItem|str, force: bool = False, **kwargs) -> None:
+        """
+        This will connect this attribute to the given attribute - making this attribute
+        drive the value of the other attribute.
+        """
         attribute = mref.get(attribute)
         cmds.connectAttr(
             self.path(),
@@ -76,7 +94,11 @@ class Attribute(mref.Trait):
             **kwargs
         )
 
-    def disconnect(self, attribute=None):
+    def disconnect(self, attribute: mref.ReferencedItem|str = None) -> None:
+        """
+        This will disconnect this attribute from the given attribute. If no other attribute
+        has been given then all connections to and from this attribute will be disconnected.
+        """
         if attribute:
             attributes = mref.get(attribute)
 
@@ -92,22 +114,34 @@ class Attribute(mref.Trait):
                 attribute.path(),
             )
 
-    def connections(self):
+    def connections(self) -> list[mref.ReferencedItem]:
+        """
+        This will return a list of connected plugs
+        """
         return self.outputs() + self.inputs()
 
-    def inputs(self):
+    def inputs(self) -> list[mref.ReferencedItem]:
+        """
+        This will return a list of inputs coming into the node
+        """
         return [
             mref.get(attribute)
             for attribute in
             cmds.listConnections(self.path(), source=True, destination=False, plugs=True) or []
         ]
 
-    def outputs(self):
+    def outputs(self) -> list[mref.ReferencedItem]:
+        """
+        This will return a list of outputs coming from the node
+        """
         return [
             mref.get(attribute)
             for attribute in
             cmds.listConnections(self.path(), source=False, destination=True, plugs=True) or []
         ]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """
+        This string representation of this type
+        """
         return self.name(include_node=True)

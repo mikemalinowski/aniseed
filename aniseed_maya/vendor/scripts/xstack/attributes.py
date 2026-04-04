@@ -120,6 +120,29 @@ class _Attribute:
     def set_pre_expose(self, value: bool):
         self._pre_expose = value
 
+    # ----------------------------------------------------------------------------------
+    def hook_to_parent(self, tags=None, fallback_to_default=True):
+
+        # -- If this attributes component has no parent, we do nothing
+        if not self._component.parent:
+            return
+
+        # -- If we have tags, then attempt to connect based on those tags
+        if tags:
+            if not isinstance(tags, list):
+                tags = [tags]
+
+            for tag in tags:
+                for output in self._component.parent.outputs():
+                    if tag in output.name().lower():
+                        self.set(output.address())
+                        return
+
+        # -- If we did not match with tags, but we are allowed to fallback
+        # -- to the default, then do that now.
+        if fallback_to_default and self._component.parent.default_output():
+            self.set(self._component.parent.default_output().address())
+
 
 # --------------------------------------------------------------------------------------
 class Option(_Attribute):

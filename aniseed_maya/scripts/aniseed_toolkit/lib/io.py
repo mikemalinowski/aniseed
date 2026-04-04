@@ -169,7 +169,11 @@ def _create_dataset_from_nodes(nodes):
     all_node_data = dict()
 
     for node in nodes:
-        node_type = cmds.nodeType(node)
+
+        try:
+            node_type = cmds.nodeType(node)
+        except:
+            continue
 
         try:
             parent = cmds.listRelatives(node, parent=True)[0]

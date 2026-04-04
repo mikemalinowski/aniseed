@@ -9,12 +9,12 @@ class GetControls(aniseed_toolkit.Tool):
     classification = "Animation"
     user_facing = False
 
-    def run(self):
+    def run(self, namespace: str = ""):
         """
         This will return the control nodes for all the selected rigs. If no
         rig is selected then all controls in all rigs will be returned.
         """
-        return aniseed_toolkit.rig.all_controls()
+        return aniseed_toolkit.rig.all_controls(namespace)
 
 
 class ResolveRigNode(aniseed_toolkit.Tool):

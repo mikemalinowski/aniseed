@@ -1,4 +1,5 @@
 import mref
+import typing
 from maya import cmds
 from maya.api import OpenMaya as om
 
@@ -6,63 +7,19 @@ from maya.api import OpenMaya as om
 class DependencyNode(mref.Trait):
     priority = -1
 
-    attribute_types = {
-        "bool": "at",
-        "long": "at",
-        "short": "at",
-        "byte": "at",
-        "char": "at",
-        "enum": "at",
-        "float": "at",
-        "double": "at",
-        "doubleAngle": "at",
-        "doubleLinear": "at",
-        "string": "dt",
-        "stringArray": "dt",
-        "compound": "at",
-        "message": "at",
-        "time": "at",
-        "matrix": "dt",
-        "fltMatrix": "at",
-        "reflectanceRGB": "dt",
-        "reflectance": "at",
-        "spectrumRGB": "dt",
-        "spectrum": "at",
-        "float2": "dt",
-        "float3": "dt",
-        "float3": "at",
-        "double2": "dt",
-        "double2": "at",
-        "double3": "dt",
-        "double3": "at",
-        "long2": "dt",
-        "long2": "at",
-        "long3": "dt",
-        "long3": "at",
-        "short2": "dt",
-        "short2": "at",
-        "short3": "dt",
-        "short3": "at",
-        "doubleArray": "dt",
-        "floatArray": "dt",
-        "Int32Array": "dt",
-        "vectorArray": "dt",
-        "nurbsCurve": "dt",
-        "nurbsSurface": "dt",
-        "mesh": "dt",
-        "lattice": "dt",
-        "pointArray": "dt",
-    }
-
     def __init__(self, *args, **kwargs):
         super(DependencyNode, self).__init__(*args, **kwargs)
 
         self._dependency_node = om.MFnDependencyNode(self._pointer)
 
     @classmethod
-    def can_bind(cls, pointer):
+    def can_bind(cls, pointer: om.MObject) -> bool:
+        """
+        This determines whether this trait can be bound to the given object
+        """
         if isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kDependencyNode):
             return True
+        return False
 
     def name(self) -> str:
         """
@@ -70,33 +27,50 @@ class DependencyNode(mref.Trait):
         """
         return self._dependency_node.name().split("|")[-1]
 
-    def full_name(self):
+    def full_name(self) -> str:
+        """
+        Returns the full name of the node which is referenced
+        """
         return self.name()
 
-    def rename(self, new_name):
+    def rename(self, new_name: str) -> None:
+        """
+        Renames this node to the given name
+        """
         cmds.rename(
             self.full_name(),
             new_name,
         )
 
-    def attribute(self, attribute_name):
+    def attribute(self, attribute_name: str) -> mref.ReferencedItem|None:
+        """
+        Gets the attribute on this node by the attribute name
+        """
         attribute_address = f"{self.name()}.{attribute_name}"
         if not cmds.objExists(attribute_address):
             return None
         return mref.get(attribute_address)
 
-    def attr(self, attribute_name):
+    def attr(self, attribute_name: str) -> mref.ReferencedItem|None:
+        """
+        Gets the attribute on this node by the attribute name
+        """
         return self.attribute(attribute_name)
 
-    def attributes(self, **kwargs):
+    def attributes(self, **kwargs) -> list[mref.ReferencedItem]:
+        """
+        Returns a list of all attributes on this node
+        """
         return [
             mref.get(f"{self.name()}.{attribute}")
             for attribute in cmds.listAttr(self.item.name(), **kwargs)
         ]
 
-    def add_attribute(self, name, value, attribute_type, **kwargs):
-
-        kwargs[self.attribute_types[attribute_type]] = attribute_type
+    def add_attribute(self, name: str, value: typing.Any, attribute_type: str, **kwargs) -> mref.ReferencedItem:
+        """
+        Adds an attribute to this node with the given name, value and type.
+        """
+        kwargs[mref.constants.attribute_types[attribute_type]] = attribute_type
         cmds.addAttr(
             self.full_name(),
             shortName=name,
@@ -106,5 +80,26 @@ class DependencyNode(mref.Trait):
         attribute.set(value)
         return attribute
 
-    def node_type(self):
+    def node_type(self) -> str:
+        """
+        Returns the type of this node
+        """
         return cmds.nodeType(self.item.full_name())
+
+    def inputs(self, **kwargs) -> list[mref.ReferencedItem]:
+        """
+        Returns a list of inputs coming into this node
+        """
+        return [
+            mref.get(node)
+            for node in cmds.listConnections(self.full_name(), source=True, destination=False, shapes=True, **kwargs)
+        ]
+
+    def outputs(self, **kwargs) -> list[mref.ReferencedItem]:
+        """
+        Returns a list of outputs coming out of this node
+        """
+        return [
+            mref.get(node)
+            for node in cmds.listConnections(self.full_name(), source=False, destination=True, shapes=True, **kwargs)
+        ]

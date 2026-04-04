@@ -74,6 +74,7 @@ class HeadComponent(aniseed.RigComponent):
 
         self.declare_output(
             "Head Control",
+            is_default=True,
         )
 
         # -- Declare our properties we will use during our build process
@@ -82,6 +83,9 @@ class HeadComponent(aniseed.RigComponent):
 
     def on_enter_stack(self):
         self.user_func_create_skeleton()
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent(tags=["tip", "chest"])
 
     def input_widget(self, requirement_name):
         if requirement_name in ["Parent", "Neck Joint", "Head Joint"]:
@@ -234,6 +238,3 @@ class HeadComponent(aniseed.RigComponent):
 
         if parent:
             aniseed_toolkit.transformation.snap_position(neck, parent)
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to([neck, head], set_name="deformers")

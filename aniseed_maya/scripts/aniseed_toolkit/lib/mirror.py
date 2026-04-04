@@ -15,7 +15,7 @@ def global_mirror(
     transforms: list[str] or str = None,
     across: str = "YZ",
     behaviour: bool = True,
-    name_replacement: dict = None,
+    name_replacement: list = None,
 ):
     """
     This function is taken from github with a minor modification. The
@@ -33,7 +33,6 @@ def global_mirror(
         name_replacement : a tuple of length two, where the first part should
             be replaced with the second part
     """
-    print("given transformS %s" % transforms)
     # No specified transforms, so will get selection
     if not transforms:
         transforms = cmds.ls(selection=True)
@@ -48,7 +47,6 @@ def global_mirror(
             "Keyword Argument: 'across' not of accepted value ('XY', 'YZ', 'XZ').")
 
     # -- Ask for any name replacement data if required
-    print("given name replacement : %s" % name_replacement)
     if name_replacement is None:
         name_replacement = _ask_for_rename_data()
 
@@ -111,7 +109,7 @@ def global_mirror(
                     name_replacement[0],
                     name_replacement[1],
                 )
-            print("mirroring %s" % target)
+
             cmds.xform(
                 target,
                 worldSpace=True,

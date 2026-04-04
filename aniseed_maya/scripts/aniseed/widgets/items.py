@@ -31,7 +31,7 @@ class LocationSelector(QtWidgets.QComboBox):
     """
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, config, parent=None):
+    def __init__(self, config, value=None, parent=None):
         super(LocationSelector, self).__init__(parent=parent)
 
         locations = [
@@ -42,10 +42,12 @@ class LocationSelector(QtWidgets.QComboBox):
             config.back,
         ]
 
+        active_index = 0
         for iterative_idx, item in enumerate(locations):
             self.addItem(item)
-
-        self.setCurrentIndex(0)
+            if item == value:
+                active_index = iterative_idx
+        self.setCurrentIndex(active_index)
 
 
 # --------------------------------------------------------------------------------------

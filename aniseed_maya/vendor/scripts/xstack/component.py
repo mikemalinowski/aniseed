@@ -439,8 +439,20 @@ class Component:
             description=description,
             component=self,
             is_default=is_default,
+            group=group,
         )
         self._outputs.append(output)
+
+    # ----------------------------------------------------------------------------------
+    def default_output(self):
+        """
+        This will return the output that is marked as default. If one is not defined then
+        None will be returned.
+        """
+        for output_plug in self._outputs:
+            if output_plug.is_default():
+                return output_plug
+        return None
 
     # ----------------------------------------------------------------------------------
     def inputs(self) -> typing.List[Input]:

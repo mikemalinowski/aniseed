@@ -2,6 +2,7 @@ import re
 import typing
 import crosswalk
 
+from . import resources
 from . import component
 from . import widgets
 
@@ -44,6 +45,7 @@ class RigConfiguration(component.RigComponent):
     """
     identifier = "Rig Configuration : Standard"
     version = 1
+    icon = resources.get("config.png")
 
     def __init__(self, *args, **kwargs):
         super(RigConfiguration, self).__init__(*args, **kwargs)
@@ -292,6 +294,15 @@ class RigConfiguration(component.RigComponent):
             return camel_to_snake(str_value)
 
         return str_value
+
+    def resolved_description(self, description):
+        return self.apply_style(description, self.option("description_style").get())
+
+    def resolved_classification(self, classification):
+        return self.apply_style(classification, self.option("classification_style").get())
+
+    def resolved_location(self, location, ):
+        return self.apply_style(location, self.option("location_style").get())
 
     def generate_name(
             self,

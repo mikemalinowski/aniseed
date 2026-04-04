@@ -81,6 +81,9 @@ class TentacleComponent(aniseed.RigComponent):
         self.input("Start Joint").value_changed.connect(self.update_outputs)
         self.input("End Joint").value_changed.connect(self.update_outputs)
 
+    def on_enter_stack(self):
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def update_outputs(self) -> None:
         """

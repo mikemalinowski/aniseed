@@ -74,7 +74,7 @@ class MayaConfigStandard(aniseed.RigConfiguration):
     def create_editable_structure(self, parent, skeleton_org_name, control_org_name):
 
         make_editable = self.rig.add_component(
-            component_type="Stack : Organiser",
+            component_type="Stack : Execution Block",
             label="Make Rig Editable",
         )
 
@@ -96,18 +96,12 @@ class MayaConfigStandard(aniseed.RigConfiguration):
             parent=make_editable,
         )
 
-        self.rig.add_component(
-            component_type="Utility : Build All Guides",
-            label="Build All Guides",
-            parent=make_editable,
-        )
-
         return make_editable
 
     def create_rig_structure(self, parent, skeleton_org_name, control_org_name):
 
         build_rig = self.rig.add_component(
-            component_type="Stack : Organiser",
+            component_type="Stack : Execution Block",
             label="Build Control Rig",
         )
 

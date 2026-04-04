@@ -59,11 +59,6 @@ class MouthComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
-        self.declare_option(
-            name="LinkedGuide",
-            value="",
-            hidden=True,
-        )
         self.declare_output(
             "Jaw Control",
         )
@@ -78,6 +73,9 @@ class MouthComponent(aniseed.RigComponent):
 
     def on_enter_stack(self):
         self.user_func_create_skeleton()
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def input_widget(self, requirement_name: str):
 
@@ -101,11 +99,6 @@ class MouthComponent(aniseed.RigComponent):
         if not self.input("Jaw Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
             return menu
-
-        if self.guide():
-            menu["Remove Guide"] = self.user_func_remove_guide
-        else:
-            menu["Create Guide"] = self.user_func_create_guide
 
         return menu
 
@@ -537,71 +530,3 @@ class MouthComponent(aniseed.RigComponent):
         self.input("Jaw Joint").set(jaw_joint)
         self.input("Upper Lip Joint").set(upper_lip_joint)
         self.input("Lower Lip Joint").set(lower_lip_joint)
-
-        # -- Now create the guide
-        self.user_func_create_guide()
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to([jaw_joint, lower_lip_joint, upper_lip_joint], set_name="deformers")
-
-    def user_func_create_guide(self):
-
-        # -- If the guide already exists, then we do not need to do anything
-        # -- more.
-        if self.guide():
-            return
-
-        jaw_joint = self.input("Jaw Joint").get()
-        upper_lip = self.input("Upper Lip Joint").get()
-        lower_lip = self.input("Lower Lip Joint").get()
-
-        # -- Create the org node
-        org = mref.create("transform", name="hand_guide").full_name()
-        guides = []
-
-        # -- Create the jaw guide
-        jaw_guide = aniseed_toolkit.guide.create(
-            joint=jaw_joint,
-            parent=org,
-            scale=1.25,
-        )
-        guides.append(jaw_guide)
-
-        # -- Now create the lip guides as children of the jaw guide
-        lower_lip_guide = aniseed_toolkit.guide.create(
-            joint=lower_lip,
-            parent=jaw_guide,
-            scale=1,
-        )
-        upper_lip_guide = aniseed_toolkit.guide.create(
-            joint=upper_lip,
-            parent=jaw_guide,
-            scale=1,
-        )
-        guides.append(lower_lip_guide)
-        guides.append(upper_lip_guide)
-
-        # -- Store the guide link
-        self.option("LinkedGuide").set(org)
-
-        return guides
-
-    def user_func_remove_guide(self):
-        if not self.guide():
-            return
-
-        with aniseed_toolkit.joints.HeldTransforms(self.all_joints()):
-            cmds.delete(self.guide())
-
-    def guide(self):
-        guide = self.option("LinkedGuide").get()
-        if guide and cmds.objExists(guide):
-            return guide
-        return None
-
-    def all_joints(self):
-        return [
-            self.input("Jaw Joint").get(),
-            self.input("Upper Lip Joint").get(),
-            self.input("Lower Lip Joint").get(),
-        ]

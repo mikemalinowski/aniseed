@@ -109,5 +109,5 @@ class ApplyIKBiasData(aniseed.RigComponent):
             for name, value in data.items():
                 attribute_address = f"{ikh}.springAngleBias[{idx}].{name}"
                 mc.setAttr(attribute_address, lock=False)
-                mc.setAttr(f"{ikh}.springAngleBias[{idx}].{name}", value)
+                mc.setAttr(attribute_address, value)
                 # mc.setAttr(attribute_address, lock=True)

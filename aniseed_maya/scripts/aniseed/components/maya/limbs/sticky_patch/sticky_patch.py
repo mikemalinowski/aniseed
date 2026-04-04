@@ -82,6 +82,9 @@ class StickyPatchComponent(aniseed.RigComponent):
         # -- Now we hide that option
         creation_option.set_hidden(True)
 
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
+
     def user_functions(self) -> typing.Dict[str, callable]:
         menu = super(StickyPatchComponent, self).user_functions()
 
@@ -227,9 +230,6 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         if create_patch:
             self.user_func_create_patch(joint)
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to(joint, set_name="deformers")
 
     def user_func_create_patch(self, joint_to_drive=None):
 

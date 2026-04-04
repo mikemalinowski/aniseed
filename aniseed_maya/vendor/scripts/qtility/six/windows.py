@@ -24,6 +24,15 @@ from PySide6 import QtWidgets, QtCore
 
 
 # ------------------------------------------------------------------------------
+def host() -> str:
+    """
+    Returns the host name
+    """
+    for test_string, func_ in HOST_MAPPING.items():
+        if test_string in sys.executable:
+            return test_string.split(".")[0]
+
+# ------------------------------------------------------------------------------
 # noinspection PyPep8Naming
 def application() -> QtWidgets.QWidget:
     """

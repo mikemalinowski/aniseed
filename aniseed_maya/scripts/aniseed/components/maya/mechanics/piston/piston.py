@@ -76,6 +76,10 @@ class PistonComponent(aniseed.RigComponent):
         if option_name == "Upvector Axis":
             return aniseed.widgets.AxisSelector()
 
+    def on_enter_stack(self):
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
+
     def run(self) -> bool:
 
         base_parent = self.input("Base Parent").get()

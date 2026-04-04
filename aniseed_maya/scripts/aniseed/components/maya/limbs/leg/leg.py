@@ -26,6 +26,21 @@ class LegComponent(aniseed.RigComponent):
         "Foot",
         "Toe",
     ]
+    guide_tags = [
+        "Ball",
+        "Heel",
+        "Toe",
+        "Inner",
+        "Outer",
+    ]
+
+    default_guide_transforms = {
+        "Ball": {},
+        "Heel": {"tz": -2, "rz": 90},
+        "Toe": {"tz": 2, "rx": 180, "rz": 90},
+        "Inner": {"tx": -2, "rx": 90, "rz": 90},
+        "Outer": {"tx": 2, "rx": -90, "rz": 90},
+    }
 
     def __init__(self, *args, **kwargs):
         super(LegComponent, self).__init__(*args, **kwargs)
@@ -64,11 +79,13 @@ class LegComponent(aniseed.RigComponent):
             group="Optional Twist Joints",
         )
 
-        self.declare_option(
-            name="GuideData",
-            value=self.default_guide_data(),
-            hidden=True,
-        )
+        for guide in self.guide_tags:
+            self.declare_input(
+                name=f"{guide} Guide",
+                description=f"Transform for the {guide} Control",
+                value="",
+                group="Guides",
+            )
 
         self.declare_option(
             name="Descriptive Prefix",
@@ -78,9 +95,8 @@ class LegComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Location",
-            value="lf",
+            value=self.config.left,
             group="Naming",
-            should_inherit=True,
             pre_expose=True,
         )
 
@@ -130,6 +146,7 @@ class LegComponent(aniseed.RigComponent):
         self.org: str = ""
         self.config_control = None
         self.upvector_control = None
+        self.ik_root_control = None
         self.ik_foot_control = None
         self.ik_heel_control = None
         self.ik_foot_control = None
@@ -174,34 +191,48 @@ class LegComponent(aniseed.RigComponent):
             lower_twist_count=lower_twist_count.get(),
         )
 
-    def on_build_started(self) -> None:
-        # -- Remove the guide if there is one
+        location = self.option("Location").get()
 
-        guide_data = self.option("GuideData").get()
-        linked_guide = guide_data["LinkedGuide"]
+        # -- Create the guides
+        for guide_tag in self.guide_tags:
+            guide = cmds.createNode(
+                "transform",
+                name=self.config.generate_name(
+                    classification="gde",
+                    description=guide_tag,
+                    location=location,
+                )
+            )
+            aniseed_toolkit.shapes.load_shape(guide, "core_rotator")
+            self.input(f"{guide_tag} Guide").set(guide)
 
-        if linked_guide and cmds.objExists(linked_guide):
-            self.user_func_remove_guide()
+            # -- Set the guides default transforms
+            for attribute, value in self.default_guide_transforms[guide_tag].items():
+                cmds.setAttr(f"{guide}.{attribute}", value)
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent(tags=["fk root", "fk hip", "hip"])
 
     def on_removed_from_stack(self):
         """
         When the component is removed from the stack we need to remove the
         guide and bones too.
         """
-        # -- Remove the guide
-        self.user_func_remove_guide()
-
         # -- Remove the joints (re-parenting any children)
         new_parent = mref.get(self.input("Leg Root").get()).parent()
         aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
 
         # -- Now delete our leg chain and joints
         cmds.delete(self.input("Leg Root").get())
+        cmds.delete(self.all_guides())
 
     def input_widget(self, requirement_name):
         """
         Return bespoke widgets for certain input types
         """
+        if requirement_name.endswith(" Guide"):
+            return aniseed.widgets.ObjectSelector()
+
         if requirement_name in ["Parent", "Leg Root", "Toe"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -225,14 +256,12 @@ class LegComponent(aniseed.RigComponent):
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.leg_joints = aniseed_toolkit.run(
-            "Get Joints Between",
+        self.leg_joints = aniseed_toolkit.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
         )
 
-        self.org = aniseed_toolkit.run(
-            "Create Basic Transform",
+        self.org = aniseed_toolkit.transforms.create(
             classification=self.config.organisational,
             description=self.prefix + "Leg",
             location=self.location,
@@ -263,19 +292,7 @@ class LegComponent(aniseed.RigComponent):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
             return menu
 
-        # -- Check if we have a guide
-        guide_data = self.option("GuideData").get()
-        linked_guide = guide_data["LinkedGuide"]
-
-        if linked_guide and cmds.objExists(linked_guide):
-            # -- Depending on whether we have a guide or not, change what we show
-            # -- in the actions menu
-            menu["Remove Guide"] = functools.partial(self.user_func_remove_guide)
-            menu["Toggle Joint Selectability"] = functools.partial(self.user_func_toggle_joint_selectability)
-            menu["Create Mirrored Component"] = functools.partial(self.user_func_create_mirror)
-        else:
-            menu["Create Guide"] = functools.partial(self.user_func_create_guide)
-
+        menu["Create Mirror"] = functools.partial(self.user_func_create_mirror)
         return menu
 
     def is_valid(self) -> bool:
@@ -292,8 +309,7 @@ class LegComponent(aniseed.RigComponent):
 
         # -- We also expect that the bones to be facing down X - at least
         # -- between the upper leg and the foot
-        facing_dir = aniseed_toolkit.run(
-            "Get Chain Facing Direction",
+        facing_dir = aniseed_toolkit.direction.get_chain_facing_direction(
             all_joints[0],
             all_joints[2],
         )
@@ -307,11 +323,8 @@ class LegComponent(aniseed.RigComponent):
         """
         This function will create all the controls for the leg
         """
-        guide_data = self.option("GuideData").get()
-
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.run(
-            "Create Control",
+        self.config_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}LegConfig",
             location=self.location,
             parent=self.org,
@@ -323,8 +336,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         # -- Create the upvector control for the arm
-        self.upvector_control = aniseed_toolkit.run(
-            "Create Control",
+        self.upvector_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}LegUpvector",
             location=self.location,
             parent=self.org,
@@ -338,8 +350,7 @@ class LegComponent(aniseed.RigComponent):
 
         cmds.xform(
             self.upvector_control.org,
-            translation=aniseed_toolkit.run(
-                "Calculate Upvector Position",
+            translation=aniseed_toolkit.transformation.calculate_upvector_position(
                 point_a=self.leg_joints[0],
                 point_b=self.leg_joints[1],
                 point_c=self.leg_joints[2],
@@ -356,8 +367,7 @@ class LegComponent(aniseed.RigComponent):
             )
 
         # -- Now create the main IK control
-        self.ik_foot_control = aniseed_toolkit.run(
-            "Create Control",
+        self.ik_foot_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}Foot",
             location=self.location,
             parent=self.org,
@@ -365,14 +375,9 @@ class LegComponent(aniseed.RigComponent):
             config=self.config,
             shape_scale=40.0,
             rotate_shape=[0, 90, 0] if self.shape_flip else [0, -90, 0],
+            match_to=self.input("Ball Guide").get()
         )
         self.ik_controls.append(self.ik_foot_control.ctl)
-
-        cmds.xform(
-            self.ik_foot_control.org,
-            matrix=guide_data["Markers"]["ball"],
-            worldSpace=True,
-        )
 
         if self.option("Align Foot To World").get():
             cmds.xform(
@@ -385,8 +390,7 @@ class LegComponent(aniseed.RigComponent):
         self.ik_pivot_endpoint, self.pivot_controls = self.create_ik_pivots()
 
         # -- Add the heel control
-        self.ik_heel_control = aniseed_toolkit.run(
-            "Create Control",
+        self.ik_heel_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}Heel",
             location=self.location,
             parent=self.ik_pivot_endpoint,
@@ -410,8 +414,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         # -- Add the toe control
-        self.ik_toe_control = aniseed_toolkit.run(
-            "Create Control",
+        self.ik_toe_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}Toe",
             location=self.location,
             parent=self.ik_pivot_endpoint,
@@ -439,8 +442,7 @@ class LegComponent(aniseed.RigComponent):
 
         for idx, joint in enumerate(self.leg_joints):
 
-            fk_control = aniseed_toolkit.run(
-                "Create Control",
+            fk_control = aniseed_toolkit.control.create(
                 description=f"{self.prefix}{self._LABELS[idx]}FK",
                 location=self.location,
                 parent=fk_parent,
@@ -459,7 +461,7 @@ class LegComponent(aniseed.RigComponent):
         """
 
         # -- Create the ik root control
-        ik_root_control = aniseed_toolkit.control.create(
+        self.ik_root_control = aniseed_toolkit.control.create(
             description=f"{self.prefix}IKRoot",
             location=self.location,
             shape="core_cube",
@@ -468,11 +470,10 @@ class LegComponent(aniseed.RigComponent):
             config=self.config,
         )
 
-        replicated_joints = aniseed_toolkit.run(
-            "Replicate Chain",
+        replicated_joints = aniseed_toolkit.joints.replicate_chain(
             from_this=self.leg_joints[0],
             to_this=self.leg_joints[2],
-            parent=ik_root_control.ctl,
+            parent=self.ik_root_control.ctl,
         )
 
         # -- Rename the ik joints
@@ -490,10 +491,7 @@ class LegComponent(aniseed.RigComponent):
         # -- Ensure all the rotation values are on the joint
         # -- orients to allow for correct assignment of the
         # -- ik vector
-        aniseed_toolkit.run(
-            "Move Joint Rotations To Orients",
-            self.ik_joints,
-        )
+        aniseed_toolkit.joints.move_rotations_to_orients(self.ik_joints)
 
         # -- Create the Ik setup
         handle, effector = cmds.ikHandle(
@@ -524,6 +522,12 @@ class LegComponent(aniseed.RigComponent):
             self.ik_heel_control.ctl,
         )
 
+        # -- Create the guide line
+        aniseed_toolkit.guide.link(
+            self.upvector_control.ctl,
+            self.ik_joints[1],
+        )
+
         if self.option("Apply Soft Ik").get():
 
             root_marker = cmds.createNode(
@@ -537,7 +541,7 @@ class LegComponent(aniseed.RigComponent):
 
             cmds.parent(
                 root_marker,
-                ik_root_control.ctl,
+                self.ik_root_control.ctl,
             )
 
             cmds.xform(
@@ -568,8 +572,7 @@ class LegComponent(aniseed.RigComponent):
                 ),
                 worldSpace=True,
             )
-            aniseed_toolkit.run(
-                "Create Soft Ik",
+            aniseed_toolkit.rigging.create_two_bone_soft_ik(
                 root=root_marker,
                 target=tip_marker,
                 second_joint=self.ik_joints[-2],
@@ -615,14 +618,9 @@ class LegComponent(aniseed.RigComponent):
             defaultValue=0,
             keyable=True,
         )
-        ik_visibility_attribute = f"{self.config_control.ctl}.show_ik"
-        fk_visibility_attribute = f"{self.config_control.ctl}.show_fk"
 
         for ik_control in self.ik_controls:
-            ik_control = aniseed_toolkit.run(
-                "Get Control",
-                ik_control,
-            )
+            ik_control = aniseed_toolkit.control.get(ik_control)
             cmds.connectAttr(
                 f"{self.config_control.ctl}.show_ik",
                 f"{ik_control.off}.visibility",
@@ -630,18 +628,14 @@ class LegComponent(aniseed.RigComponent):
             )
 
         for fk_control in self.fk_controls:
-            fk_control = aniseed_toolkit.run(
-                "Get Control",
-                fk_control,
-            )
+            fk_control = aniseed_toolkit.control.get(fk_control)
             cmds.connectAttr(
                 f"{self.config_control.ctl}.show_fk",
                 f"{fk_control.off}.visibility",
                 force=True,
             )
 
-        blend_chain_setup = aniseed_toolkit.run(
-            "Create Blend Chain",
+        blend_chain_setup = aniseed_toolkit.rigging.create_blend_chain(
             parent=self.org,
             transforms_a=self.ik_bindings,
             transforms_b=self.fk_controls,
@@ -649,17 +643,16 @@ class LegComponent(aniseed.RigComponent):
             attribute_name="ikfk",
             match_transforms=self.leg_joints,
         )
-        for idx, blend_joint in enumerate(blend_chain_setup.out_blend_joints):
-            self.nk_joints.append(
-                cmds.rename(
-                    blend_joint,
-                    self.config.generate_name(
+        for idx, blend_joint in enumerate(blend_chain_setup.blend_joints):
+            blend_joint.rename(
+                self.config.generate_name(
                         classification="mech",
                         description=f"{self.prefix}LegNK",
                         location=self.location,
-                    )
-                ),
+                    ),
             )
+            self.nk_joints.append(blend_joint.name())
+
             cmds.parentConstraint(
                 self.nk_joints[idx],
                 self.leg_joints[idx],
@@ -676,7 +669,7 @@ class LegComponent(aniseed.RigComponent):
         """
         Snap is the mechanism for IK/FK snapping
         """
-        group = "Leg_%s_%s" % (
+        group = "IKFK_Leg_%s_%s" % (
             self.prefix,
             self.location,
         )
@@ -709,17 +702,12 @@ class LegComponent(aniseed.RigComponent):
                 group=group,
             )
 
-        pivot_attributes = [
-            "ball",
-            "heel",
-            "tip",
-            "inner",
-            "outer",
-        ]
-        for attribute_name in pivot_attributes:
+        for attribute_name in self.guide_tags:
+            attribute_name = attribute_name.lower().split(" ")[0] + "_roll"
+
             snappy.new_forced_attribute(
                 node=self.ik_foot_control.ctl,
-                attribute_name=attribute_name.title(),
+                attribute_name=attribute_name,
                 attribute_value=0,
                 group=group,
             )
@@ -736,7 +724,7 @@ class LegComponent(aniseed.RigComponent):
             )
 
             twist_component.input("Joints").set(upper_twist_joints)
-            twist_component.input("Parent").set(self.org)
+            twist_component.input("Parent").set(self.ik_root_control.ctl)
             twist_component.input("Root").set(self.nk_joints[0])
             twist_component.input("Tip").set(self.nk_joints[1])
 
@@ -748,8 +736,7 @@ class LegComponent(aniseed.RigComponent):
             twist_component.run()
 
             for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.run(
-                    "Rotate Shapes",
+                aniseed_toolkit.shapes.rotate(
                     twist,
                     *self.shape_rotation,
                 )
@@ -774,8 +761,7 @@ class LegComponent(aniseed.RigComponent):
             twist_component.run()
 
             for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.run(
-                    "Rotate Shapes",
+                aniseed_toolkit.shapes.rotate(
                     twist,
                     *self.shape_rotation,
                 )
@@ -789,204 +775,29 @@ class LegComponent(aniseed.RigComponent):
         self.output("Blended Foot").set(self.nk_joints[2])
         self.output("Blended Toe").set(self.nk_joints[3])
 
+    def create_ik_pivots(self):
 
-    def user_func_create_guide(self) -> list[str]:
+        aniseed_toolkit.attributes.add_separator(self.ik_foot_control.ctl)
 
-        if self.has_guide():
-            return []
-
-        guide_org = mref.create("transform", name="leg_guide", parent=None)
-
-        # -- Create the guides for the joints (replicate chain and apply ik?)
-        root_joint = self.input("Leg Root").get()
-        toe_joint = self.input("Toe").get()
-        leg_joints = aniseed_toolkit.joints.get_between(root_joint, toe_joint)
-
-        # -- Create the guide setup for the ik
-        ik_org, guides = aniseed_toolkit.guide.create_ik_guide(
-            start=leg_joints[0],
-            end=leg_joints[2],
-            parent=guide_org.full_name(),
-            constrain_end_orientation=True,
-        )
-
-        # -- Scale the shape of the first guide (its always easier for the rigger
-        # -- if the first guide of a component is larger)
-        aniseed_toolkit.shapes.scale(guides[0], scale_by=1.5)
-
-        # -- Now we need to create a guide for the foot
-        toe_guide = aniseed_toolkit.guide.create(
-            joint=leg_joints[-1],
-            parent=guides[-1],
-            link_to=guides[-1],
-        )
-
-        # -- Ensure the twisters are tweened
-        if self.input("Upper Twist Joints").get():
-            aniseed_toolkit.guide.create_tweens(
-                drive_these=self.input("Upper Twist Joints").get(),
-                from_this=guides[0],
-                to_this=guides[1],
-                parent=guide_org.full_name(),
-            )
-
-        if self.input("Lower Twist Joints").get():
-            aniseed_toolkit.guide.create_tweens(
-                drive_these=self.input("Lower Twist Joints").get(),
-                from_this=guides[1],
-                to_this=guides[2],
-                parent=guide_org.full_name(),
-            )
-
-        # -- Now create the guide for the foot roll pivots
-        guide_base = aniseed_toolkit.run(
-            "Create Basic Transform",
-            classification="gde",
-            description="LegGuide",
-            location=self.option("Location").get(),
-            config=self.config,
-            match_to=self.input("Toe").get(),
-            parent=guide_org.full_name(),
-        )
-
-        # -- Constrain the position of the base in Z and X
-        cmds.pointConstraint(
-            guides[-1],
-            guide_base,
-            skip=["y"],
-        )
-        cmds.xform(
-            guide_base,
-            rotation=(0, 0, 0),
-            worldSpace=True,
-        )
-
-        guide_data = self.option("GuideData").get()
-
-        for marker_name, marker_matrix in guide_data["Markers"].items():
-
-            marker = aniseed_toolkit.run(
-                "Create Basic Transform",
-                classification="gde",
-                description=marker_name.title(),
-                location=self.option("Location").get(),
-                config=self.config,
-                parent=guide_base,
-            )
-            aniseed_toolkit.tagging.tag(marker, "guide")
-
-            cmds.xform(
-                marker,
-                matrix=marker_matrix,
-                worldSpace=True,
-            )
-            aniseed_toolkit.run(
-                "Apply Shape",
-                node=marker,
-                data="core_symbol_rotator",
-                color=[0, 255, 0],
-            )
-            aniseed_toolkit.run(
-                "Tag Node",
-                node=marker,
-                tag=marker_name,
-            )
-            guides.append(marker)
-
-        # -- Store the linked guide
-        guide_data["LinkedGuide"] = guide_org.name()
-        self.option("GuideData").set(guide_data)
-
-        # -- Finally make the joints unselectable
-        aniseed_toolkit.joints.make_referenced(self.all_joints())
-
-        # -- If there is a parent of the root then we constrain our
-        # -- setup to that
-        root_joint = mref.get(root_joint)
-        if root_joint.parent():
-            cmds.parentConstraint(
-                root_joint.parent().full_name(),
-                guide_org.full_name(),
-                maintainOffset=True,
-            )
-
-        return guides
-
-    def user_func_remove_guide(self):
-
-        if not self.has_guide():
-            return
-
-        aniseed_toolkit.joints.unreference(self.all_joints())
-
-        guide_data = self.option("GuideData").get()
-        linked_guide = guide_data["LinkedGuide"]
-
-        for marker_name, _ in guide_data["Markers"].items():
-            marker = aniseed_toolkit.run(
-                "Find First Child With Tag",
-                node=linked_guide,
-                tag=marker_name,
-            )
-            if not marker:
-                continue
-
-            guide_data["Markers"][marker_name] = cmds.xform(
-                marker,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            )
-
-        guide_data["LinkedGuide"] = None
-        self.option("GuideData").set(guide_data)
-
-        with aniseed_toolkit.joints.HeldTransforms(self.all_joints()):
-            cmds.delete(linked_guide)
-
-    def create_ik_pivots(self):#, foot_control, foot_bone, toe_bone):
-
-        aniseed_toolkit.run(
-            "Add Separator Attribute",
-            self.ik_foot_control.ctl,
-        )
-
-        # ----------------------------------------------------------------------
-        # -- Now create the start pivot
-        pivot_order = [
-            "ball",
-            "heel",
-            "tip",
-            "inner",
-            "outer",
-        ]
-        guide_data = self.option("GuideData").get()
         controls = list()
 
         last_parent = self.ik_foot_control.ctl
 
-        for pivot_label in pivot_order:
+        for pivot_tag in self.guide_tags:
 
-            description = pivot_label.title()
+            description = f"{pivot_tag.lower()}_roll"
 
-            pivot_control = aniseed_toolkit.run(
-                "Create Control",
+            pivot_control = aniseed_toolkit.control.create(
                 description=description,
                 location=self.option("Location").get(),
                 parent=last_parent,
                 shape="core_sphere",  # "core_symbol_rotator",
                 shape_scale=4,
                 config=self.config,
+                match_to=self.input(f"{pivot_tag} Guide").get()
             )
 
-            cmds.xform(
-                pivot_control.org,
-                matrix=guide_data["Markers"][pivot_label],
-                worldSpace=True,
-            )
-
-            parameter_pivot = aniseed_toolkit.run(
-                "Create Basic Transform",
+            parameter_pivot = aniseed_toolkit.transforms.create(
                 classification="piv",
                 description=description,
                 location=self.option("Location").get(),
@@ -1014,13 +825,22 @@ class LegComponent(aniseed.RigComponent):
 
         return last_parent, controls
 
+    def user_func_create_mirror(self):
+        aniseed_toolkit.component.mirror(
+            component_instance=self,
+            transforms=self.all_guides() + self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Leg Root").get()).parent().name(),
+            input_overrides={"Leg Root": ""},
+        )
+
     def user_func_create_skeleton(self, parent=None, upper_twist_count=None, lower_twist_count=None):
 
         # -- Resovle the parent. The parent variable will change throughout
         # -- the course of the function but the component parent will
         # -- remain the same.
         parent = aniseed_toolkit.mutils.first_selected()
-        component_parent = parent
 
         if upper_twist_count is None:
             upper_twist_count = qtility.request.text(
@@ -1049,8 +869,20 @@ class LegComponent(aniseed.RigComponent):
             joint_data=joint_data,
             location=location,
             config=self.config,
-            parent=parent,
+            parent=None,
         )
+        if parent:
+            cmds.parent(all_joints[0], parent)
+            cmds.xform(
+                all_joints[0],
+                translation=cmds.xform(
+                    parent,
+                    query=True,
+                    translation=True,
+                    worldSpace=True,
+                ),
+                worldSpace=True,
+            )
 
         self.input("Leg Root").set(all_joints[0])
         self.input("Toe").set(all_joints[-1])
@@ -1081,69 +913,6 @@ class LegComponent(aniseed.RigComponent):
             )
             self.input("Lower Twist Joints").set(lower_twists)
 
-        # -- Immediately enter guide mode
-        guides = self.user_func_create_guide()
-
-        # -- If we have a parent, then match the translation to it, this
-        # -- just makes the riggers life a little easier as the component
-        # -- will show in a contextually relevant locaiton.
-        aniseed_toolkit.transformation.snap_position(guides[0], component_parent)
-
-        # -- Add our joints to a deformers set. If we're given twists, then we
-        # -- use them + the foot. Otherwise we use the arm joints themselves.
-        deformers = all_joints
-        if upper_twist_count:
-            deformers = upper_twists + lower_twists + [all_joints[3]]
-        aniseed_toolkit.sets.add_to(deformers, set_name="deformers")
-
-    def user_func_toggle_joint_selectability(self):
-        joints = self.all_joints()
-        if aniseed_toolkit.joints.is_referenced(joints[0]):
-            aniseed_toolkit.joints.unreference(joints)
-        else:
-            aniseed_toolkit.joints.make_referenced(joints)
-
-    def user_func_create_mirror(self):
-        """
-        This will create a mirrored version of the component
-        """
-        location = self.option("Location").get()
-
-        if location not in [self.config.left, self.config.right]:
-            print("You can only mirror if the component is left or right")
-            return
-
-        # -- Get the opposite location
-        location = self.config.left if location == self.config.right else self.config.right
-
-        # -- Select the parent joint and duplicate ourselves (setting hte label so
-        # -- we know its mirrored. Note that we clear the root bone as this will
-        # -- trigger the duplcated component to generate the skeleton too.
-        cmds.select(cmds.listRelatives(self.input("Leg Root").get(), parent=True)[0])
-        mirrored_component = self.duplicate(
-            input_overrides={"Leg Root": ""},
-            option_overrides={"Location": location, "GuideData": self.default_guide_data()},
-        )
-        mirrored_component.set_label(f"{self.label()} (Mirrored)")
-
-        # -- Get the two guides, as we need to match them
-        this_guide = self.option("GuideData").get().get("LinkedGuide")
-        mirrored_guide = mirrored_component.option("GuideData").get().get("LinkedGuide")
-
-        # -- Get all the guide elements
-        guides_from_this_component = aniseed_toolkit.tagging.all_children(this_guide, "guide")
-        guides_from_mirrored_component = aniseed_toolkit.tagging.all_children(mirrored_guide, "guide")
-
-        # -- Perform the match
-        for guide, mirrored_guide in zip(guides_from_this_component, guides_from_mirrored_component):
-            mref.get(mirrored_guide).match_to(mref.get(guide))
-
-        # -- Now we do an in-place mirror
-        aniseed_toolkit.mirror.global_mirror(
-            transforms=guides_from_mirrored_component,
-            name_replacement={},
-        )
-
     def all_joints(self):
 
         # -- Get the start and end point
@@ -1163,31 +932,8 @@ class LegComponent(aniseed.RigComponent):
 
         return [joint for joint in all_joints if joint]
 
-    @classmethod
-    def default_guide_data(cls):
-        return dict(
-            Markers=dict(
-                ball=[1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-                      0.0, 3.297, 1.0],
-                heel=[0.0, 1.0, 0.0, 0.0, -1.0, 0.05, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
-                      0.0, -7, 1.0],
-                tip=[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.06, 0.0, -1.0, 0.0, 0.0,
-                     0.0, 7.095, 1.0],
-                inner=[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, -4.0,
-                       0.0, 3.3, 1.0],
-                outer=[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, -1.0, 0.0, 0.0, 0.0,
-                       4.0, 0.0, 3.3, 1.0],
-            ),
-            LinkedGuide=None,
-        )
-
-    def has_guide(self):
-        """
-        Checks whether this has a valid guide or not
-        """
-        # -- Check if the guide already exists first
-        guide_data = self.option("GuideData").get()
-        guide = guide_data.get("LinkedGuide")
-        if guide and cmds.objExists(guide):
-            return True
-        return False
+    def all_guides(self):
+        results = []
+        for guide_tag in self.guide_tags:
+            results.append(self.input(f"{guide_tag} Guide").get())
+        return results

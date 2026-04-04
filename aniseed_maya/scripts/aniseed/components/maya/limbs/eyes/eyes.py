@@ -141,6 +141,8 @@ class EyesComponent(aniseed.RigComponent):
 
     def on_enter_stack(self):
         self.user_func_create_skeleton()
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def input_widget(self, requirement_name: str):
 
@@ -515,9 +517,6 @@ class EyeComponent(aniseed.RigComponent):
         if parent:
             aniseed_toolkit.transformation.snap_position(eye_joint, parent)
 
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to(eye_joint, set_name="deformers")
-
         return eye_joint
 
     def run(self):
@@ -564,6 +563,12 @@ class EyeComponent(aniseed.RigComponent):
         )
         self.output("Eye Control").set(direct_eye_control.ctl)
         self.output("Aim Control").set(aim_control.ctl)
+
+        # -- Create the guide line
+        aniseed_toolkit.guide.link(
+            aim_control.ctl,
+            direct_eye_control.ctl,
+        )
 
         cmds.setAttr(
             f"{aim_control.org}.translate{forward_axis}",

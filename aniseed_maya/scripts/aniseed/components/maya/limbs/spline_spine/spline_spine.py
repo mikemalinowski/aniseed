@@ -55,7 +55,7 @@ class SplineSpine(aniseed.RigComponent):
         # -- Hidden Option (data storage)
         self.declare_option(name="GuideData", value=None, hidden=True)
         self.declare_option(name="Joint Count", value=8, hidden=False, pre_expose=True)
-        self.declare_option(name="PreInitialised", value=False, hidden=True)
+        # self.declare_option(name="PreInitialised", value=False, hidden=True)
 
         # -- Outputs
         self.declare_output(name="Root Transform")
@@ -90,21 +90,10 @@ class SplineSpine(aniseed.RigComponent):
         When this enters the stack, if we were given a joint count then
         lets automatically generate the joints and build the guide
         """
-        # -- We only ever want to do this once (i.e, we do not want to do
-        # -- it when this is added to the stack via a load for instance).
-        # -- Therefore we use a hidden option to store whether this has
-        # -- already been performed or not.
-        initialised_option = self.option("PreInitialised")
-
-        # -- If this has already been performed, we skip
-        if initialised_option.get():
-            return
-
         # -- Now that we have used the joint count option we dont want
         # -- the user to see it again so we hide it. We also mark the
         # -- initialisation step as having run (so it never gets run again).
         self.option("Joint Count").set_hidden(True)
-        initialised_option.set(True)
 
         # -- Providing the number of joints was not zero then we build
         # -- the joints and guide (the create guide is called from within
@@ -112,6 +101,9 @@ class SplineSpine(aniseed.RigComponent):
         joint_count = self.option("Joint Count").get()
         if joint_count:
             self.user_func_create_skeleton(joint_count=joint_count)
+
+        # -- Attempt to auto resolve the parent based on its default output
+        self.input("Parent").hook_to_parent()
 
     def on_removed_from_stack(self):
         """
@@ -172,7 +164,6 @@ class SplineSpine(aniseed.RigComponent):
         # -- we give the ability to create it.
         if linked_guide and cmds.objExists(linked_guide):
             menu["Remove Guide"] = self.user_func_remove_guide
-            menu["Toggle Joint Selectability"] = self.user_func_toggle_joint_selectability
         else:
             menu["Create Guide"] = self.user_func_create_guide
 
@@ -254,16 +245,6 @@ class SplineSpine(aniseed.RigComponent):
             ),
             worldSpace=True,
         )
-
-        # -- Add our joints to a deformers set.
-        aniseed_toolkit.sets.add_to(joints, set_name="deformers")
-
-    def user_func_toggle_joint_selectability(self):
-        joints = self.all_joints()
-        if aniseed_toolkit.joints.is_referenced(joints[0]):
-            aniseed_toolkit.joints.unreference(joints)
-        else:
-            aniseed_toolkit.joints.make_referenced(joints)
 
     def is_valid(self) -> bool:
         """
@@ -388,10 +369,12 @@ class SplineSpine(aniseed.RigComponent):
         for ik_control in ik_controls:
             ik_control = mref.get(ik_control.ctl)
             for nurbs_shape in ik_control.shapes():
-                cmds.connectAttr(
-                    f"{master_control.ctl}.ik_visibility",
-                    f"{nurbs_shape.full_name()}.visibility",
-                )
+                try:
+                    cmds.connectAttr(
+                        f"{master_control.ctl}.ik_visibility",
+                        f"{nurbs_shape.full_name()}.visibility",
+                    )
+                except: pass
 
         # -- Finally we set our output variables
         self.output("Root Transform").set(spline_setup.out_trace_joints[0].name())
@@ -414,6 +397,15 @@ class SplineSpine(aniseed.RigComponent):
         # -- Define our running parent
         parent = master_control.ctl
 
+        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
+            "TweakerVisibility",
+            value=False,
+            attribute_type="bool",
+            keyable=True,
+        )
+        print("------------------------")
+        print(tweaker_vis_attribute.path())
+        print(tweaker_vis_attribute)
         # -- We need to keep track of the ik controls we build
         ik_controls = []
 
@@ -432,6 +424,9 @@ class SplineSpine(aniseed.RigComponent):
                 orient_to_world=orient_to_world,
                 drive_this=spline_setup.out_controls[idx].full_name(),
             )
+
+            for shape in mref.get(base_control_tweaker.ctl).shapes():
+                tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility")
 
             # -- If we need to orient to world then we do that by adjusting
             # -- the rotation of the control org.
@@ -569,9 +564,6 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Read the joint chain
         joints = self.all_joints()
-
-        # -- Make the joints unselectable
-        aniseed_toolkit.joints.make_referenced(joints)
 
         # -- Create the spline setup - note that this same function is called
         # -- when building the rig too. This ensures the behaviour of the guide
@@ -851,7 +843,7 @@ class SplineSpine(aniseed.RigComponent):
             )
         except:
             joints = []
-        print("found joints : %s" % joints)
+
         # -- We now cycle the joints and declare a new output attribute
         # -- to represent it
         for idx, joint in enumerate(joints):
@@ -1009,6 +1001,13 @@ class TriSplineSpine(SplineSpine):
         orient_to_world = self.option("Orient Controls To World").get()
         control_scale = 10.0
 
+        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
+            "TweakerVisibility",
+            value=False,
+            attribute_type="bool",
+            keyable=True,
+        )
+
         # -- Now we can start building our actual controls.
         hip_control, hip_control_tweaker = self.create_doubled_control(
             descriptive=f"{descriptive}Hip",
@@ -1073,6 +1072,25 @@ class TriSplineSpine(SplineSpine):
             drive_this=spline_setup.out_controls[4].full_name(),
         )
         ik_controls.extend([chest_control, chest_control_tweaker])
+
+
+        tweakers = [
+            hip_control_tweaker,
+            chest_control_tweaker,
+            mid_control_tweaker,
+            lower_mid_control_tweaker,
+            upper_mid_control_tweaker,
+        ]
+        for tweaker in tweakers:
+            for shape in mref.get(tweaker.ctl).shapes():
+
+                # cmds.connectAttr(
+                #     tweaker_vis_attribute.path(),
+                #     f"{shape.full_name()}.visibility", force=True
+                # )
+                try:
+                    tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility", force=True)
+                except: pass
 
         # -- We use a skinned mesh to automate the movement of the
         # -- central control, so lets build that now.

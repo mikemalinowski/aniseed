@@ -17,3 +17,4 @@ from . import skin
 from . import containts
 from . import direction
 from . import sets
+from . import component

@@ -207,7 +207,7 @@ class TwistSetup:
                 0.001,
                 min(
                     0.9999,
-                    idx / (self._twist_count - 1)
+                    idx if self._twist_count == 1 else idx / (self._twist_count - 1)
                 )
             )
 

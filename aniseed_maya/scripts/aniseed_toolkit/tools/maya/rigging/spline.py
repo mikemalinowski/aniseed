@@ -285,9 +285,10 @@ class SimpleSplineSetup:
             target = self.out_sub_tracers[idx]
             if idx == 0 and self.option_lock_end_orientations_to_control:
                 target = self.out_controls[0]
+
             if idx == len(anchors) - 1 and self.option_lock_end_orientations_to_control:
                 target = self.out_controls[-1]
-
+                
             # -- Constrain the target to the anchor
             mc.parentConstraint(
                 target.full_name(),
