@@ -133,15 +133,13 @@ class BlendedConstraint(aniseed.RigComponent):
             )[0]
         )
         constraint.attr("interpType").set(0)  # No Flip
-        print("constraint : %s" % constraint)
 
         weight_attributes = constraint.weight_attributes()
-        print("weight_attributes : %s" % weight_attributes)
 
         reverse_node = mref.create("reverse")
         blend_attribute.connect(reverse_node.attr("inputX"))
-        reverse_node.attr("outputX").connect(constraint.attr(weight_attributes[0]))
-        blend_attribute.connect(constraint.attr(weight_attributes[1]))
+        reverse_node.attr("outputX").connect(weight_attributes[0])
+        blend_attribute.connect(weight_attributes[1])
 
         cmds.parentConstraint(
             rotator_control.ctl,

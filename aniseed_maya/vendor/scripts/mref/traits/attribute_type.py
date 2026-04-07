@@ -120,7 +120,7 @@ class Attribute(mref.Trait):
         """
         return self.outputs() + self.inputs()
 
-    def inputs(self) -> list[mref.ReferencedItem]:
+    def inputs(self, node_type=None) -> list[mref.ReferencedItem]:
         """
         This will return a list of inputs coming into the node
         """
@@ -130,7 +130,7 @@ class Attribute(mref.Trait):
             cmds.listConnections(self.path(), source=True, destination=False, plugs=True) or []
         ]
 
-    def outputs(self) -> list[mref.ReferencedItem]:
+    def outputs(self, node_type=None) -> list[mref.ReferencedItem]:
         """
         This will return a list of outputs coming from the node
         """

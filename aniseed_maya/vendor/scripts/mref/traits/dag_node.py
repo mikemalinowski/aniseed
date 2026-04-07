@@ -25,7 +25,7 @@ class DagNode(mref.Trait):
         """
         return self._dag_node.fullPathName()
 
-    def children(self, recursive: bool = False, node_type: str = None) -> list[mref.ReferencedItem]:
+    def children(self, recursive: bool = False, node_type: str = None, name_match: str = None) -> list[mref.ReferencedItem]:
         """
         Returns a list of all children of the node
 
@@ -33,7 +33,7 @@ class DagNode(mref.Trait):
             recursive (bool, optional): If False (default) only immediate children
                 will be returned. If True all children will be returned.
             node_type (str, optional): Only return children of the specified type
-
+            name_match:
         Returns:
             A list of NodeReference objects
         """
@@ -45,11 +45,13 @@ class DagNode(mref.Trait):
         if node_type:
             additional_args['type'] = node_type
 
-        return [
-            mref.get(node)
-            for node in cmds.listRelatives(self.full_name(), children=True, **additional_args) or []
-        ]
-
+        return mref.ReferenceList(
+            [
+                mref.get(node)
+                for node in cmds.listRelatives(self.full_name(), children=True, **additional_args) or []
+                if not name_match or name_match in node.split("|")[-1]
+            ],
+        )
 
     def parent(self) -> mref.ReferencedItem|None:
         """

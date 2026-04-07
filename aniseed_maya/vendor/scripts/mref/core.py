@@ -200,24 +200,30 @@ def get(identifier: typing.Any) -> ReferencedItem|list[ReferencedItem]:
     ReferenceItem or a list of ReferencedItems.
     """
     if isinstance(identifier, list):
-        return MRefList(
+        return ReferenceList(
             ReferencedItem(sub_identifier)
             for sub_identifier in identifier
         )
     return ReferencedItem(identifier)
 
 
-def create(*args, **kwargs) -> ReferencedItem|list[ReferencedItem]:
+def create(node_type, unique=True, *args, **kwargs) -> ReferencedItem|list[ReferencedItem]:
     """
     This will use the normal cmds create but return the ReferencedItem
     casts. For any types which return a list of items, then a list of
     ReferencedItems is returned.
     """
+    # -- If we have been given a name argument and we need to
+    # -- make it unique, do that before we do anything else.
+    if unique and "name" in kwargs:
+        desired_name = kwargs.pop("name")
+        kwargs["name"] = unique_name(desired_name)
+
     parent = kwargs.get("parent", None)
-    result = cmds.createNode(*args, **kwargs)
+    result = cmds.createNode(node_type, *args, **kwargs)
 
     if isinstance(result, list):
-        return MRefList(
+        return ReferenceList(
             get(node)
             for node in result
         )
@@ -232,7 +238,7 @@ def selected() -> list[ReferencedItem]:
     """
     This will return the current selection as a list of ReferencedItems.
     """
-    return MRefList(
+    return ReferenceList(
         get(node)
         for node in cmds.ls(selection=True, long=True)
     )
@@ -247,7 +253,7 @@ def find(search_string: str, **kwargs) -> list[ReferencedItem]:
     if "long" in kwargs:
         kwargs.pop("long")
 
-    return MRefList(
+    return ReferenceList(
         get(node)
         for node in cmds.ls(search_string, long=True, **kwargs)
     )
@@ -274,7 +280,7 @@ def delete(nodes: ReferencedItem|list[ReferencedItem]) -> None:
         cmds.delete(node)
 
 
-class MRefList(list):
+class ReferenceList(list):
 
     def names(self):
         results = []
@@ -295,3 +301,14 @@ class MRefList(list):
             else:
                 results.append(node)
         return results
+
+
+def unique_name(name):
+    counter = 1
+    proposed_name = name
+
+    while cmds.objExists(proposed_name):
+        counter += 1
+        proposed_name = f"{name}{counter}"
+
+    return proposed_name

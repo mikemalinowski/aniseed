@@ -61,10 +61,12 @@ class DependencyNode(mref.Trait):
         """
         Returns a list of all attributes on this node
         """
-        return [
-            mref.get(f"{self.name()}.{attribute}")
-            for attribute in cmds.listAttr(self.item.name(), **kwargs)
-        ]
+        return mref.ReferenceList(
+            [
+                mref.get(f"{self.name()}.{attribute}")
+                for attribute in cmds.listAttr(self.item.name(), **kwargs) or []
+            ]
+        )
 
     def add_attribute(self, name: str, value: typing.Any, attribute_type: str, **kwargs) -> mref.ReferencedItem:
         """
@@ -77,8 +79,16 @@ class DependencyNode(mref.Trait):
             **kwargs
         )
         attribute = mref.get(f"{self.full_name()}.{name}")
-        attribute.set(value)
+
+        try:
+            attribute.set(value)
+        except:
+            pass
+
         return attribute
+
+    def has_attribute(self, attribute_name: str) -> bool:
+        return self.attribute(attribute_name) is not None
 
     def node_type(self) -> str:
         """
@@ -103,3 +113,7 @@ class DependencyNode(mref.Trait):
             mref.get(node)
             for node in cmds.listConnections(self.full_name(), source=False, destination=True, shapes=True, **kwargs)
         ]
+
+    def delete(self):
+        if cmds.objExists(self.full_name()):
+            cmds.delete(self.full_name())

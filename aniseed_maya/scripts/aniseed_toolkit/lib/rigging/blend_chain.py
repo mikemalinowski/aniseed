@@ -89,14 +89,13 @@ class BlendChain:
                 )[0]
             )
             constraint.attr("interpType").set(2)  # Shortest
-            print(constraint.weight_attributes(full_name=True))
             # -- Hook up the direct connection
-            blend_attribute.connect(constraint.weight_attributes(full_name=True)[1])
+            blend_attribute.connect(constraint.weight_attributes()[1])
 
             # -- Hook up the reverse connection
             reverse_node = mref.create("reverse")
             blend_attribute.connect(reverse_node.attr("inputX"))
-            reverse_node.attr("outputX").connect(constraint.weight_attributes(full_name=True)[0])
+            reverse_node.attr("outputX").connect(constraint.weight_attributes()[0])
 
             created_joints.append(blend_joint)
             parent = blend_joint

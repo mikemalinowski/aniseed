@@ -106,6 +106,6 @@ class ConstrainBetween(aniseed.RigComponent):
 
         attribute.connect(reverse_node.attr("inputX"))
         reverse_node.attr("outputX").connect(
-            constraint.attr(weight_attributes[0])
+            weight_attributes[0]
         )
-        attribute.connect(constraint.attr(weight_attributes[1]))
+        attribute.connect(weight_attributes[1])
