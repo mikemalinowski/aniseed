@@ -1,3 +1,4 @@
+import re
 import types
 import typing
 import os
@@ -71,6 +72,7 @@ class ReferencedItem:
     This is the class which developers will usually interact with. This class
     will have traits bound to it.
     """
+    _plug_regex = re.compile(r"(\w+)(?:\[(\d+)\])?")
 
     def __init__(self, item: "ReferencedItem|str|om.MObject"):
 
@@ -180,18 +182,106 @@ class ReferencedItem:
             return item.pointer()
 
         if isinstance(item, str):
-            sel = om.MSelectionList()
-            sel.add(item)
-
             if "." in item:
-                return sel.getPlug(0)
-            return sel.getDependNode(0)
+                return cls.get_mplug(item)
+            return cls._resolve_node(item)
 
     def pointer(self) -> om.MObject:
         """
         This will return the mobject represented by this object.
         """
         return self._pointer
+
+    @classmethod
+    def _resolve_node(cls, node_address):
+        sel = om.MSelectionList()
+        sel.add(node_address)
+        return sel.getDependNode(0)
+
+    @classmethod
+    def get_mplug(cls, attr_string):
+        """
+        This will attempt to resolve the plug from the given attribute string. Note
+        that this is not as simple as it should be, as there are multiple types of
+        attributes in maya, each of which need accessing in slightly different ways.
+        """
+
+        # -- Firstly, if this is not an attribute address, we error out
+        # -- immediately.
+        if "." not in attr_string:
+            raise RuntimeError(f"Not an attribute: {attr_string}")
+
+        # -- If this is a direct attribute we return it. As this is the case
+        # -- for most situations we opt for speed by asking for forgiveness
+        # -- rather than permission
+        try:
+            sel = om.MSelectionList()
+            sel.add(attr_string)
+            return sel.getPlug(0)
+        except:
+            pass
+
+        # -- To reach here we're dealing with an nested attribute or compound
+        # -- attribute
+        node_name, remainder = attr_string.split(".", 1)
+
+        # -- Get the Dependency Node Fn for the node
+        sel = om.MSelectionList()
+        sel.add(node_name)
+        obj = sel.getDependNode(0)
+        fn = om.MFnDependencyNode(obj)
+
+        # -- Get all the attribute parts
+        tokens = remainder.split(".")
+
+        # --- Now we construct a map of the alias's. This is to support special
+        # -- attributes such as those on blendshapes where the address is the
+        # -- alias but the actual plug is the weight[n] attribute./
+        alias_map = dict(fn.getAliasList() or [])
+        if tokens[0] in alias_map:
+            alias_path = alias_map[tokens[0]]
+            tokens = alias_path.split(".") + tokens[1:]
+
+        # -- Define the variable we will ultimately try and return
+        plug = None
+
+        for idx, token in enumerate(tokens):
+
+            # -- Check if this is a valid attribute form
+            match = cls._plug_regex.fullmatch(token)
+            if not match:
+                raise RuntimeError(f"Invalid token: {token}")
+
+            name, index = match.groups()
+            index = int(index) if index is not None else None
+
+            # If we're the first token in the address we can just get the
+            # -- plug directly
+            if idx == 0:
+                plug = fn.findPlug(name, False)
+            else:
+                # -- we need to start special casing and branching based
+                # -- on the plug type
+                if plug.isCompound:
+                    found = False
+                    for c in range(plug.numChildren()):
+                        child = plug.child(c)
+                        if child.partialName(useLongNames=True) == name:
+                            plug = child
+                            found = True
+                            break
+                    if not found:
+                        raise RuntimeError(f"Child '{name}' not found on {plug.name()}")
+                else:
+                    raise RuntimeError(f"{plug.name()} has no child '{name}'")
+
+            # -- Check for an array attribute
+            if index is not None:
+                if not plug.isArray:
+                    raise RuntimeError(f"{plug.name()} is not an array")
+                plug = plug.elementByLogicalIndex(index)
+
+        return plug
 
 def get(identifier: typing.Any) -> ReferencedItem|list[ReferencedItem]:
     """

@@ -94,6 +94,17 @@ class Attribute(mref.Trait):
             **kwargs
         )
 
+    def connect_next(self, attribute: mref.ReferencedItem|str, force: bool = False, **kwargs) -> None:
+
+        existing_plugs = attribute.get(multiIndices=True) or []
+        next_index = max(existing_plugs) + 1 if existing_plugs else 0
+        cmds.connectAttr(
+            self.path(),
+            f"{attribute.path()}[{next_index}]",
+            force=force,
+            **kwargs
+        )
+
     def disconnect(self, attribute: mref.ReferencedItem|str = None) -> None:
         """
         This will disconnect this attribute from the given attribute. If no other attribute

@@ -9,6 +9,8 @@ class StandardConfig(aniseed.RigConfiguration):
     left = "LF"
     right = "RT"
     middle = "MD"
+    front = "FR"
+    back = "BK"
 
     # -- Base Types
     organisational = "ORG"

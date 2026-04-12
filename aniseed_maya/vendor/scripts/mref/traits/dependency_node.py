@@ -1,3 +1,5 @@
+import traceback
+
 import mref
 import typing
 from maya import cmds
@@ -61,12 +63,17 @@ class DependencyNode(mref.Trait):
         """
         Returns a list of all attributes on this node
         """
-        return mref.ReferenceList(
-            [
-                mref.get(f"{self.name()}.{attribute}")
-                for attribute in cmds.listAttr(self.item.name(), **kwargs) or []
-            ]
-        )
+        for attribute in cmds.listAttr(self.item.name(), **kwargs) or []:
+            if attribute.startswith("."):
+                attribute = attribute[1:]
+
+            attribute_address = f"{self.name()}.{attribute}"
+            try:
+                mref.get(attribute_address)
+            except:
+                import traceback
+                traceback.print_exc()
+        return mref.ReferenceList()
 
     def add_attribute(self, name: str, value: typing.Any, attribute_type: str, **kwargs) -> mref.ReferencedItem:
         """

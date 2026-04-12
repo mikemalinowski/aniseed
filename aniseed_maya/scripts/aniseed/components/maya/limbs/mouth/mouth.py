@@ -405,6 +405,11 @@ class MouthComponent(aniseed.RigComponent):
                 z=0,
             )
 
+            aniseed_toolkit.guide.link(
+                aim_control.ctl,
+                jaw_control.ctl,
+            )
+
             cmds.setAttr(
                 f"{aim_control.org}.translate{chain_direction.axis.upper()}",
                 jaw_length * self.option("Aim Control Distance Multiplier").get(),

@@ -60,6 +60,6 @@ def _convert_to_cmds(variable):
         return variable.full_name()
 
     if isinstance(variable, core.ReferenceList):
-        return variable.full_name()
+        return variable.full_names()
 
     return variable

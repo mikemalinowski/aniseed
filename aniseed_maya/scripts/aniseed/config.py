@@ -16,6 +16,8 @@ class RigConfiguration(component.RigComponent):
     left = "l"
     right = "r"
     middle = "c"
+    front = "f"
+    back = "b"
 
     # -- Base Types
     organisational = "org"

@@ -55,6 +55,7 @@ class BlendChain:
             attribute_type="float",
             min=0,
             max=1,
+            keyable=True,
         )
 
         parent = self.parent
