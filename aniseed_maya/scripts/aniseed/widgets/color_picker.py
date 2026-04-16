@@ -43,7 +43,7 @@ class ColorPicker(QtWidgets.QWidget):
 
         # -- Prompt for a new colour
         new_colour = QtWidgets.QColorDialog.getColor(
-            QtWidgets.QColor(*self._colour),
+            QtGui.QColor(*self._colour),
             parent=self,
             title="Select Colour",
         )

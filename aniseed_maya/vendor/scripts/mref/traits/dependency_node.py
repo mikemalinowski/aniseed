@@ -109,7 +109,7 @@ class DependencyNode(mref.Trait):
         """
         return [
             mref.get(node)
-            for node in cmds.listConnections(self.full_name(), source=True, destination=False, shapes=True, **kwargs)
+            for node in cmds.listConnections(self.full_name(), source=True, destination=False, shapes=True, **kwargs) or []
         ]
 
     def outputs(self, **kwargs) -> list[mref.ReferencedItem]:
@@ -118,7 +118,7 @@ class DependencyNode(mref.Trait):
         """
         return [
             mref.get(node)
-            for node in cmds.listConnections(self.full_name(), source=False, destination=True, shapes=True, **kwargs)
+            for node in cmds.listConnections(self.full_name(), source=False, destination=True, shapes=True, **kwargs) or []
         ]
 
     def delete(self):

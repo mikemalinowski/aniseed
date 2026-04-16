@@ -40,7 +40,7 @@ class SplineSpine(aniseed.RigComponent):
         self.declare_input(name="Tip Joint", value="", group="Joint Requirements")
 
         # -- Naming Options
-        self.declare_option(name="Descriptive Prefix", value="Spine", group="Naming")
+        self.declare_option(name="Descriptive Prefix", value="Spine", group="Naming", pre_expose=True)
         self.declare_option(name="Location", value="md", group="Naming", pre_expose=True)
 
         # -- Visual Options

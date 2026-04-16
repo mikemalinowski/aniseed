@@ -26,3 +26,21 @@ def add_separator(node: str = "") -> None:
         keyable=True,
     )
     cmds.setAttr(f"{node}.{name_to_use}", lock=True)
+
+
+def lock_and_hide(nodes: list, attributes: list, lock=True, hide=True) -> None:
+    """
+    This will lock and hide (optionally) the list of attributes from the list
+    of nodes.
+    :param nodes:
+    :param attributes:
+    :return:
+    """
+    for node in nodes:
+        for attribute in attributes:
+            cmds.setAttr(
+                f"{node}.{attribute}",
+                lock=lock,
+                channelBox=not hide,
+                keyable=not hide,
+            )

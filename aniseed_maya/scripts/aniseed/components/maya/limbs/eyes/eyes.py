@@ -1,4 +1,5 @@
 import os
+import mref
 import typing
 import aniseed
 import aniseed_toolkit
@@ -647,11 +648,55 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         if self.option("Include Eye Lids").get():
-            self.create_eyelid_behaviour(
+            lid_controls = self.create_eyelid_behaviour(
                 component_org=component_org,
                 eye_control=direct_eye_control.ctl,
                 aim_control=aim_control.ctl,
             )
+
+            self.create_blink_behaviour(
+                eye_control=direct_eye_control,
+                upper_lid_control=lid_controls[1],
+                lower_lid_control=lid_controls[0],
+            )
+
+    def create_blink_behaviour(self, eye_control, upper_lid_control, lower_lid_control):
+
+        upper_zero = mref.get(upper_lid_control.zero)
+        lower_zero = mref.get(lower_lid_control.zero)
+
+        host = mref.get(eye_control.ctl)
+        blink_attribute = host.add_attribute(
+            "blink",
+            value=0,
+            attribute_type="float",
+            keyable=True,
+            min=0,
+            max=1,
+        )
+        blink_reverse = mref.create("floatMath")
+        blink_reverse.attr("operation").set(2)
+        blink_reverse.attr("floatB").set(-1)
+
+        blink_attribute.connect(blink_reverse.attr("floatA"))
+
+        max_rotation = 65
+        upper_rotation_multiplier = max_rotation * 0.666
+        lower_rotation_multiplier = max_rotation * 0.333
+
+        upper_multiplier = mref.create("floatMath")
+        upper_multiplier.attr("operation").set(2)  # -- Multiply
+        upper_multiplier.attr("floatB").set(upper_rotation_multiplier)
+        blink_attribute.connect(upper_multiplier.attr("floatA"))
+
+        lower_multiplier = mref.create("floatMath")
+        lower_multiplier.attr("operation").set(2)  # -- Multiply
+        lower_multiplier.attr("floatB").set(lower_rotation_multiplier)
+        blink_reverse.attr("outFloat").connect(lower_multiplier.attr("floatA"))
+
+        upper_multiplier.attr("outFloat").connect(upper_zero.attr("rotateX"))
+        lower_multiplier.attr("outFloat").connect(lower_zero.attr("rotateX"))
+
 
     def create_eyelid_behaviour(self, component_org, eye_control, aim_control):
 
@@ -740,6 +785,7 @@ class EyeComponent(aniseed.RigComponent):
             "Upper": f"{eye_control}.upperLidFollow",
         }
 
+        lid_controls = []
         for idx in range(len(labels)):
 
             label = labels[idx]
@@ -850,6 +896,7 @@ class EyeComponent(aniseed.RigComponent):
                 config=self.config,
                 shape="core_cube",
             )
+            lid_controls.append(lid_control)
 
             kwargs = {
                 forward_axis.lower(): 1,
@@ -879,6 +926,7 @@ class EyeComponent(aniseed.RigComponent):
                 self.input(f"{label} Eye Lid Joint").get(),
                 maintainOffset=True,
             )
+        return lid_controls
 
     @classmethod
     def axis_vector(cls, axis):

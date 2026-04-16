@@ -28,3 +28,78 @@ class ExecutionBlock(aniseed.RigComponent):
 
     def run(self):
         return True
+
+
+class RunExectionBlock(aniseed.RigComponent):
+    """
+    This will instigate the run of a block during the execution of another
+    block.
+    """
+    identifier = "Stack : Run Execution Block"
+
+    def __init__(self, *args, **kwargs):
+        super(RunExectionBlock, self).__init__(*args, **kwargs)
+        self.declare_input(
+            name="Execution Block Label",
+            value="",
+        )
+
+    def input_widget(self, requirement_name: str):
+            return aniseed.widgets.ItemSelector(
+                items=self.get_valid_execution_blocks(),
+                default_item="",
+            )
+
+    def get_all_parent_labels(self):
+        parents = []
+        parent = self.parent
+
+        while parent:
+            parents.append(parent.label())
+            parent = parent.parent
+
+        return parents
+
+    def get_valid_execution_blocks(self):
+
+        execution_blocks = []
+        parent_labels = self.get_all_parent_labels()
+
+        for component in self.stack.components(of_type=ExecutionBlock.identifier):
+            if component.label() not in parent_labels:
+                execution_blocks.append(component.label())
+
+        clean_list = sorted(list(set(execution_blocks)))
+        clean_list.insert(0, "")
+        return clean_list
+
+    def is_valid(self):
+        component_label = self.input("Execution Block Label").get()
+
+        if not component_label:
+            print("No Component Label Selected")
+            return False
+
+        component = self.stack.get_component_by_label(
+            label=component_label,
+            of_type=ExecutionBlock.identifier,
+        )
+
+        if not component:
+            print(f"{component_label} could not be found.")
+            return False
+
+        return True
+
+    def run(self):
+        component_label = self.input("Execution Block Label").get()
+
+        component = self.stack.get_component_by_label(
+            label=component_label,
+            of_type=ExecutionBlock.identifier,
+        )
+
+        if not component:
+            return
+
+        self.stack.build(build_below=component)

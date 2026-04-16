@@ -1,4 +1,5 @@
 import os
+import mref
 import json
 from maya import cmds
 import maya
@@ -408,3 +409,37 @@ def _get_nurbs_cv_components(nurbs_surface):
             comp_fn.addElement(u, v)
 
     return cv_component
+
+
+def add_all_skin_joints_to_all_skins():
+    """
+    This will add all joints that are part of all skin clusters
+    within the scene to all skin clusters.
+    :return:
+    """
+    # -- Get a list of all the skin clusters in the scene
+    all_skins = mref.ls(type="skinCluster")
+
+    # -- We need to find all the joints driving any of the skins
+    all_skin_joints = []
+    for skin in all_skins:
+        all_skin_joints.extend(skin.influences())
+    all_skin_joints = list(set(all_skin_joints))
+
+    # -- Store the lock weights setting of each joint, so we can restore it
+    lock_weight_values = dict()
+    for joint in all_skin_joints:
+        lock_weight_values[joint] = joint.attr("liw").get()
+
+    # -- Now ensure all of those joints are part of all
+    # -- of the skins
+    for skin in all_skins:
+        for joint in all_skin_joints:
+            print(skin)
+            try:
+                skin.add_influence(joint, lockWeights=True)
+            except: pass
+
+    # -- Now restore the lock weights
+    for joint, lock_value in lock_weight_values.items():
+        joint.attr("liw").set(lock_value)

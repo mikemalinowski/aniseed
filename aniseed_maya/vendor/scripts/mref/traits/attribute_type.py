@@ -151,6 +151,36 @@ class Attribute(mref.Trait):
             cmds.listConnections(self.path(), source=False, destination=True, plugs=True) or []
         ]
 
+    def type(self):
+        """
+        Returns the type of the attribute value.
+        """
+        return self.get(type=True)
+
+    def python_type(self):
+        """
+        Returns the python type that most represents this attribute value.
+        :return:
+        """
+        attribute_type = self.get(type=True)
+
+        if attribute_type in ["doubleLinear", "float", "doubleAngle", "double"]:
+            return float
+
+        if attribute_type == ["int", "enum"]:
+            return int
+
+        if attribute_type in ["bool"]:
+            return bool
+
+        if attribute_type in ["double3", "float3"]:
+            return list
+
+        if attribute_type in ["string"]:
+            return str
+
+        return None
+
     def __repr__(self) -> str:
         """
         This string representation of this type

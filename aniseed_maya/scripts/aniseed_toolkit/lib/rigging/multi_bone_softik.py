@@ -53,13 +53,14 @@ def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, ho
     aniseed_toolkit.run("Add Separator Attribute", host)
 
     for attr, value in float_attrs.items():
-        mc.addAttr(
-            host,
-            shortName=attr,
-            attributeType="float",
-            keyable=False if "Default" in attr else True,
-            defaultValue=value
-        )
+        if not mc.objExists(f"{host}.{attr}"):
+            mc.addAttr(
+                host,
+                shortName=attr,
+                attributeType="float",
+                keyable=False if "Default" in attr else True,
+                defaultValue=value
+            )
 
     # -- Convert the float to the attribute address
     for idx, joint in enumerate(full_chain):
@@ -68,18 +69,20 @@ def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, ho
     soft_dist_attr = f"{host}.SoftDistance"
     stretch_attr = f"{host}.Stretch"
 
-    mc.addAttr(
-        host,
-        shortName="root_matrix",
-        at="matrix",
-    )
+    if not mc.objExists(f"{host}.root_matrix"):
+        mc.addAttr(
+            host,
+            shortName="root_matrix",
+            at="matrix",
+        )
     root_matrix = f"{host}.root_matrix"
 
-    mc.addAttr(
-        host,
-        shortName="target_matrix",
-        at="matrix",
-    )
+    if not mc.objExists(f"{host}.target_matrix"):
+        mc.addAttr(
+            host,
+            shortName="target_matrix",
+            at="matrix",
+        )
     target_matrix = f"{host}.target_matrix"
 
     mc.connectAttr(

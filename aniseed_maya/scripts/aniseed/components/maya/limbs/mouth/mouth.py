@@ -306,6 +306,7 @@ class MouthComponent(aniseed.RigComponent):
         )
 
 
+
         # -- Hook up our constraint driving connections
         lower_lip_reverse_node = cmds.createNode("reverse")
 
@@ -480,23 +481,24 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Now we create the actual controls for the lps
         # -- Finally we now create the constraints for the joints
-        cmds.parentConstraint(
-            upper_lip_control.ctl,
-            upper_lip_joint,
-            maintainOffset=True,
-        )
+        for constraint_type in [cmds.parentConstraint, cmds.scaleConstraint]:
+            constraint_type(
+                upper_lip_control.ctl,
+                upper_lip_joint,
+                maintainOffset=True,
+            )
 
-        cmds.parentConstraint(
-            lower_lip_control.ctl,
-            lower_lip_joint,
-            maintainOffset=True,
-        )
+            constraint_type(
+                lower_lip_control.ctl,
+                lower_lip_joint,
+                maintainOffset=True,
+            )
 
-        cmds.parentConstraint(
-            jaw_control.ctl,
-            jaw_joint,
-            maintainOffset=True,
-        )
+            constraint_type(
+                jaw_control.ctl,
+                jaw_joint,
+                maintainOffset=True,
+            )
 
     def user_func_create_skeleton(self):
 

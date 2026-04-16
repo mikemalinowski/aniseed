@@ -36,3 +36,15 @@ class CopySkinToUnskinnedMeshes(aniseed_toolkit.Tool):
             skinned_mesh=skinned_mesh,
             unbound_meshes=unbound_meshes,
         )
+
+
+class AddAllSkinJointsToAllSkins(aniseed_toolkit.Tool):
+
+    identifier = "Add All Skins Joints to All Skins"
+    classification = "Rigging"
+    categories = [
+        "Skinning",
+    ]
+
+    def run(self):
+        aniseed_toolkit.skin.add_all_skin_joints_to_all_skins()

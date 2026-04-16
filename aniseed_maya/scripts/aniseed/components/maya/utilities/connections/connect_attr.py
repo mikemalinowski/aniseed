@@ -60,3 +60,67 @@ class ConnectAttr(aniseed.RigComponent):
             destination_node.attr(self.input_widget("Destination Attribute").get()),
             force=self.option("Force").get(),
         )
+
+
+class ConnectManyAttr(aniseed.RigComponent):
+
+    identifier = "Utility : Connect Attribute (Multi)"
+
+    def __init__(self, *args, **kwargs):
+        super(ConnectManyAttr, self).__init__(*args, **kwargs)
+
+        self.declare_input(
+            name="Source Node",
+            value="",
+        )
+
+        self.declare_input(
+            name="Source Attribute",
+            value="",
+        )
+
+        self.declare_input(
+            name="Destination Nodes",
+            value=[],
+        )
+
+        self.declare_input(
+            name="Destination Attribute",
+            value="",
+        )
+
+        self.declare_option(
+            name="Force",
+            value=True,
+        )
+
+    def input_widget(self, requirement_name: str):
+        if requirement_name in ["Source Node"]:
+            return aniseed.widgets.ObjectSelector()
+
+        if requirement_name == "Destination Nodes":
+            return aniseed.widgets.ObjectList()
+
+    def is_valid(self) -> bool:
+        source_node = self.input_widget("Source Node").get()
+        destination_nodes = self.input_widget("Destination Nodes").get()
+
+        if not source_node or not cmds.objExists(source_node):
+            print("Source node is invalid.")
+            return False
+
+        for destination_node in destination_nodes:
+            if not destination_node or not cmds.objExists(destination_node):
+                print("Destination node is invalid.")
+                return False
+
+    def run(self):
+
+        source_node = mref.get(self.option("Source Node").get())
+        destination_nodes = mref.get(self.option("Destination Nodes").get())
+
+        for destination_node in destination_nodes:
+            source_node.attr(self.input("Source Attribute").get()).connect(
+                destination_node.attr(self.input("Destination Attribute").get()),
+                force=self.option("Force").get(),
+            )

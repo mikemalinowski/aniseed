@@ -1,4 +1,5 @@
 import os
+import mref
 import typing
 import aniseed
 import qtility
@@ -127,18 +128,18 @@ class TriLegComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
-            name="Upvector Distance Multiplier",
-            value=0.5,
-            group="Behaviour",
-        )
-
-        self.declare_option(
             name="Upvector Position Multiplier",
             value=1.0,
             group="Behaviour",
         )
         self.declare_option(
             name="Apply Soft Ik",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Align Heel And Toe To Foot",
             value=True,
             group="Behaviour",
         )
@@ -225,6 +226,9 @@ class TriLegComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectList()
 
         if requirement_name == "Lower Twist Joints":
+            return aniseed.widgets.ObjectList()
+
+        if requirement_name == "Mid Twist Joints":
             return aniseed.widgets.ObjectList()
 
         if requirement_name.endswith(" Guide"):
@@ -315,10 +319,14 @@ class TriLegComponent(aniseed.RigComponent):
 
         # -- Using the data from the ik and fk setups we
         # -- can now construct the blend setup
-        self.create_nk_setup(
+        nk_chian = self.create_nk_setup(
             parent=parent,
             ik_data=ik_data,
             fk_data=fk_data,
+        )
+        self.create_twists(
+            nk_chain=nk_chian,
+            parent=parent,
         )
 
     def create_nk_setup(self, parent, ik_data, fk_data):
@@ -420,6 +428,8 @@ class TriLegComponent(aniseed.RigComponent):
         self.output("Blended Foot").set(nk_joints[self.INDEX_FOOT])
         self.output("Blended Toe").set(nk_joints[self.INDEX_TOE])
 
+        return nk_joints
+
     def create_fk_setup(self, parent):
 
         root_joint = self.input("Leg Root").get()
@@ -491,6 +501,10 @@ class TriLegComponent(aniseed.RigComponent):
             to_this=joint_chain[self.INDEX_FOOT],
             parent=ik_root_control.ctl,
         )
+        n = mref.get(upper_to_foot_chain[0])
+        m = n.get_matrix(space="world")
+        cmds.setAttr(f"{upper_to_foot_chain[0]}.inheritsTransform", 0)
+        n.set_matrix(m, space="world")
 
         upper_to_foot_chain = self._apply_mechanism_name(
             upper_to_foot_chain,
@@ -504,6 +518,7 @@ class TriLegComponent(aniseed.RigComponent):
             solver="ikRPsolver",
             priority=1,
         )
+
         upper_to_foot_ikh = cmds.rename(
             self.config.generate_name(
                 classification="ikh",
@@ -589,6 +604,14 @@ class TriLegComponent(aniseed.RigComponent):
                 rotation=(0, 0, 0),
                 worldSpace=True,
             )
+        lock_ankle_rotation_attr = mref.get(foot_control.ctl).add_attribute(
+            "lock_ankle_rotation",
+            attribute_type="float",
+            value=0,
+            keyable=True,
+            minValue=0,
+            maxValue=1,
+        )
 
         # -- Apply the spring solve ik bias
         cmds.setAttr(f"{upper_to_foot_ikh}.springAngleBias[0].springAngleBias_Position", lock=False)
@@ -624,16 +647,17 @@ class TriLegComponent(aniseed.RigComponent):
             shape_scale=reference_scale / 3.0,
             rotate_shape=[90, 0, 0],
         )
-        cmds.xform(
-            heel_control.org,
-            rotation=cmds.xform(
-                foot_control.ctl,
-                query=True,
-                rotation=True,
+        if self.option("Align Heel And Toe To Foot").get():
+            cmds.xform(
+                heel_control.org,
+                rotation=cmds.xform(
+                    foot_control.ctl,
+                    query=True,
+                    rotation=True,
+                    worldSpace=True,
+                ),
                 worldSpace=True,
-            ),
-            worldSpace=True,
-        )
+            )
 
         # -- Add the toe control
         toe_control = aniseed_toolkit.control.create(
@@ -646,16 +670,17 @@ class TriLegComponent(aniseed.RigComponent):
             shape_scale=reference_scale / 3.0,
             rotate_shape=[180, 0, 0],
         )
-        cmds.xform(
-            toe_control.org,
-            rotation=cmds.xform(
-                foot_control.ctl,
-                query=True,
-                rotation=True,
+        if self.option("Align Heel And Toe To Foot").get():
+            cmds.xform(
+                toe_control.org,
+                rotation=cmds.xform(
+                    foot_control.ctl,
+                    query=True,
+                    rotation=True,
+                    worldSpace=True,
+                ),
                 worldSpace=True,
-            ),
-            worldSpace=True,
-        )
+            )
 
         # -- Create the ankle control
         ankle_control = aniseed_toolkit.control.create(
@@ -677,12 +702,18 @@ class TriLegComponent(aniseed.RigComponent):
                 worldSpace=True,
             ),
         )
-        cmds.parentConstraint(
-            foot_control.ctl,
-            ankle_control.ctl,
-            skipRotate=["x", "y", "z"],
-            maintainOffset=True,
+        cns = mref.get(
+                cmds.parentConstraint(
+                foot_control.ctl,
+                ankle_control.ctl,
+                skipRotate=["x", "y", "z"],
+                maintainOffset=True,
+            )[0]
         )
+        cns.attr("interpType").set(0)
+        controller = mref.get(ankle_control.ctl)
+        for axis in ["X", "Y", "Z"]:
+            controller.attr(f"translate{axis}").set(lock=True, keyable=False, channelBox=False)
 
         # -- Now we have our controls we can start to parent the IK
         # -- accordingly.
@@ -701,6 +732,27 @@ class TriLegComponent(aniseed.RigComponent):
             ),
         )
         cmds.parent(ankle_addition_zero, upper_to_foot_chain[self.INDEX_LOWER_LEG])
+
+        # -- Add a constraint on the ankle addition to optionally follow the foot control
+        cmds.parentConstraint(
+            foot_control.ctl,
+            ankle_addition_zero,
+            maintainOffset=True,
+        )
+        cns = mref.get(
+            cmds.parentConstraint(
+                upper_to_foot_chain[self.INDEX_LOWER_LEG],
+                ankle_addition_zero,
+                maintainOffset=True,
+            )[0],
+        )
+        cns.attr("interpType").set(0)  # -- No Flip
+
+        # -- Now set the blend
+        reverse = mref.create("reverse")
+        lock_ankle_rotation_attr.connect(reverse.attr("inputX"))
+        reverse.attr("outputX").connect(cns.weight_attributes()[-1])
+        lock_ankle_rotation_attr.connect(cns.weight_attributes()[0])
 
         ankle_addition = self._apply_mechanism_name(
             nodes=[cmds.createNode("transform")],
@@ -733,7 +785,7 @@ class TriLegComponent(aniseed.RigComponent):
         cmds.xform(
             full_chain_upv.org,
             translation=aniseed_toolkit.transformation.calculate_upvector_position(
-                length=1,
+                length=self.option("Upvector Position Multiplier").get(),
                 *upper_two_bone_ik
             ),
             rotation=(0, 0, 0),
@@ -849,6 +901,11 @@ class TriLegComponent(aniseed.RigComponent):
         ik_controls.append(toe_control.ctl)
         ik_controls.append(full_chain_upv.ctl)
 
+        cmds.pointConstraint(
+            ik_root_control.ctl,
+            upper_to_foot_chain[0],
+            maintainOffset=True,
+        )
         return dict(
             controls=ik_controls,
             blend_points=[
@@ -897,6 +954,7 @@ class TriLegComponent(aniseed.RigComponent):
     def create_twists(self, nk_chain, parent):
 
         upper_twist_joints = self.input("Upper Twist Joints").get()
+        mid_twist_joints = self.input("Mid Twist Joints").get()
         lower_twist_joints = self.input("Lower Twist Joints").get()
 
         if upper_twist_joints:
@@ -913,6 +971,25 @@ class TriLegComponent(aniseed.RigComponent):
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
             twist_component.option("Descriptive Prefix").set("UpperTwist")
+            twist_component.option("Location").set(self.option("Location").get())
+
+            twist_component.run()
+
+
+        if mid_twist_joints:
+            twist_component = self.rig.component_library.request("Augment : Twister")(
+                "",
+                stack=self.rig,
+            )
+
+            twist_component.input("Joints").set(mid_twist_joints)
+            twist_component.input("Parent").set(nk_chain[1])
+            twist_component.input("Root").set(nk_chain[1])
+            twist_component.input("Tip").set(nk_chain[2])
+
+            twist_component.option("Constrain Root").set(False)
+            twist_component.option("Constrain Tip").set(True)
+            twist_component.option("Descriptive Prefix").set("LowerTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()

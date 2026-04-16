@@ -93,8 +93,36 @@ class RigConfiguration(component.RigComponent):
             location=self.middle,
         )
 
+        # -- Create the edit structure
+        edit_component = self.create_editable_structure(None, skeleton_org_name, control_org_name)
+        build_component = self.create_rig_structure(None, skeleton_org_name, control_org_name)
+        srt_component = self.rig.get_component_by_label("Global SRT")
+        reparent_component = self.rig.get_component_by_label("Parent Skeleton")
+        created_joint = srt_component.input("Joint To Drive").get()
+        reparent_component.input("Node To Re-Parent").set(created_joint)
+
+        self.stack.build()
+        self.stack.build(build_below=edit_component)
+
+        # -- Finally select the root joint for the user
+        cmds.select(created_joint)
+        return
+
+    def create_editable_structure(self, parent, skeleton_org_name, control_org_name):
+
+        make_editable = self.rig.add_component(
+            component_type="Stack : Execution Block",
+            label="Make Rig Editable",
+        )
+
+        construction_org = self.rig.add_component(
+            component_type="Stack : Organiser",
+            label="Rig Hierarchy",
+            parent=make_editable,
+        )
+
         # -- Lets pre-load our Standard rigs with a series of components
-        sub_struct = self.rig.add_component(
+        self.rig.add_component(
             component_type="Utility : Add Sub Structure",
             label="Define Rig Structure",
             inputs={
@@ -109,50 +137,17 @@ class RigConfiguration(component.RigComponent):
                     "constraints",
                 ]
             },
+            parent=construction_org
         )
 
-        reparent_component = self.rig.add_component(
+        self.rig.add_component(
             component_type="Utility : Reparent",
             label="Parent Skeleton",
             inputs={
                 "Node To Re-Parent": "",
                 "New Parent": skeleton_org_name
             },
-            parent=sub_struct,
-        )
-
-        # -- Create the edit structure
-        edit_component = self.create_editable_structure(None, skeleton_org_name, control_org_name)
-        build_component = self.create_rig_structure(None, skeleton_org_name, control_org_name)
-
-        srt_component = self.rig.get_component_by_label("Global SRT")
-        created_joint = srt_component.input("Joint To Drive").get()
-        reparent_component.input("Node To Re-Parent").set(created_joint)
-
-        self.stack.build()
-        self.stack.build(build_below=edit_component)
-
-        # -- Finally we will remove the two placeholder components
-        self.stack.remove_component(sub_struct)
-
-        # -- Finally select the root joint for the user
-        cmds.select(created_joint)
-        return
-
-    def create_editable_structure(self, parent, skeleton_org_name, control_org_name):
-
-        make_editable = self.rig.add_component(
-            component_type="Stack : Execution Block",
-            label="Make Rig Editable",
-        )
-
-        show_skeleton = self.rig.add_component(
-            component_type="Utility : Show/Hide",
-            label="Show Skeleton",
-            inputs={
-                "Nodes To Set Visibility": [skeleton_org_name]
-            },
-            parent=make_editable,
+            parent=construction_org,
         )
 
         self.rig.add_component(
@@ -174,6 +169,15 @@ class RigConfiguration(component.RigComponent):
         )
 
         self.rig.add_component(
+            component_type="Stack : Run Execution Block",
+            label="Ensure Rig Is Editable",
+            parent=build_rig,
+            inputs={
+                "Execution Block Label": "Make Rig Editable",
+            }
+        )
+
+        self.rig.add_component(
             component_type="Utility : Remove All Guides",
             label="Remove All Guides",
             parent=build_rig,
@@ -188,10 +192,16 @@ class RigConfiguration(component.RigComponent):
             parent=build_rig,
         )
 
+        post_build = self.rig.add_component(
+            component_type="Stack : Organiser",
+            label="Post Build",
+            parent=build_rig,
+        )
+
         apply_shapes = self.rig.add_component(
             component_type="Utility : Apply Control Shapes",
             label="Apply Shapes",
-            parent=build_rig,
+            parent=post_build,
         )
 
         self.rig.add_component(
@@ -212,19 +222,53 @@ class RigConfiguration(component.RigComponent):
                     "ikHandle",
                 ],
             },
-            parent=build_rig,
+            parent=post_build,
+        )
+        layers_org = self.rig.add_component(
+            component_type="Stack : Organiser",
+            label="Construct Layers",
+            parent=post_build,
         )
 
         self.rig.add_component(
-            component_type="Utility : Show/Hide",
-            label="Hide Skeleton",
-            parent=build_rig,
+            component_type="Utility : Add Controls To Layer",
+            label="Control Layer",
+            parent=layers_org,
             inputs={
-                "Nodes To Set Visibility": [skeleton_org_name],
-            },
-            options={
-                "Visibility": False,
-            },
+                "Layer Name": "Controls",
+                "Root Node": "[Global SRT].[output].[Main Control]",
+            }
         )
 
+        self.rig.add_component(
+            component_type="Utility : Add Children Of Type To Layer",
+            label="Geometry Layer",
+            parent=layers_org,
+            inputs={
+                "Layer Name": "Geometry",
+                "Node Types": ["transform"],
+                "Root Node": self.config.generate_name(
+                    classification=self.config.organisational,
+                    description="geometry",
+                    location=self.config.middle,
+                    unique=False,
+                )
+            }
+        )
+
+        self.rig.add_component(
+            component_type="Utility : Add Children Of Type To Layer",
+            label="Joint Layer",
+            parent=layers_org,
+            inputs={
+                "Layer Name": "Joints",
+                "Node Types": ["joint"],
+                "Root Node": self.config.generate_name(
+                    classification=self.config.organisational,
+                    description="skeleton",
+                    location=self.config.middle,
+                    unique=False,
+                )
+            }
+        )
         return build_rig

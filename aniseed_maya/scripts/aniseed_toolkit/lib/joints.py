@@ -675,16 +675,22 @@ def make_referenced(joints):
         joints = [joints]
 
     for joint in joints:
-        cmds.setAttr(joint + ".overrideEnabled", 1)
-        cmds.setAttr(joint + ".overrideDisplayType", 2)  # 2 = Reference
+        try:
+            cmds.setAttr(joint + ".overrideEnabled", 1)
+            cmds.setAttr(joint + ".overrideDisplayType", 2)  # 2 = Reference
+        except:
+            pass
 
 
 def unreference(joints):
     if isinstance(joints, str):
         joints = [joints]
 
-    for joint in joints:
-        cmds.setAttr(joint + ".overrideDisplayType", 0)  # 0 = Normal
+    try:
+        for joint in joints:
+            cmds.setAttr(joint + ".overrideDisplayType", 0)  # 0 = Normal
+    except:
+        pass
 
 
 def is_referenced(joint):

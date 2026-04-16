@@ -42,6 +42,9 @@ class AddSubStructureComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
 
+        for output in self.outputs():
+            self.remove_output(output.name())
+
         parent = self.input("Parent").get()
 
         existing_nodes = crosswalk.items.get_children(parent)
@@ -54,6 +57,8 @@ class AddSubStructureComponent(aniseed.RigComponent):
                 location=self.config.middle,
                 unique=False,
             )
+            self.declare_output(name=sub_node)
+            self.output(sub_node).set(resolved_name)
 
             if resolved_name in existing_nodes:
                 continue
