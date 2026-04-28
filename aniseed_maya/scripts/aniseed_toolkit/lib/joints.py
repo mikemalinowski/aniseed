@@ -482,6 +482,7 @@ def move_rotations_to_orients(joints: list[str] = None) -> None:
     Returns:
         None
     """
+    print("given joints %s"  % joints)
     if isinstance(joints, str):
         joints = [joints]
 
@@ -645,14 +646,14 @@ def roll(joints: list[str] = None, axis="x", value=90) -> None:
     cmds.select(joints)
     return None
 
-def chain_from_ordered_dict(joint_data, location, config, parent):
+def chain_from_ordered_dict(joint_data, location, config, parent, prefix="", subtract_label=""):
     identity_data = {"tx": 0, "ty": 0, "tz": 0, "rx": 0, "ry": 0, "rz": 0, "sx": 1, "sy": 1, "sz": 1, "jointOrientX": 0, "jointOrientY": 0, "jointOrientZ": 0}
 
     joints = []
     next_parent = parent
     for name, attributes in joint_data.items():
         joint = create(
-            description=name,
+            description=prefix+name.replace(subtract_label, ""),
             location=location,
             parent=next_parent,
             config=config,

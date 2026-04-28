@@ -18,6 +18,8 @@ class Trait:
     # -- the highest priority will always have its method executed.
     priority = 0
 
+    DynamicFunctionNotFound = 12325092
+
     def __init__(self, pointer, item):
         self._pointer = pointer
         self.item = item
@@ -26,6 +28,8 @@ class Trait:
     def can_bind(cls, pointer):
         return False
 
+    def dynamic_function(self, item):
+        return Trait.DynamicFunctionNotFound
 
 class TraitLibrary(factories.Factory):
     """
@@ -106,6 +110,14 @@ class ReferencedItem:
                 if isinstance(callable_item[1], types.MethodType):
                     self.func_mapping[callable_item[0]] = callable_item[1]
                     self.__dict__[callable_item[0]] = callable_item[1]
+
+    def __getattr__(self, name: str):
+        for trait in self.traits:
+            try:
+                return getattr(trait, name)
+            except AttributeError:
+                pass
+        raise AttributeError(f"{name} is not part of {self}")
 
     def __repr__(self) -> str:
         """
@@ -291,10 +303,13 @@ def get(identifier: typing.Any) -> ReferencedItem|list[ReferencedItem]:
     """
     if isinstance(identifier, list):
         return ReferenceList(
-            ReferencedItem(sub_identifier)
+            get(sub_identifier)
             for sub_identifier in identifier
         )
-    return ReferencedItem(identifier)
+    try:
+        return ReferencedItem(identifier)
+    except:
+        return identifier
 
 
 def create(node_type, unique=True, *args, **kwargs) -> ReferencedItem|list[ReferencedItem]:
@@ -310,6 +325,10 @@ def create(node_type, unique=True, *args, **kwargs) -> ReferencedItem|list[Refer
         kwargs["name"] = unique_name(desired_name)
 
     parent = kwargs.get("parent", None)
+
+    if parent and isinstance(parent, ReferencedItem):
+        parent = parent.name()
+
     result = cmds.createNode(node_type, *args, **kwargs)
 
     if isinstance(result, list):
@@ -317,20 +336,20 @@ def create(node_type, unique=True, *args, **kwargs) -> ReferencedItem|list[Refer
             get(node)
             for node in result
         )
-    node = get(result)
 
+    node = get(result)
     if parent:
         node.set_parent(parent)
     return node
 
 
-def selected() -> list[ReferencedItem]:
+def selected(**kwargs) -> list[ReferencedItem]:
     """
     This will return the current selection as a list of ReferencedItems.
     """
     return ReferenceList(
         get(node)
-        for node in cmds.ls(selection=True, long=True)
+        for node in cmds.ls(selection=True, long=True, **kwargs)
     )
 
 

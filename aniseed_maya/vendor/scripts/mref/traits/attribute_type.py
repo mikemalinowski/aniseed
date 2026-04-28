@@ -131,25 +131,30 @@ class Attribute(mref.Trait):
         """
         return self.outputs() + self.inputs()
 
-    def inputs(self, node_type=None) -> list[mref.ReferencedItem]:
+    def inputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
         This will return a list of inputs coming into the node
         """
-        return [
-            mref.get(attribute)
-            for attribute in
-            cmds.listConnections(self.path(), source=True, destination=False, plugs=True) or []
-        ]
+        results = []
+        for attribute in cmds.listConnections(self.path(), source=True, destination=False, plugs=True) or []:
+            attribute = mref.get(attribute)
+            if skip_converters and attribute.node().node_type() == "unitConversion":
+                attribute = attribute.node().input.inputs()[0]
+            results.append(attribute)
+        return results
 
-    def outputs(self, node_type=None) -> list[mref.ReferencedItem]:
+
+    def outputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
         This will return a list of outputs coming from the node
         """
-        return [
-            mref.get(attribute)
-            for attribute in
-            cmds.listConnections(self.path(), source=False, destination=True, plugs=True) or []
-        ]
+        results = []
+        for attribute in cmds.listConnections(self.path(), source=False, destination=True, plugs=True) or []:
+            attribute = mref.get(attribute)
+            if skip_converters and attribute.node().node_type() == "unitConversion":
+                attribute = attribute.node().output.outputs()[0]
+            results.append(attribute)
+        return results
 
     def type(self):
         """

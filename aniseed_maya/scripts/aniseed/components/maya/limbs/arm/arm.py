@@ -62,6 +62,7 @@ class ArmComponent(aniseed.RigComponent):
             name="Descriptive Prefix",
             value="",
             group="Naming",
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -261,6 +262,7 @@ class ArmComponent(aniseed.RigComponent):
         """
         This is triggered when the stack is executed
         """
+        self._clear_values()
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
@@ -642,6 +644,7 @@ class ArmComponent(aniseed.RigComponent):
             location=self.option("Location").get(),
             config=self.config,
             parent=parent,
+            prefix=self.option("Descriptive Prefix").get(),
         )
 
         self.input("Shoulder").set(all_joints[0])
@@ -654,7 +657,7 @@ class ArmComponent(aniseed.RigComponent):
                 all_joints[1],
                 all_joints[2],
                 upper_twist_count,
-                description=self.option("Descriptive Prefix").get() + "UpperTwist",
+                description=self.option("Descriptive Prefix").get() + "ArmUpperTwist",
                 location=self.option("Location").get(),
                 config=self.config,
                 down_bone_axis="x",
@@ -666,7 +669,7 @@ class ArmComponent(aniseed.RigComponent):
                 all_joints[2],
                 all_joints[3],
                 lower_twist_count,
-                description=self.option("Descriptive Prefix").get() + "LowerTwist",
+                description=self.option("Descriptive Prefix").get() + "ArmLowerTwist",
                 location=self.option("Location").get(),
                 config=self.config,
                 down_bone_axis="x",
@@ -707,3 +710,25 @@ class ArmComponent(aniseed.RigComponent):
         all_joints = arm_joints + upper_twists + lower_twists
 
         return [joint for joint in all_joints if joint]
+
+    def _clear_values(self):
+
+        self.prefix: str = ""
+        self.location: str = ""
+        self.org: str = ""
+        self.arm_joints: list[str] = []
+        self.chain_direction: "Direction" = None
+        self.shoulder_control: "Control" = None
+        self.config_control: "Control" = None
+        self.upvector_control: "Control" = None
+        self.ik_hand_control: "Control" = None
+        self.fk_upper_control: "Control" = None
+        self.fk_lower_control: "Control" = None
+        self.fk_hand_control: "Control" = None
+
+        self.controls: list[str] = []
+        self.fk_controls: list[str] = []
+        self.ik_controls: list[str] = []
+        self.ik_joints: list[str] = []
+        self.nk_joints: list[str] = []
+        self.shape_rotation = [90, 0, 0]

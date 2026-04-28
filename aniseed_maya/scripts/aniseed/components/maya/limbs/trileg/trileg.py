@@ -112,6 +112,7 @@ class TriLegComponent(aniseed.RigComponent):
             name="Descriptive Prefix",
             value="Leg",
             group="Naming",
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -746,7 +747,7 @@ class TriLegComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )[0],
         )
-        cns.attr("interpType").set(0)  # -- No Flip
+        cns.attr("interpType").set(2)  # -- Shortest
 
         # -- Now set the blend
         reverse = mref.create("reverse")
@@ -956,6 +957,7 @@ class TriLegComponent(aniseed.RigComponent):
         upper_twist_joints = self.input("Upper Twist Joints").get()
         mid_twist_joints = self.input("Mid Twist Joints").get()
         lower_twist_joints = self.input("Lower Twist Joints").get()
+        prefix = self.option("Descriptive Prefix").get()
 
         if upper_twist_joints:
             twist_component = self.rig.component_library.request("Augment : Twister")(
@@ -970,7 +972,7 @@ class TriLegComponent(aniseed.RigComponent):
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("UpperTwist")
+            twist_component.option("Descriptive Prefix").set(prefix+"LegUpperTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()
@@ -989,7 +991,7 @@ class TriLegComponent(aniseed.RigComponent):
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("LowerTwist")
+            twist_component.option("Descriptive Prefix").set(prefix+"LegMidTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()
@@ -1007,7 +1009,7 @@ class TriLegComponent(aniseed.RigComponent):
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("LowerTwist")
+            twist_component.option("Descriptive Prefix").set(prefix+"LegLowerTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()
@@ -1128,6 +1130,7 @@ class TriLegComponent(aniseed.RigComponent):
             location=location,
             config=self.config,
             parent=None,
+            prefix=self.option("Descriptive Prefix").get(),
         )
         cmds.parent(all_joints[0], parent)
         

@@ -91,6 +91,7 @@ class LegComponent(aniseed.RigComponent):
             name="Descriptive Prefix",
             value="",
             group="Naming",
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -252,6 +253,9 @@ class LegComponent(aniseed.RigComponent):
     # noinspection DuplicatedCode
     def run(self):
 
+        # -- Ensure our properties are cleared
+        self._clear_values()
+
         # -- Determine the options we're building with
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
@@ -263,7 +267,7 @@ class LegComponent(aniseed.RigComponent):
 
         self.org = aniseed_toolkit.transforms.create(
             classification=self.config.organisational,
-            description=self.prefix + "Leg",
+            description=f"{self.prefix}Leg",
             location=self.location,
             config=self.config,
             parent=self.input("Parent").get()
@@ -462,7 +466,7 @@ class LegComponent(aniseed.RigComponent):
 
         # -- Create the ik root control
         self.ik_root_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}IKRoot",
+            description=f"{self.prefix}LegIKRoot",
             location=self.location,
             shape="core_cube",
             parent=self.org,
@@ -486,6 +490,7 @@ class LegComponent(aniseed.RigComponent):
                     location=self.location,
                 )
             )
+            print("makde with location : %s " % self.location)
             self.ik_joints.append(joint)
 
         # -- Ensure all the rotation values are on the joint
@@ -669,8 +674,8 @@ class LegComponent(aniseed.RigComponent):
         """
         Snap is the mechanism for IK/FK snapping
         """
-        group = "IKFK_Leg_%s_%s" % (
-            self.prefix,
+        group = "IKFK_%s_%s" % (
+            self.prefix + "Leg",
             self.location,
         )
 
@@ -730,7 +735,7 @@ class LegComponent(aniseed.RigComponent):
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("UpperTwist")
+            twist_component.option("Descriptive Prefix").set(self.prefix+"LegUpperTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()
@@ -755,7 +760,7 @@ class LegComponent(aniseed.RigComponent):
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("LowerTwist")
+            twist_component.option("Descriptive Prefix").set(self.prefix+"LegLowerTwist")
             twist_component.option("Location").set(self.option("Location").get())
 
             twist_component.run()
@@ -787,8 +792,12 @@ class LegComponent(aniseed.RigComponent):
 
             description = f"{pivot_tag.lower()}_roll"
 
+            prefix = ""
+            if self.prefix:
+                prefix = self.prefix + "_"
+
             pivot_control = aniseed_toolkit.control.create(
-                description=description,
+                description=f"{prefix}{description}",
                 location=self.option("Location").get(),
                 parent=last_parent,
                 shape="core_sphere",  # "core_symbol_rotator",
@@ -799,7 +808,7 @@ class LegComponent(aniseed.RigComponent):
 
             parameter_pivot = aniseed_toolkit.transforms.create(
                 classification="piv",
-                description=description,
+                description=f"{prefix}{description}",
                 location=self.option("Location").get(),
                 config=self.config,
                 parent=pivot_control.ctl,
@@ -870,6 +879,8 @@ class LegComponent(aniseed.RigComponent):
             location=location,
             config=self.config,
             parent=None,
+            prefix=self.option("Descriptive Prefix").get(),
+            # subtract_label="Leg",
         )
         if parent:
             cmds.parent(all_joints[0], parent)
@@ -894,7 +905,7 @@ class LegComponent(aniseed.RigComponent):
                 all_joints[0],
                 all_joints[1],
                 upper_twist_count,
-                description=self.option("Descriptive Prefix").get() + "UpperLegTwist",
+                description=self.option("Descriptive Prefix").get() + "LegUpperTwist",
                 location=self.option("Location").get(),
                 config=self.config,
                 down_bone_axis="x",
@@ -906,7 +917,7 @@ class LegComponent(aniseed.RigComponent):
                 all_joints[1],
                 all_joints[2],
                 lower_twist_count,
-                description=self.option("Descriptive Prefix").get() + "LowerLegTwist",
+                description=self.option("Descriptive Prefix").get() + "LegLowerTwist",
                 location=self.option("Location").get(),
                 config=self.config,
                 down_bone_axis="x",
@@ -937,3 +948,27 @@ class LegComponent(aniseed.RigComponent):
         for guide_tag in self.guide_tags:
             results.append(self.input(f"{guide_tag} Guide").get())
         return results
+
+    def _clear_values(self):
+        self.prefix: str = ""
+        self.location: str = ""
+        self.leg_joints: list[str] = []
+        self.org: str = ""
+        self.config_control = None
+        self.upvector_control = None
+        self.ik_root_control = None
+        self.ik_foot_control = None
+        self.ik_heel_control = None
+        self.ik_foot_control = None
+        self.ik_toe_control = None
+        self.ik_pivot_endpoint = ""
+        self.pivot_controls = []
+
+        self.controls: list[str] = []
+        self.fk_controls: list = []
+        self.ik_controls: list = []
+        self.ik_bindings: list[str] = []
+        self.ik_joints: list[str] = []
+        self.nk_joints: list[str] = []
+        self.shape_rotation = [0, 0, 0]
+        self.shape_flip = False

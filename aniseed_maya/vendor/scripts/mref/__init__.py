@@ -16,10 +16,15 @@ from . import constants
 from . import wrapping
 
 from maya import cmds
+from maya import mel
 
 # -- This will resolve any unknown property accessors
 # -- as if they are maya cmds commands.
 def __getattr__(name):
-    if not hasattr(cmds, name):
-        raise AttributeError(f"{name} is not recognised in mref or cmds")
-    return wrapping.wrapped_cmds(name)
+    if hasattr(cmds, name):
+        return wrapping.wrapped_cmds(name)
+
+    if hasattr(mel, name):
+        return wrapping.wrapped_mel(name)
+
+    raise AttributeError(f"{name} is not recognised in mref or cmds")

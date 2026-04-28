@@ -23,6 +23,12 @@ class DependencyNode(mref.Trait):
             return True
         return False
 
+    def __getattr__(self, name: str) -> typing.Any:
+        try:
+            return self.attribute(name)
+        except:
+            raise AttributeError(f"{self} does not have attribute {name}")
+
     def name(self) -> str:
         """
         Returns the name of the node which is referenced
@@ -122,5 +128,32 @@ class DependencyNode(mref.Trait):
         ]
 
     def delete(self):
+        """
+        This will remove the node from the scene
+        """
         if cmds.objExists(self.full_name()):
             cmds.delete(self.full_name())
+
+    def lock(self):
+        """
+        This will lock the node
+        """
+        cmds.lockNode(self.full_name(), lock=True)
+
+    def unlcok(self):
+        """
+        This will unlock the node
+        """
+        cmds.lockNode(self.full_name(), lock=False)
+
+    def is_locked(self):
+        """
+        This will return whether or not the node is locked
+        """
+        return cmds.lockNode(self.full_name(), lock=True, query=True)[0]
+
+    def set_lock_state(self, state: bool):
+        """
+        This will set the nodes lock state to the given state
+        """
+        cmds.lockNode(self.full_name(), lock=state)

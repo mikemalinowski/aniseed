@@ -233,6 +233,7 @@ class HeadComponent(aniseed.RigComponent):
             ),
         )
 
+        mc.xform(head, rotation=[0, 0, 0], worldSpace=True)
         self.input("Neck Joints").set([neck])
         self.input("Head Joint").set(head)
 
