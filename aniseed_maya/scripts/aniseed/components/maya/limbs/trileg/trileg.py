@@ -1,5 +1,6 @@
 import os
 import mref
+import snappy
 import typing
 import aniseed
 import qtility
@@ -141,6 +142,12 @@ class TriLegComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Align Heel And Toe To Foot",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Apply World Fk Switches",
             value=True,
             group="Behaviour",
         )
@@ -320,14 +327,20 @@ class TriLegComponent(aniseed.RigComponent):
 
         # -- Using the data from the ik and fk setups we
         # -- can now construct the blend setup
-        nk_chian = self.create_nk_setup(
+        nk_chain = self.create_nk_setup(
             parent=parent,
             ik_data=ik_data,
             fk_data=fk_data,
         )
         self.create_twists(
-            nk_chain=nk_chian,
+            nk_chain=nk_chain,
             parent=parent,
+        )
+
+        self.create_snap(
+            ik_data["controls"],
+            fk_data["controls"],
+            nk_chain,
         )
 
     def create_nk_setup(self, parent, ik_data, fk_data):
@@ -366,24 +379,7 @@ class TriLegComponent(aniseed.RigComponent):
             defaultValue=0,
             keyable=True,
         )
-        ik_visibility_attribute = f"{config_control.ctl}.show_ik"
-        fk_visibility_attribute = f"{config_control.ctl}.show_fk"
 
-        for ik_control in ik_data["controls"]:
-            ik_control = aniseed_toolkit.control.get(ik_control)
-            cmds.connectAttr(
-                f"{config_control.ctl}.show_ik",
-                f"{ik_control.off}.visibility",
-                force=True,
-            )
-
-        for fk_control in fk_data["controls"]:
-            fk_control = aniseed_toolkit.control.get(fk_control)
-            cmds.connectAttr(
-                f"{config_control.ctl}.show_fk",
-                f"{fk_control.off}.visibility",
-                force=True,
-            )
 
         deformation_joints = aniseed_toolkit.joints.get_between(
             start=self.input("Leg Root").get(),
@@ -422,6 +418,40 @@ class TriLegComponent(aniseed.RigComponent):
                 deformation_joints[idx],
                 maintainOffset=True,
             )
+
+        ikfk_attribute = mref.get(config_control.ctl).ikfk
+
+        ik_condition = mref.create("lessThan")
+        fk_condition = mref.create("greaterThan")
+
+        ikfk_attribute.connect(ik_condition.input1)
+        ikfk_attribute.connect(fk_condition.input1)
+
+        ik_condition.input2.set(0.9)
+        fk_condition.input2.set(0.1)
+        ik_visibility_attribute = ik_condition.output.full_name()
+        fk_visibility_attribute = fk_condition.output.full_name()
+
+
+        for ik_control in ik_data["controls"]:
+            ik_control = aniseed_toolkit.control.get(ik_control)
+            cmds.connectAttr(
+                ik_visibility_attribute,
+                f"{ik_control.off}.visibility",
+                force=True,
+            )
+
+        for fk_control in fk_data["controls"]:
+            fk_control = aniseed_toolkit.control.get(fk_control)
+            cmds.connectAttr(
+                fk_visibility_attribute,
+                f"{fk_control.off}.visibility",
+                force=True,
+            )
+
+        # -- Set up the space switches on teh fk controls
+        if self.option("Apply World Fk Switches").get():
+            aniseed_toolkit.space.setup_fk_worldspace_switches(fk_data["controls"], rig=self.rig)
 
         self.output("Blended Upper Leg").set(nk_joints[self.INDEX_UPPER_LEG])
         self.output("Blended Mid Leg").set(nk_joints[self.INDEX_MID_LEG])
@@ -687,7 +717,7 @@ class TriLegComponent(aniseed.RigComponent):
         ankle_control = aniseed_toolkit.control.create(
             description=prefix + "Ankle",
             location=location,
-            parent=upper_to_foot_chain[self.INDEX_LOWER_LEG],  # heel_control.ctl,
+            parent=heel_control.ctl, # upper_to_foot_chain[self.INDEX_LOWER_LEG],  # heel_control.ctl,
             shape="core_paddle",
             shape_scale=reference_scale,
             match_to=upper_to_foot_chain[self.INDEX_LOWER_LEG],
@@ -703,18 +733,18 @@ class TriLegComponent(aniseed.RigComponent):
                 worldSpace=True,
             ),
         )
-        cns = mref.get(
-                cmds.parentConstraint(
-                foot_control.ctl,
-                ankle_control.ctl,
-                skipRotate=["x", "y", "z"],
-                maintainOffset=True,
-            )[0]
-        )
-        cns.attr("interpType").set(0)
-        controller = mref.get(ankle_control.ctl)
-        for axis in ["X", "Y", "Z"]:
-            controller.attr(f"translate{axis}").set(lock=True, keyable=False, channelBox=False)
+        # cns = mref.get(
+        #         cmds.parentConstraint(
+        #         foot_control.ctl,
+        #         ankle_control.ctl,
+        #         skipRotate=["x", "y", "z"],
+        #         maintainOffset=True,
+        #     )[0]
+        # )
+        # cns.attr("interpType").set(0)
+        # controller = mref.get(ankle_control.ctl)
+        # for axis in ["X", "Y", "Z"]:
+        #     controller.attr(f"translate{axis}").set(lock=True, keyable=False, channelBox=False)
 
         # -- Now we have our controls we can start to parent the IK
         # -- accordingly.
@@ -732,9 +762,10 @@ class TriLegComponent(aniseed.RigComponent):
                 matrix=True,
             ),
         )
-        cmds.parent(ankle_addition_zero, upper_to_foot_chain[self.INDEX_LOWER_LEG])
+        # -- HERE
+        cmds.parent(ankle_addition_zero, heel_control.ctl) # upper_to_foot_chain[self.INDEX_LOWER_LEG])
 
-        # -- Add a constraint on the ankle addition to optionally follow the foot control
+        # # -- Add a constraint on the ankle addition to optionally follow the foot control
         cmds.parentConstraint(
             foot_control.ctl,
             ankle_addition_zero,
@@ -754,6 +785,17 @@ class TriLegComponent(aniseed.RigComponent):
         lock_ankle_rotation_attr.connect(reverse.attr("inputX"))
         reverse.attr("outputX").connect(cns.weight_attributes()[-1])
         lock_ankle_rotation_attr.connect(cns.weight_attributes()[0])
+
+        m_zero = mref.get(ankle_addition_zero)
+        print(m_zero.translateX.inputs())
+        # m_zero.attr("translateX").disconnect()
+        cmds.disconnectAttr(f"{m_zero.translateX.inputs()[0].name(include_node=True)}", m_zero.translateX.name(include_node=True))
+        cmds.disconnectAttr(f"{m_zero.translateY.inputs()[0].name(include_node=True)}", m_zero.translateY.name(include_node=True))
+        cmds.disconnectAttr(f"{m_zero.translateZ.inputs()[0].name(include_node=True)}", m_zero.translateZ.name(include_node=True))
+        #
+        # mref.get(ankle_addition_zero).translateX.disconnect()
+        # mref.get(ankle_addition_zero).translateY.disconnect()
+        # mref.get(ankle_addition_zero).translateZ.disconnect()
 
         ankle_addition = self._apply_mechanism_name(
             nodes=[cmds.createNode("transform")],
@@ -1203,3 +1245,91 @@ class TriLegComponent(aniseed.RigComponent):
         for guide_tag in self.guide_tags:
             results.append(self.input(f"{guide_tag} Guide").get())
         return results
+
+    def create_snap(self, ik_controls, fk_controls, nk_joints):
+        """
+        Snap is the mechanism for IK/FK snapping
+        """
+
+        prefix = self.option("Descriptive Prefix").get()
+        location = self.option("Location").get()
+
+        ik_foot_control = ik_controls[-4]
+        ankle_control = ik_controls[-3]
+        toe_control = ik_controls[-2]
+        upvector_control = ik_controls[-1]
+        pivot_controls = ik_controls[:-4]
+
+        ankle_marker = mref.create("transform", parent=nk_joints[-3], name="ankle_marker")
+        ankle_marker.set_matrix(mref.get(ankle_control).get_matrix(space="world"), space="world")
+
+        group = "IKFK_%s_%s" % (
+            prefix,
+            location,
+        )
+
+        snappy.new(
+            node=ik_foot_control,
+            target=nk_joints[-2],
+            group=group,
+        )
+
+        snappy.new(
+            node=upvector_control,
+            target=nk_joints[1],
+            group=group,
+        )
+
+        snappy.new(
+            node=ankle_control,
+            target=ankle_marker.name(), #nk_joints[-3],
+            group=group,
+        )
+
+        snappy.new(
+            node=toe_control,
+            target=nk_joints[-1],
+            group=group,
+        )
+
+        for pivot_control in pivot_controls:
+            # -- We leave the target blank for these - which meanas the
+            # -- controls will just get zero'd
+            snappy.new(
+                node=pivot_control,
+                target=None,
+                group=group,
+            )
+
+        for idx, fk_control in enumerate(fk_controls):
+            print("FK CONTROL : %s" % fk_control)
+            snappy.new(
+                node=fk_control,
+                target=nk_joints[idx],
+                group=group,
+            )
+
+        for attribute_name in self.guide_tags:
+            attribute_name = attribute_name.lower().split(" ")[0] + "_roll"
+
+            snappy.new_forced_attribute(
+                node=ik_foot_control,
+                attribute_name=attribute_name,
+                attribute_value=0,
+                group=group,
+            )
+
+        snappy.new_forced_attribute(
+            node=ik_foot_control,
+            attribute_name="lock_ankle_rotation",
+            attribute_value=1,
+            group=group,
+        )
+
+        for i in range(3):
+            snappy.new_forced_attribute(
+                node=ik_foot_control,
+                attribute_name=f"Joint{i}Addition",
+                attribute_value=0,
+                group=group,
+            )

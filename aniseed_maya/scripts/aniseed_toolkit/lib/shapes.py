@@ -1,6 +1,7 @@
 import os
 import json
 import typing
+import functools
 from maya import cmds
 from . import mutils
 from . import rig
@@ -427,11 +428,17 @@ def shape_to_dict(node: str = "") -> typing.Dict:
 
     return data
 
+@functools.lru_cache(maxsize=None)
 def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
     """
     This will attempt to get the shape dictionary data from a shape file.
     The shape file can either be the local name of a shape in the shapes
     directory or an absolute path to a shape file.
+
+    The parsed shape data is cached per input string — subsequent calls
+    with the same argument return the cached dict without touching
+    disk. Call ``shape_data_from_file.cache_clear()`` to invalidate.
+    Callers are expected to treat the returned dict as read-only.
 
     Args:
         shape_file: The shape file to read (either absolute path or the name
@@ -450,7 +457,7 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
         print("could not find shape : %s" % shape_file)
         return None
 
-    with open (shape_file, "r") as f:
+    with open(shape_file, "r") as f:
         return json.load(f)
 
 

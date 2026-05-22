@@ -6,23 +6,30 @@ import maya.api.OpenMayaAnim as oma
 
 class AnimCurve(mref.Trait):
     """
-    This trait will bind and represent attributes.
+    Trait bound to any node with ``MFn.kAnimCurve``. Provides
+    serialisation of an anim curve's keys, tangents, infinity
+    behaviour and weighting state, plus a reconstruction method that
+    rebuilds the same key data on a curve of the same type.
+
+    Note: this trait only serialises the *shape* of the curve. It does
+    not record which attribute the curve drives, nor any character
+    set, layer, or container membership.
     """
 
     def __init__(self, *args, **kwargs):
-        super(AnimCurve, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._animcurve = oma.MFnAnimCurve(self._pointer)
 
     @classmethod
-    def can_bind(cls, pointer):
-        if isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kAnimCurve):
-            return True
-        return False
+    def can_bind(cls, pointer) -> bool:
+        return isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kAnimCurve)
 
-    def to_dictionary(self):
+    def to_dictionary(self) -> dict:
         """
-        Returns a dictionary serialisation of the curve
-        :return:
+        Serialise this anim curve to a dictionary containing the
+        curve's name, type, weighting state, infinity behaviour, and
+        every key (time, value, tangent types, tangent positions, and
+        weights).
         """
         curve_name = self.item.name()
         data = {
@@ -31,55 +38,92 @@ class AnimCurve(mref.Trait):
             "isWeighted": self._animcurve.isWeighted,
             "preInfinity": self._animcurve.preInfinityType,
             "postInfinity": self._animcurve.postInfinityType,
-            "keys": []
+            "keys": [],
         }
+
         for i in range(self._animcurve.numKeys):
-            time_value = self._animcurve.input(i)
+            # Batch all tangent queries into one cmds.keyTangent call;
+            # returned values match the flag order below.
+            (
+                in_tangent_type,
+                out_tangent_type,
+                in_tangent_x,
+                in_tangent_y,
+                out_tangent_x,
+                out_tangent_y,
+                lock_tangents,
+                in_weight,
+                out_weight,
+                weight_lock,
+                weighted_tangents,
+            ) = cmds.keyTangent(
+                curve_name,
+                query=True,
+                index=(i, i),
+                inTangentType=True,
+                outTangentType=True,
+                ix=True, iy=True,
+                ox=True, oy=True,
+                lock=True,
+                inWeight=True, outWeight=True,
+                weightLock=True,
+                weightedTangents=True,
+            )
 
-            key_data = {
-                "time": time_value,
+            data["keys"].append({
+                "time": self._animcurve.input(i),
                 "value": self._animcurve.value(i),
-                "inTangentType": cmds.keyTangent(curve_name, query=True, index=(i, i), inTangentType=True)[0],
-                "outTangentType": cmds.keyTangent(curve_name, query=True, index=(i, i), outTangentType=True)[0],
-                "inTangentX": cmds.keyTangent(curve_name, query=True, index=(i, i), ix=True)[0],
-                "inTangentY": cmds.keyTangent(curve_name, query=True, index=(i, i), iy=True)[0],
-                "outTangentX": cmds.keyTangent(curve_name, query=True, index=(i, i), ox=True)[0],
-                "outTangentY": cmds.keyTangent(curve_name, query=True, index=(i, i), oy=True)[0],
-                "lockTangents": cmds.keyTangent(curve_name, query=True, index=(i, i), lock=True)[0],
-                "inWeight": cmds.keyTangent(curve_name, query=True, index=(i, i), inWeight=True)[0],
-                "outWeight": cmds.keyTangent(curve_name, query=True, index=(i, i), outWeight=True)[0],
-                "weightLock": cmds.keyTangent(curve_name, query=True, index=(i, i), weightLock=True)[0],
-                "weightedTangents": cmds.keyTangent(curve_name, query=True, index=(i, i), weightedTangents=True)[0],
-            }
-
-            data["keys"].append(key_data)
+                "inTangentType": in_tangent_type,
+                "outTangentType": out_tangent_type,
+                "inTangentX": in_tangent_x,
+                "inTangentY": in_tangent_y,
+                "outTangentX": out_tangent_x,
+                "outTangentY": out_tangent_y,
+                "lockTangents": lock_tangents,
+                "inWeight": in_weight,
+                "outWeight": out_weight,
+                "weightLock": weight_lock,
+                "weightedTangents": weighted_tangents,
+            })
 
         return data
 
-    def construct_from_dictionary(self, data):
+    def construct_from_dictionary(self, data: dict) -> None:
         """
-        Rebuilds the curve from teh data
-        :param data:
-        :return:
+        Rebuild this curve's keys from a dictionary produced by
+        ``to_dictionary``. All existing keys on the curve are cleared
+        first.
+
+        :param data: A dictionary with the same shape as
+            ``to_dictionary`` returns. Keys must be in time-ascending
+            order — the order of ``data["keys"]`` is taken to match
+            the curve-index of each key after insertion.
         """
         curve_name = self.item.name()
 
-        # Set infinity
         cmds.setAttr(f"{curve_name}.preInfinity", data.get("preInfinity", 0))
         cmds.setAttr(f"{curve_name}.postInfinity", data.get("postInfinity", 0))
 
-        # Remove all existing keys safely
-        cmds.cutKey(curve_name, time=(0, float('inf')))
+        # Restore curve-level weighting state before adding keys so the
+        # per-key weights apply correctly.
+        self._animcurve.setIsWeighted(data.get("isWeighted", False))
+
+        # Clear all existing keys, including any at negative time.
+        cmds.cutKey(curve_name, clear=True)
 
         for idx, key_data in enumerate(data["keys"]):
             self._animcurve.addKey(key_data["time"], key_data["value"])
 
+            # Each flag (or pair of position flags) goes in its own
+            # cmds.keyTangent call because Maya rejects several
+            # combinations in a single edit-mode call (e.g. inWeight +
+            # weightedTangents together). Tangent types are set last so
+            # we don't need to re-assert them after the positions —
+            # setting positions can otherwise flip the type to "fixed".
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), lock=key_data["lockTangents"])
+            cmds.keyTangent(curve_name, edit=True, index=(idx, idx), weightedTangents=key_data["weightedTangents"])
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), inWeight=key_data["inWeight"])
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), outWeight=key_data["outWeight"])
-            cmds.keyTangent(curve_name, edit=True, index=(idx, idx), weightedTangents=key_data["weightedTangents"])
-            cmds.keyTangent(curve_name, edit=True, index=(idx, idx), inTangentType=key_data["inTangentType"])
-            cmds.keyTangent(curve_name, edit=True, index=(idx, idx), outTangentType=key_data["outTangentType"])
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), ix=key_data["inTangentX"], iy=key_data["inTangentY"])
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), ox=key_data["outTangentX"], oy=key_data["outTangentY"])
             cmds.keyTangent(curve_name, edit=True, index=(idx, idx), inTangentType=key_data["inTangentType"])

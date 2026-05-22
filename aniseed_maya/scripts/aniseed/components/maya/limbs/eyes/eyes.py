@@ -66,6 +66,21 @@ class EyesComponent(aniseed.RigComponent):
             group="Required Joints (Right)"
         )
 
+        self.declare_input(
+            name="Left Pupil Joint",
+            value="",
+            validate=False,
+            group="Optional Joints",
+        )
+
+        self.declare_input(
+            name="Right Pupil Joint",
+            value="",
+            validate=False,
+            group="Optional Joints",
+        )
+
+
         self.declare_option(
             name="Name",
             value="Eye",
@@ -82,6 +97,32 @@ class EyesComponent(aniseed.RigComponent):
             name="Aim Distance",
             value=30,
             group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Add Blink",
+            value=True,
+            group="Behaviour",
+        )
+
+
+        self.declare_option(
+            name="Auto Blink Upper Multiplier",
+            value=1,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Auto Blink Lower Multiplier",
+            value=1,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Add Pupil",
+            value=False,
+            group="Behaviour",
+            pre_expose=True,
         )
 
         self.declare_option(
@@ -140,6 +181,28 @@ class EyesComponent(aniseed.RigComponent):
             name="Central Aim Control",
         )
 
+        self.declare_output(
+            name="Left Upper Eye Lid Control",
+        )
+        self.declare_output(
+            name="Left Lower Eye Lid Control",
+        )
+        self.declare_output(
+            name="Right Upper Eye Lid Control",
+        )
+        self.declare_output(
+            name="Right Lower Eye Lid Control",
+        )
+        self.declare_output(
+            name="Left Pupil Control",
+        )
+        self.declare_output(
+            name="Right Pupil Control",
+        )
+        self.declare_output(
+            name="org"
+        )
+
     def on_enter_stack(self):
         self.user_func_create_skeleton()
         # -- Attempt to auto resolve the parent based on its default output
@@ -167,8 +230,20 @@ class EyesComponent(aniseed.RigComponent):
         return menu
 
     def run(self):
+        parent = mref.get(self.input("Parent").get())
+        org = mref.create(
+            "transform",
+            name=self.config.generate_name(
+                classification="org",
+                description="eyes",
+                location=self.config.middle,
+            ),
+            parent=parent,
+        )
+        org.match_to(parent)
+        self.output("org").set(org.name())
 
-        components = self._get_components()
+        components = self._get_components(parent=org.name())
 
         lf_eye_component = components[0]
         rt_eye_component = components[1]
@@ -234,9 +309,15 @@ class EyesComponent(aniseed.RigComponent):
         self.output("Left Aim Control").set(lf_eye_component.output("Aim Control").get())
         self.output("Right Eye Control").set(rt_eye_component.output("Eye Control").get())
         self.output("Right Aim Control").set(rt_eye_component.output("Aim Control").get())
+        self.output("Left Upper Eye Lid Control").set(lf_eye_component.output("Upper Eye Lid Control").get())
+        self.output("Left Lower Eye Lid Control").set(lf_eye_component.output("Lower Eye Lid Control").get())
+        self.output("Right Upper Eye Lid Control").set(rt_eye_component.output("Upper Eye Lid Control").get())
+        self.output("Right Lower Eye Lid Control").set(rt_eye_component.output("Lower Eye Lid Control").get())
         self.output("Central Aim Control").set(master_aim_control.ctl)
+        self.output("Left Pupil Control").set(lf_eye_component.output("Pupil Control").get())
+        self.output("Right Pupil Control").set(rt_eye_component.output("Pupil Control").get())
 
-    def _get_components(self):
+    def _get_components(self, parent=None):
 
         # -- Create the two individual eye components
         lf_eye_component = EyeComponent(label="lf", stack=self.stack)
@@ -261,6 +342,10 @@ class EyesComponent(aniseed.RigComponent):
                         option.get(),
                     )
 
+        if parent:
+            lf_eye_component.input("Parent").set(parent)
+            rt_eye_component.input("Parent").set(parent)
+
         # -- Now set the side specific requirements
         lf_eye_component.input("Eye Joint").set(
             self.input("Left Eye Joint").get(),
@@ -284,6 +369,14 @@ class EyesComponent(aniseed.RigComponent):
 
         rt_eye_component.input("Upper Eye Lid Joint").set(
             self.input("Right Upper Eye Lid Joint").get(),
+        )
+
+        lf_eye_component.input("Pupil Joint").set(
+            self.input("Left Pupil Joint").get(),
+        )
+
+        rt_eye_component.input("Pupil Joint").set(
+            self.input("Right Pupil Joint").get(),
         )
 
         lf_eye_component.option("Location").set(
@@ -351,6 +444,9 @@ class EyesComponent(aniseed.RigComponent):
                 component.input("Upper Eye Lid Joint").get(),
             )
 
+            self.input(f"{label} Pupil Joint").set(
+                component.input("Pupil Joint").get(),
+            )
             cmds.parent(root_joint, parent)
 
 
@@ -384,6 +480,13 @@ class EyeComponent(aniseed.RigComponent):
 
         self.declare_input(
             name="Lower Eye Lid Joint",
+            value="",
+            validate=False,
+            group="Optional Joints",
+        )
+
+        self.declare_input(
+            name="Pupil Joint",
             value="",
             validate=False,
             group="Optional Joints",
@@ -434,6 +537,32 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Add Pupil",
+            value=False,
+            group="Behaviour",
+            pre_expose=True,
+        )
+
+
+        self.declare_option(
+            name="Add Blink",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Auto Blink Upper Multiplier",
+            value=1,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Auto Blink Lower Multiplier",
+            value=1,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Default Upper Lid Follow",
             value=0.5,
             group="Defaults",
@@ -457,6 +586,16 @@ class EyeComponent(aniseed.RigComponent):
 
         self.declare_output(
             name="Aim Control",
+        )
+
+        self.declare_output(
+            name="Upper Eye Lid Control",
+        )
+        self.declare_output(
+            name="Lower Eye Lid Control",
+        )
+        self.declare_output(
+            name="Pupil Control",
         )
 
     def on_enter_stack(self):
@@ -514,6 +653,15 @@ class EyeComponent(aniseed.RigComponent):
                     config=self.config,
                 )
                 self.input(f"{label} Eye Lid Joint").set(lid_joint)
+
+        if self.option("Add Pupil").get():
+            pupil_joint = aniseed_toolkit.joints.create(
+                description=self.option("Name").get() + f"Pupil",
+                location=self.option("Location").get(),
+                parent=eye_joint,
+                config=self.config,
+            )
+            self.input(f"Pupil Joint").set(pupil_joint)
 
         if parent:
             aniseed_toolkit.transformation.snap_position(eye_joint, parent)
@@ -654,11 +802,15 @@ class EyeComponent(aniseed.RigComponent):
                 aim_control=aim_control.ctl,
             )
 
-            self.create_blink_behaviour(
-                eye_control=direct_eye_control,
-                upper_lid_control=lid_controls[1],
-                lower_lid_control=lid_controls[0],
-            )
+            if self.option("Add Blink").get():
+                self.create_blink_behaviour(
+                    eye_control=direct_eye_control,
+                    upper_lid_control=lid_controls[1],
+                    lower_lid_control=lid_controls[0],
+                )
+
+        if self.option("Add Pupil").get():
+            self.create_pupil_behaviour(direct_eye_control)
 
     def create_blink_behaviour(self, eye_control, upper_lid_control, lower_lid_control):
 
@@ -681,8 +833,8 @@ class EyeComponent(aniseed.RigComponent):
         blink_attribute.connect(blink_reverse.attr("floatA"))
 
         max_rotation = 65
-        upper_rotation_multiplier = max_rotation * 0.666
-        lower_rotation_multiplier = max_rotation * 0.333
+        upper_rotation_multiplier = max_rotation * self.option("Auto Blink Upper Multiplier").get()
+        lower_rotation_multiplier = max_rotation * self.option("Auto Blink Lower Multiplier").get()
 
         upper_multiplier = mref.create("floatMath")
         upper_multiplier.attr("operation").set(2)  # -- Multiply
@@ -697,6 +849,45 @@ class EyeComponent(aniseed.RigComponent):
         upper_multiplier.attr("outFloat").connect(upper_zero.attr("rotateX"))
         lower_multiplier.attr("outFloat").connect(lower_zero.attr("rotateX"))
 
+
+    def create_pupil_behaviour(self, eye_control):
+
+        eye_controller = mref.get(eye_control.ctl)
+        pupil_joint = self.input("Pupil Joint").get()
+        description = self.option("Name").get()
+        location = self.option("Location").get()
+
+
+        pupil_control = aniseed_toolkit.control.create(
+            description=f"{description}Pupil",
+            location=location,
+            config=self.config,
+            parent=eye_controller.name(),
+            shape="core_circle",
+            match_to=pupil_joint,
+        )
+        cmds.parentConstraint(
+            pupil_control.ctl,
+            pupil_joint,
+            maintainOffset=False,
+        )
+        cmds.scaleConstraint(
+            pupil_control.ctl,
+            pupil_joint,
+            maintainOffset=False,
+        )
+
+        # -- Add the pupil scale attribute
+        pupil_attribute = eye_controller.add_attribute(
+            "pupil_scale",
+            attribute_type="float",
+            keyable=True,
+            value=1,
+        )
+        for axis in ["X", "Y", "Z"]:
+            pupil_attribute.connect(f"{pupil_control.zero}.scale{axis}")
+
+        self.output("Pupil Control").set(pupil_control.ctl)
 
     def create_eyelid_behaviour(self, component_org, eye_control, aim_control):
 
@@ -791,13 +982,15 @@ class EyeComponent(aniseed.RigComponent):
             label = labels[idx]
             inversion = inversions[idx]
 
+            eye_lid_joint = self.input(f"{label} Eye Lid Joint").get()
+
             lid_driver_parent = aniseed_toolkit.transforms.create(
                 classification="zro",
                 description=f"{description}{label}LidDriver",
                 location=location,
                 parent=component_org,
                 config=self.config,
-                match_to=eye_joint,
+                match_to=eye_lid_joint,
             )
 
             lid_driver = aniseed_toolkit.transforms.create(
@@ -806,7 +999,7 @@ class EyeComponent(aniseed.RigComponent):
                 location=location,
                 config=self.config,
                 parent=lid_driver_parent,
-                match_to=eye_joint,
+                match_to=eye_lid_joint,
             )
 
             lid_tracker = aniseed_toolkit.transforms.create(
@@ -815,7 +1008,7 @@ class EyeComponent(aniseed.RigComponent):
                 location=location,
                 config=self.config,
                 parent=lid_driver_parent,
-                match_to=eye_joint,
+                match_to=eye_lid_joint,
             )
 
             cmds.parentConstraint(
@@ -897,6 +1090,7 @@ class EyeComponent(aniseed.RigComponent):
                 shape="core_cube",
             )
             lid_controls.append(lid_control)
+            self.output(f"{label} Eye Lid Control").set(lid_control.ctl)
 
             kwargs = {
                 forward_axis.lower(): 1,
@@ -922,6 +1116,11 @@ class EyeComponent(aniseed.RigComponent):
                 **kwargs
             )
             cmds.parentConstraint(
+                lid_control.ctl, # lid_driver,
+                self.input(f"{label} Eye Lid Joint").get(),
+                maintainOffset=True,
+            )
+            cmds.scaleConstraint(
                 lid_control.ctl, # lid_driver,
                 self.input(f"{label} Eye Lid Joint").get(),
                 maintainOffset=True,

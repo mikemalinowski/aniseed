@@ -1,4 +1,5 @@
 import os
+import mref
 import typing
 import aniseed
 import aniseed_toolkit
@@ -71,6 +72,10 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         self.declare_output(
             name="Control",
+        )
+
+        self.declare_output(
+            name="Follicle",
         )
 
     def on_enter_stack(self):
@@ -152,6 +157,7 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
         self.output("Control").set(control.ctl)
+        self.output("Follicle").set(follicle)
 
     def input_widget(self, requirement_name: str):
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:
@@ -161,16 +167,19 @@ class StickyPatchComponent(aniseed.RigComponent):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(config=self.config)
 
-    def create_follicle(self):
+    def create_follicle(self, u=0.5, v=0.5, prefix=""):
 
-        follicle = cmds.rename(
-            cmds.createNode('follicle'),
+        follicle = cmds.createNode("follicle")
+        follicle_xform = cmds.listRelatives(follicle, parent=True)[0]
+        follicle_xform = cmds.rename(
+            follicle_xform,
             self.config.generate_name(
                 classification="foll",
-                description=self.option("Descriptive Prefix").get() + "Follicle",
+                description=self.option("Descriptive Prefix").get() + prefix + "Follicle",
                 location=self.option("Location").get(),
             ),
         )
+        follicle = cmds.listRelatives(follicle_xform, children=True)[0]
 
         patch_xform = self.input("Geometry Patch").get()
         patch_shape = cmds.listRelatives(
@@ -179,7 +188,7 @@ class StickyPatchComponent(aniseed.RigComponent):
         )[0]
 
         cmds.parent(
-            follicle,
+            follicle_xform,
             self.input("Parent").get(),
         )
 
@@ -208,14 +217,18 @@ class StickyPatchComponent(aniseed.RigComponent):
 
         cmds.setAttr(
             f"{follicle}.parameterU",
-            0.5,
+            u,
         )
 
         cmds.setAttr(
             f"{follicle}.parameterV",
-            0.5,
+            v,
         )
 
+        cmds.setAttr(
+            f"{follicle_xform}.inheritsTransform",
+            False,
+        )
         return follicle
 
     def user_func_create_skeleton(self, create_patch=False):
@@ -361,3 +374,111 @@ class StickyPatchComponent(aniseed.RigComponent):
             surface_node,
             toSelectedBones=True,
         )
+
+class AngledStickyPatchComponent(StickyPatchComponent):
+
+    identifier = "Limb : Sticky Patch (Aimed)"
+
+    def __init__(self, *args, **kwargs):
+        super(AngledStickyPatchComponent, self).__init__(*args, **kwargs)
+
+    def run(self):
+        super(AngledStickyPatchComponent, self).run()
+
+        # -- Get the control and follicle
+        control = aniseed_toolkit.control.get(self.output("Control").get())
+        follicle = self.output("Follicle").get()
+        print("follicle : %s" % follicle)
+        follicle_xform = cmds.listRelatives(follicle, parent=True)[0]
+        
+        # -- Create an aim upvector
+        aim_transform = mref.get(
+            aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=self.option("Descriptive Prefix").get() + "Aim",
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=follicle,
+            )
+        )
+        aim_transform.visibility.set(False)
+        aim_transform.match_to(follicle_xform)
+        aim_transform.translateZ.set(10)
+
+        # -- We create two readers - this allows us to blend
+        # -- for the twist
+        v_reader = mref.get(
+            aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=self.option("Descriptive Prefix").get() + "ReaderV",
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=follicle_xform,
+            )
+        )
+        v_reader.match_to(follicle_xform)
+
+        upvector_v_follicle = self.create_follicle(
+            u=0.5, v=1, prefix="UpvectorV",
+        )
+        cmds.aimConstraint(
+            aim_transform.name(),
+            v_reader.name(),
+            aimVector=[0, 0, 1],
+            upVector=[0, -1, 0],
+            worldUpType="object",
+            worldUpObject=upvector_v_follicle,
+            maintainOffset=True,
+        )
+
+        # -- Create the U reader
+        u_reader = mref.get(
+            aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=self.option("Descriptive Prefix").get() + "ReaderU",
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=follicle_xform,
+            )
+        )
+        u_reader.match_to(follicle_xform)
+
+        upvector_u_follicle = self.create_follicle(
+            u=1, v=0.5, prefix="UpvectorU",
+        )
+        cmds.aimConstraint(
+            aim_transform.name(),
+            u_reader.name(),
+            aimVector=[0, 0, 1],
+            upVector=[0, -1, 0],
+            worldUpType="object",
+            worldUpObject=upvector_u_follicle,
+            maintainOffset=True,
+        )
+
+        # -- Now we create our resolver. This blends the result of the two
+        resolver = mref.get(
+            aniseed_toolkit.transforms.create(
+                classification="mech",
+                description=self.option("Descriptive Prefix").get() + "Resolver",
+                location=self.option("Location").get(),
+                config=self.config,
+                parent=follicle_xform,
+            )
+        )
+        resolver.match_to(follicle_xform)
+
+        cmds.parentConstraint(
+            v_reader.name(),
+            resolver.name(),
+            maintainOffset=False,
+        )
+
+        cns = cmds.parentConstraint(
+            u_reader.name(),
+            resolver.name(),
+            maintainOffset=False,
+        )[0]
+        cmds.setAttr(f"{cns}.interpType", 2) # Shortest
+
+        cmds.parent(control.org, resolver.name())

@@ -48,3 +48,16 @@ class AddAllSkinJointsToAllSkins(aniseed_toolkit.Tool):
 
     def run(self):
         aniseed_toolkit.skin.add_all_skin_joints_to_all_skins()
+
+class AddAllSkinJointsToSelectedSkins(aniseed_toolkit.Tool):
+
+    identifier = "Add All Skins Joints to Selected Meshes"
+    classification = "Rigging"
+    categories = [
+        "Skinning",
+    ]
+
+    def run(self):
+        aniseed_toolkit.skin.add_all_skin_joints_to_target_meshes(
+            mc.ls(selection=True),
+        )

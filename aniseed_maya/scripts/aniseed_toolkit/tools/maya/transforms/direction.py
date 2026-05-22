@@ -1,3 +1,4 @@
+from maya import cmds
 import aniseed_toolkit
 
 
@@ -98,3 +99,24 @@ class GetUpvectorDirection(aniseed_toolkit.Tool):
         return aniseed_toolkit.direction.get_upvector_direction(
             start, end, epsilon
         )
+
+class AimAtTool(aniseed_toolkit.Tool):
+
+    identifier = "Aim At"
+    classification = "Rigging"
+    categories = [
+        "Transforms",
+    ]
+
+    def run(self, aim_this="", at_this="", aim_axis="x", up_axis="y", up_target=""):
+
+        selection_list = cmds.ls(sl=True)
+        if len(selection_list) == 2:
+            aim_this = selection_list[0]
+            at_this = selection_list[1]
+        elif len(selection_list) == 3:
+            aim_this = selection_list[0]
+            at_this = selection_list[1]
+            up_target = selection_list[2]
+        print("up target : ", up_target)
+        aniseed_toolkit.transformation.aim_at(aim_this, at_this, aim_axis, up_axis, up_target)

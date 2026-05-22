@@ -49,6 +49,7 @@ class SplineSpine(aniseed.RigComponent):
         # -- Behavioural Options
         self.declare_option(name="Number Of Controls", value=4, group="Behaviour", pre_expose=True)
         self.declare_option(name="Orient Controls To World", value=True, group="Behaviour")
+        self.declare_option(name="Orient FK Controls To World", value=False, group="Behaviour")
         self.declare_option(name="Lock End Orientations To Controls", value=True, group="Behaviour")
         self.declare_option(name="FK Interaction Mode", value=False, group="Behaviour")
 
@@ -456,6 +457,7 @@ class SplineSpine(aniseed.RigComponent):
         """
         Creates our FK controllers
         """
+        print("CREATING FKFKFKFKFK")
         # -- Read out our option data
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -475,11 +477,22 @@ class SplineSpine(aniseed.RigComponent):
 
         for idx, trace_joint in enumerate(spline_setup.out_anchor_points):
 
+            # aligner = mref.get(
+            #     aniseed_toolkit.transforms.create(
+            #         classification="mech",
+            #         description=f"{descriptive}FkAlign",
+            #         location=location,
+            #         parent=next_parent,
+            #         config=self.config,
+            #     ),
+            # )
+            # aligner.match_to(next_parent)
+
             # -- Create the actual control hierarcy
             fk_control = aniseed_toolkit.control.create(
                 description=f"{descriptive}Fk",
                 location=location,
-                parent=next_parent,
+                parent=next_parent,#aligner.name(),
                 shape=self.option("Shape").get(),
                 shape_scale=control_scale,
                 config=self.config,
@@ -495,6 +508,14 @@ class SplineSpine(aniseed.RigComponent):
             cmds.connectAttr(f"{decompose_node}.outputRotate", f"{fk_control.org}.rotate")
             cmds.connectAttr(f"{decompose_node}.outputScale", f"{fk_control.org}.scale")
 
+            if self.option("Orient FK Controls To World").get():
+                print("CREATING FK :: ZERO")
+                cmds.xform(
+                    fk_control.zero,
+                    rotation=(0, 0, 0),
+                    worldSpace=True,
+                )
+
             # -- Set the corresponding output plug
             tag = "FK Control %s" % idx
             self.output(tag).set(fk_control.ctl)
@@ -502,7 +523,21 @@ class SplineSpine(aniseed.RigComponent):
             # -- Store the fk control and make this fk control the parent
             # -- of the next fk control.
             fk_controls.append(fk_control)
-            next_parent = fk_control.ctl
+
+
+            realigner = mref.get(
+                aniseed_toolkit.transforms.create(
+                    classification="mech",
+                    description=f"{descriptive}FkReAlign",
+                    location=location,
+                    parent=fk_control.ctl,
+                    config=self.config,
+                ),
+            )
+            realigner.match_to(trace_joint)
+
+            next_parent = realigner.name()#fk_control.ctl
+            # next_parent = fk_control.ctl
 
         return fk_controls
 

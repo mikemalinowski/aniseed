@@ -37,10 +37,8 @@ class MirrorShape(aniseed_toolkit.Tool):
 
         Returns: None
         """
-        if not nodes:
-            nodes = mc.ls(sl=True)
-
-        return aniseed_toolkit.shapes.mirror(nodes, axis)
+        for node in mc.ls(selection=True):
+            aniseed_toolkit.shapes.mirror([node], axis)
 
 
 class AutoMirrorShapes(aniseed_toolkit.Tool):

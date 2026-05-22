@@ -60,9 +60,10 @@ class ApplyShapeColor(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        return aniseed_toolkit.shapes.apply_color(
-            node=node,
-            r=r,
-            g=g,
-            b=b,
-        )
+        for node in mc.ls(selection=True):
+            aniseed_toolkit.shapes.apply_color(
+                node=node,
+                r=r,
+                g=g,
+                b=b,
+            )

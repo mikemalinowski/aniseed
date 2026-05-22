@@ -70,3 +70,53 @@ class ColorControls(aniseed.RigComponent):
             )
 
         return True
+
+
+# noinspection PyUnresolvedReferences
+class ColorSpecificControls(aniseed.RigComponent):
+
+    identifier = "Utility : Color Specifc Controls"
+    icon = os.path.join(os.path.dirname(__file__), "colouring.png")
+
+    def __init__(self, *args, **kwargs):
+        super(ColorSpecificControls, self).__init__(*args, **kwargs)
+
+        self.declare_input(
+            name="Nodes",
+            value=[],
+        )
+
+        self.declare_option(
+            name="Color",
+            value=[242, 222, 111],
+        )
+
+    def input_widget(self, requirement_name: str) -> "PySide6.QWidget":
+        return aniseed.widgets.ObjectList()
+
+    def option_widget(self, option_name):
+        if option_name == "Color":
+            return aniseed.widgets.ColorPicker(
+                default_colour=self.option("Color").get(),
+            )
+
+        return None
+
+    def run(self) -> bool:
+
+        nodes = self.input("Nodes").get()
+        color = self.option("Color").get()
+
+        for node in nodes:
+
+            shapes = mc.listRelatives(node, type="nurbsCurve")
+
+            if not shapes:
+                continue
+
+            aniseed_toolkit.shapes.apply_color(
+                node,
+                *color
+            )
+
+        return True

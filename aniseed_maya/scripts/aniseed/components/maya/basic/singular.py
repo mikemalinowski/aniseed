@@ -50,6 +50,13 @@ class Singular(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Add Offset Control",
+            value=False,
+            group="Naming",
+            pre_expose=True,
+        )
+
+        self.declare_option(
             name="Create Joint",
             value=True,
             group="Creation",
@@ -63,6 +70,7 @@ class Singular(aniseed.RigComponent):
         )
 
         self.declare_output(name="Control", is_default=True)
+        self.declare_output(name="Offset Control", is_default=False)
 
     def suggested_label(self):
         return self.option("Description").get()
@@ -125,15 +133,27 @@ class Singular(aniseed.RigComponent):
             parent=self.input("Parent").get(),
             match_to=self.input("Joint").get(),
         )
+        driving_control = control
+
+        if self.option("Add Offset Control").get():
+            driving_control = aniseed_toolkit.control.create(
+                description=self.option("Description").get() + "_offset",
+                location=self.option("Location").get(),
+                config=self.config,
+                shape=self.option("Shape").get(),
+                parent=control.ctl,
+                match_to=self.input("Joint").get(),
+            )
+            self.output("Offset Control").set(driving_control.ctl)
 
         cmds.parentConstraint(
-            control.ctl,
+            driving_control.ctl,
             self.input("Joint").get(),
             maintainOffset=True,
         )
 
         cmds.scaleConstraint(
-            control.ctl,
+            driving_control.ctl,
             self.input("Joint").get(),
             maintainOffset=True,
         )

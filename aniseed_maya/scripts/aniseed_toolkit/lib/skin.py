@@ -234,15 +234,16 @@ def skin_to_dict(mesh: str = "") -> dict:
         for dag_path in skin_fn.influenceObjects()
     ]
 
-    influence_weights = list()
-
-    for influence_index in range(influence_count):
-        influence_weights.append(
-            [
-                c for
-                c in all_weights[influence_index * vertex_count: (influence_index + 1) * vertex_count]
-            ],
-        )
+    # -- MFnSkinCluster.getWeights returns a flat component-major
+    # -- array: [v0_inf0, v0_inf1, ..., v1_inf0, v1_inf1, ...].
+    # -- Slice it back into per-influence lists.
+    influence_weights = [
+        [
+            all_weights[c * influence_count + i]
+            for c in range(vertex_count)
+        ]
+        for i in range(influence_count)
+    ]
 
     packaged_data = dict(
         influences=influences,
@@ -267,6 +268,7 @@ def save(mesh: str = "", filepath: str = ""):
         None
     """
     packaged_data = skin_to_dict(mesh)
+    print("data : %s " % packaged_data)
 
     with open(filepath, "w") as f:
         json.dump(
@@ -319,12 +321,14 @@ def dict_to_skin(mesh, weight_data) -> str:
     for i in range(len(weight_data["influences"])):
         influence_indices.append(i)
 
-    # -- Build the weight list
+    # -- Build the weight list in component-major layout, matching
+    # -- what MFnSkinCluster.setWeights expects:
+    # -- [v0_inf0, v0_inf1, ..., v1_inf0, v1_inf1, ...].
+    num_influences = len(weight_data["influences"])
     all_weights = om.MDoubleArray()
-
-    for influence_weights in weight_data["weights"]:
-        for value in influence_weights:
-            all_weights.append(value)
+    for c in range(vertex_count):
+        for i in range(num_influences):
+            all_weights.append(weight_data["weights"][i][c])
 
     # -- Now apply the weights
     skin_fn = om_anim.MFnSkinCluster(mutils.get_mobject(skin_node))
@@ -436,6 +440,50 @@ def add_all_skin_joints_to_all_skins():
     for skin in all_skins:
         for joint in all_skin_joints:
             print(skin)
+            try:
+                skin.add_influence(joint, lockWeights=True)
+            except: pass
+
+    # -- Now restore the lock weights
+    for joint, lock_value in lock_weight_values.items():
+        joint.attr("liw").set(lock_value)
+
+
+def add_all_skin_joints_to_target_meshes(meshes):
+    """
+    This will add all joints that are part of all skin clusters
+    within the scene to all skin clusters.
+    :return:
+    """
+    meshes = mref.get(
+        [
+            mref.get(mesh).shape()
+            for mesh in meshes
+        ]
+    )
+
+    # -- Get a list of all the skin clusters in the scene
+    all_skins = mref.ls(type="skinCluster")
+    skins_to_process = []
+
+    # -- We need to find all the joints driving any of the skins
+    all_skin_joints = []
+    for skin in all_skins:
+        if skin.shape() in meshes:
+            skins_to_process.append(skin)
+            all_skin_joints.extend(skin.influences())
+    all_skin_joints = list(set(all_skin_joints))
+
+    # -- Store the lock weights setting of each joint, so we can restore it
+    lock_weight_values = dict()
+    for joint in all_skin_joints:
+        lock_weight_values[joint] = joint.attr("liw").get()
+        joint.attr("liw").set(1)
+        print("yep")
+    # -- Now ensure all of those joints are part of all
+    # -- of the skins
+    for skin in skins_to_process:
+        for joint in all_skin_joints:
             try:
                 skin.add_influence(joint, lockWeights=True)
             except: pass

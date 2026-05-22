@@ -108,6 +108,12 @@ class LegComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Align Paddles To Foot",
+            value=True,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Align Upvector To World",
             value=True,
             group="Behaviour",
@@ -122,6 +128,12 @@ class LegComponent(aniseed.RigComponent):
         self.declare_option(
             name="Upvector Distance Multiplier",
             value=1,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Apply World Fk Switches",
+            value=True,
             group="Behaviour",
         )
 
@@ -406,16 +418,17 @@ class LegComponent(aniseed.RigComponent):
         )
         self.ik_controls.append(self.ik_heel_control.ctl)
 
-        cmds.xform(
-            self.ik_heel_control.org,
-            rotation=cmds.xform(
-                self.ik_foot_control.ctl,
-                query=True,
-                rotation=True,
+        if self.option("Align Paddles To Foot").get():
+            cmds.xform(
+                self.ik_heel_control.org,
+                rotation=cmds.xform(
+                    self.ik_foot_control.ctl,
+                    query=True,
+                    rotation=True,
+                    worldSpace=True,
+                ),
                 worldSpace=True,
-            ),
-            worldSpace=True,
-        )
+            )
 
         # -- Add the toe control
         self.ik_toe_control = aniseed_toolkit.control.create(
@@ -430,16 +443,17 @@ class LegComponent(aniseed.RigComponent):
         )
         self.ik_controls.append(self.ik_toe_control.ctl)
 
-        cmds.xform(
-            self.ik_toe_control.org,
-            rotation=cmds.xform(
-                self.ik_foot_control.ctl,
-                query=True,
-                rotation=True,
+        if self.option("Align Paddles To Foot").get():
+            cmds.xform(
+                self.ik_toe_control.org,
+                rotation=cmds.xform(
+                    self.ik_foot_control.ctl,
+                    query=True,
+                    rotation=True,
+                    worldSpace=True,
+                ),
                 worldSpace=True,
-            ),
-            worldSpace=True,
-        )
+            )
 
         fk_parent = self.org
         self.fk_controls = []
@@ -458,6 +472,10 @@ class LegComponent(aniseed.RigComponent):
             )
             self.fk_controls.append(fk_control.ctl)
             fk_parent = fk_control.ctl
+
+        # -- Set up the space switches on teh fk controls
+        if self.option("Apply World Fk Switches").get():
+            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
     def create_ik(self):
         """
@@ -624,22 +642,6 @@ class LegComponent(aniseed.RigComponent):
             keyable=True,
         )
 
-        for ik_control in self.ik_controls:
-            ik_control = aniseed_toolkit.control.get(ik_control)
-            cmds.connectAttr(
-                f"{self.config_control.ctl}.show_ik",
-                f"{ik_control.off}.visibility",
-                force=True,
-            )
-
-        for fk_control in self.fk_controls:
-            fk_control = aniseed_toolkit.control.get(fk_control)
-            cmds.connectAttr(
-                f"{self.config_control.ctl}.show_fk",
-                f"{fk_control.off}.visibility",
-                force=True,
-            )
-
         blend_chain_setup = aniseed_toolkit.rigging.create_blend_chain(
             parent=self.org,
             transforms_a=self.ik_bindings,
@@ -668,6 +670,35 @@ class LegComponent(aniseed.RigComponent):
                 self.nk_joints[idx],
                 self.leg_joints[idx],
                 maintainOffset=True,
+            )
+
+        ikfk_attribute = mref.get(f"{self.config_control.ctl}.ikfk")
+
+        ik_condition = mref.create("lessThan")
+        fk_condition = mref.create("greaterThan")
+
+        ikfk_attribute.connect(ik_condition.input1)
+        ikfk_attribute.connect(fk_condition.input1)
+
+        ik_condition.input2.set(0.9)
+        fk_condition.input2.set(0.1)
+        ik_visibility_attribute = ik_condition.output.full_name()
+        fk_visibility_attribute = fk_condition.output.full_name()
+
+        for ik_control in self.ik_controls:
+            ik_control = aniseed_toolkit.control.get(ik_control)
+            cmds.connectAttr(
+                ik_visibility_attribute,
+                f"{ik_control.off}.visibility",
+                force=True,
+            )
+
+        for fk_control in self.fk_controls:
+            fk_control = aniseed_toolkit.control.get(fk_control)
+            cmds.connectAttr(
+                fk_visibility_attribute,
+                f"{fk_control.off}.visibility",
+                force=True,
             )
 
     def create_snap(self):

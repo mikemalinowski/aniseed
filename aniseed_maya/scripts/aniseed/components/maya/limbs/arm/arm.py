@@ -95,6 +95,12 @@ class ArmComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
         )
+
+        self.declare_option(
+            name="Apply World Fk Switches",
+            value=True,
+            group="Behaviour",
+        )
         
         # -- Delcare our options which make it easier and quicker to generate
         # -- a skeleton if needed
@@ -325,32 +331,23 @@ class ArmComponent(aniseed.RigComponent):
                 maintainOffset=True,
             )
 
-        # -- Hook up the visibility attributes
-        cmds.addAttr(
-            self.config_control.ctl,
-            shortName="show_ik",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=1,
-            keyable=True,
-        )
-        cmds.addAttr(
-            self.config_control.ctl,
-            shortName="show_fk",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=0,
-            keyable=True,
-        )
-        ik_visibility_attribute = f"{self.config_control.ctl}.show_ik"
-        fk_visibility_attribute = f"{self.config_control.ctl}.show_fk"
+        ikfk_attribute = mref.get(f"{self.config_control.ctl}.ikfk")
+
+        ik_condition = mref.create("lessThan")
+        fk_condition = mref.create("greaterThan")
+
+        ikfk_attribute.connect(ik_condition.input1)
+        ikfk_attribute.connect(fk_condition.input1)
+
+        ik_condition.input2.set(0.9)
+        fk_condition.input2.set(0.1)
+        ik_visibility_attribute = ik_condition.output.full_name()
+        fk_visibility_attribute = fk_condition.output.full_name()
 
         for ik_control in self.ik_controls:
             ik_control = aniseed_toolkit.control.get(ik_control)
             cmds.connectAttr(
-                f"{self.config_control.ctl}.show_ik",
+                ik_visibility_attribute,
                 f"{ik_control.off}.visibility",
                 force=True,
             )
@@ -358,10 +355,14 @@ class ArmComponent(aniseed.RigComponent):
         for fk_control in self.fk_controls:
             fk_control = aniseed_toolkit.control.get(fk_control)
             cmds.connectAttr(
-                f"{self.config_control.ctl}.show_fk",
+                fk_visibility_attribute,
                 f"{fk_control.off}.visibility",
                 force=True,
             )
+
+        # -- Set up the space switches on teh fk controls
+        if self.option("Apply World Fk Switches").get():
+            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()

@@ -10,11 +10,16 @@ class Attribute(mref.Trait):
     """
 
     def __init__(self, *args, **kwargs):
-        super(Attribute, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
-        self._node = mref.get(self._pointer.node())
         self._m_plug = self._pointer
-        self._attribute_type = cmds.getAttr(self.name(include_node=True), type=True)
+
+        # -- These are resolved lazily on first access to avoid the
+        # -- per-Attribute cost of a recursive mref.get and a
+        # -- cmds.getAttr at construction time. Many Attribute
+        # -- instances are never asked for their node or type.
+        self._node_cache = None
+        self._attribute_type_cache = None
 
     @classmethod
     def can_bind(cls, pointer: om.MObject) -> bool:
@@ -28,20 +33,37 @@ class Attribute(mref.Trait):
     def node(self) -> mref.ReferencedItem:
         """
         This will return the mref.ReferencedItem object which this attribute
-        belongs to.
+        belongs to. Resolved lazily on first access.
         """
-        return self._node
+        if self._node_cache is None:
+            self._node_cache = mref.get(self._pointer.node())
+        return self._node_cache
 
     def name(self, include_node: bool = False) -> str:
         """
-        Returns the name of the attribute.
+        Returns the short-form name of the attribute.
 
-        :param include_node: If True, will return the fully qualified name of the attribute.
+        :param include_node: If True, the returned string is prefixed
+            with the owning node's short name — e.g. ``cube.translateX``
+            for a DAG node, or ``multiplyDivide1.outputX`` for a
+            dependency node. For an unambiguous address that includes
+            the full DAG path (``|foo|bar|cube.translateX``), use
+            :meth:`full_name` or :meth:`path` instead — those are the
+            safe form to hand to ``cmds`` in scenes that may contain
+            duplicate short names.
         """
         if include_node:
             return f"{self.node().name()}.{self._m_plug.partialName(useLongNames=True)}"
         else:
             return self._m_plug.partialName(useLongNames=True)
+
+    def full_name(self) -> str:
+        """
+        Returns the name of the attribute.
+
+        :param include_node: If True, will return the fully qualified name of the attribute.
+        """
+        return f"{self.node().full_name()}.{self._m_plug.partialName(useLongNames=True)}"
 
     def path(self) -> str:
         """
@@ -56,8 +78,9 @@ class Attribute(mref.Trait):
         then the type will attempted to be resolved automatically using the value
         type.
         """
-        if self._attribute_type in mref.constants.complex_attribute_types and "type" not in kwargs:
-            kwargs["type"] = self._attribute_type
+        attribute_type = self.get_type()
+        if attribute_type in mref.constants.complex_attribute_types and "type" not in kwargs:
+            kwargs["type"] = attribute_type
 
         cmds.setAttr(
             self.path(),
@@ -77,9 +100,16 @@ class Attribute(mref.Trait):
 
     def get_type(self) -> str:
         """
-        Returns the data type of this attribute
+        Returns the data type of this attribute. Cached after the first
+        query — the underlying attribute's declared type does not
+        change at runtime.
         """
-        return self._attribute_type
+        if self._attribute_type_cache is None:
+            self._attribute_type_cache = cmds.getAttr(
+                self.path(),
+                type=True,
+            )
+        return self._attribute_type_cache
 
     def connect(self, attribute: mref.ReferencedItem|str, force: bool = False, **kwargs) -> None:
         """
@@ -105,24 +135,23 @@ class Attribute(mref.Trait):
             **kwargs
         )
 
-    def disconnect(self, attribute: mref.ReferencedItem|str = None) -> None:
+    def disconnect(self, attribute: mref.ReferencedItem | str | None = None) -> None:
         """
-        This will disconnect this attribute from the given attribute. If no other attribute
-        has been given then all connections to and from this attribute will be disconnected.
+        Disconnect this attribute from the given attribute. If no
+        attribute is given, every connection to and from this attribute
+        is disconnected.
         """
-        if attribute:
-            attributes = mref.get(attribute)
-
-        else:
+        if attribute is None:
             attributes = self.connections()
+        else:
+            attributes = [mref.get(attribute)]
 
-        for attribute in attributes:
-            if not attribute:
+        for other in attributes:
+            if not other:
                 continue
-
             cmds.disconnectAttr(
                 self.path(),
-                attribute.path(),
+                other.path(),
             )
 
     def connections(self) -> list[mref.ReferencedItem]:
@@ -133,28 +162,39 @@ class Attribute(mref.Trait):
 
     def inputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
-        This will return a list of inputs coming into the node
+        Returns a list of inputs feeding into this attribute. Unit
+        conversion nodes are transparently skipped when
+        ``skip_converters`` is True (the default) via Maya's
+        ``skipConversionNodes`` flag — no Python-side recursion needed.
         """
-        results = []
-        for attribute in cmds.listConnections(self.path(), source=True, destination=False, plugs=True) or []:
-            attribute = mref.get(attribute)
-            if skip_converters and attribute.node().node_type() == "unitConversion":
-                attribute = attribute.node().input.inputs()[0]
-            results.append(attribute)
-        return results
-
+        return [
+            mref.get(attribute)
+            for attribute in cmds.listConnections(
+                self.path(),
+                source=True,
+                destination=False,
+                plugs=True,
+                skipConversionNodes=skip_converters,
+            ) or []
+        ]
 
     def outputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
-        This will return a list of outputs coming from the node
+        Returns a list of outputs being driven by this attribute. Unit
+        conversion nodes are transparently skipped when
+        ``skip_converters`` is True (the default) via Maya's
+        ``skipConversionNodes`` flag — no Python-side recursion needed.
         """
-        results = []
-        for attribute in cmds.listConnections(self.path(), source=False, destination=True, plugs=True) or []:
-            attribute = mref.get(attribute)
-            if skip_converters and attribute.node().node_type() == "unitConversion":
-                attribute = attribute.node().output.outputs()[0]
-            results.append(attribute)
-        return results
+        return [
+            mref.get(attribute)
+            for attribute in cmds.listConnections(
+                self.path(),
+                source=False,
+                destination=True,
+                plugs=True,
+                skipConversionNodes=skip_converters,
+            ) or []
+        ]
 
     def type(self):
         """
@@ -172,7 +212,7 @@ class Attribute(mref.Trait):
         if attribute_type in ["doubleLinear", "float", "doubleAngle", "double"]:
             return float
 
-        if attribute_type == ["int", "enum"]:
+        if attribute_type in ["int", "enum"]:
             return int
 
         if attribute_type in ["bool"]:

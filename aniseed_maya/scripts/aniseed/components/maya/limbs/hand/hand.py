@@ -329,21 +329,32 @@ class HandComponent(aniseed.RigComponent):
                 assume_metacarpals = True
             metacarpal = None
             if assume_metacarpals:
-                metacarpal_joint = mref.get(finger_root).parent().full_name()
+                m_finger_root = mref.get(finger_root)
+                m_metacarpal = m_finger_root.parent()
+                metacarpal_joint = m_metacarpal.full_name()
+                print("Metacarpal Joint : %s" % m_metacarpal.name())
 
-                metacarpal = aniseed_toolkit.control.create(
-                    description=f"metacarpal_{finger_labels[finger_idx]}",
-                    location=location,
-                    parent=hand.ctl,
-                    shape="core_paddle",
-                    config=self.config,
-                    match_to=self.get_parent(finger_tip, finger_depth),
-                    shape_scale=5.0,
-                    rotate_shape=shape_rotation,
-                )
-                # -- Constrain the joint
-                cmds.parentConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
-                cmds.scaleConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
+                description = self.config.extract_description(m_metacarpal.name())
+                print("description : %s" % description)
+                # -- If this metacarpal joint is already built, skip it. This is because
+                # -- multiple fingers can share a metacarpal
+                if m_metacarpal.constraints():
+                    metacarpal = aniseed_toolkit.control.get(m_metacarpal.constraints()[0].drivers()[0].name())
+
+                else:
+                    metacarpal = aniseed_toolkit.control.create(
+                        description=description,
+                        location=location,
+                        parent=hand.ctl,
+                        shape="core_paddle",
+                        config=self.config,
+                        match_to=self.get_parent(finger_tip, finger_depth),
+                        shape_scale=5.0,
+                        rotate_shape=shape_rotation,
+                    )
+                    # -- Constrain the joint
+                    cmds.parentConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
+                    cmds.scaleConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
 
             # -- We're now going to create the fk hierarchy - so start by defining
             # -- the hand as the parent, and we will update this as we go.
@@ -623,10 +634,13 @@ class HandComponent(aniseed.RigComponent):
             f"{multiply_node}.floatA"
         )
 
-        cmds.connectAttr(
-            f"{multiply_node}.outFloat",
-            to_this
-        )
+        try:
+            cmds.connectAttr(
+                f"{multiply_node}.outFloat",
+                to_this
+            )
+        except:
+            pass
 
         return multiply_node
 

@@ -110,10 +110,12 @@ def pin(joints: list[str] = None) -> list[str]:
             maintainOffset=False,
         )
 
-        cmds.setAttr(
-            f"{joint}.displayLocalAxis",
-            True,
-        )
+        try:
+            cmds.setAttr(
+                f"{joint}.displayLocalAxis",
+                True,
+            )
+        except: pass
 
         cmds.select(pin_node)
         pins.append(pin_node)
@@ -136,8 +138,8 @@ def get_pinned_nodes(item: str = "") -> str or None:
         item = cmds.listRelatives(item, parent=True)[0]
 
     for potential_result in cmds.listConnections(f"{item}.pin_link") or list():
-        if cmds.nodeType(potential_result) == "joint":
-            return potential_result
+        # if cmds.nodeType(potential_result) == "joint":
+        return potential_result
 
     return None
 
@@ -157,13 +159,12 @@ def get_pin(item: str = "") -> str or None:
     if item.startswith("PIN_"):
         return item
 
-    if cmds.nodeType(item) == "joint":
-        for item in cmds.listConnections(f"{item}.message") or list():
-            if item.startswith("PIN_"):
-                return item
-
     if item.startswith("PINOFFSET_"):
         return cmds.listRelatives(item, parent=True)[0]
+
+    for item in cmds.listConnections(f"{item}.message") or list():
+        if item.startswith("PIN_"):
+            return item
 
     return None
 
@@ -210,10 +211,12 @@ def remove_pins(items: list[str] = None) -> None:
             query=True,
         )
 
-        cmds.setAttr(
-            f"{joint}.displayLocalAxis",
-            False,
-        )
+        try:
+            cmds.setAttr(
+                f"{joint}.displayLocalAxis",
+                False,
+            )
+        except: pass
 
         cmds.delete(pin)
 

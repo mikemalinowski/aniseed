@@ -58,18 +58,13 @@ class PasteShape(aniseed_toolkit.Tool):
             print("No copied shape data")
             return
 
-        try:
-            node = node or mc.ls(sl=True)[0]
-        except IndexError:
-            print("You must give or select a node")
-            return
-
-        CopyShape._CACHE = aniseed_toolkit.run(
-            "Apply Shape",
-            node=node,
-            data=CopyShape.CACHE,
-            clear=clear,
-        )
+        for node in mc.ls(selection=True):
+            CopyShape._CACHE = aniseed_toolkit.run(
+                "Apply Shape",
+                node=node,
+                data=CopyShape.CACHE,
+                clear=clear,
+            )
 
 
 class GetShapeList(aniseed_toolkit.Tool):
@@ -210,24 +205,22 @@ class ApplyShape(aniseed_toolkit.Tool):
         Returns:
             List of shape nodes created
         """
-        if not node:
-            node = mc.ls(sl=True)[0]
+        for node in mc.ls(selection=True):
+            if not data:
+                data = qtility.request.item(
+                    items=aniseed_toolkit.run("Get Shape List"),
+                    title="Apply Shape",
+                    message="Select Shape",
+                    editable=False,
+                )
 
-        if not data:
-            data = qtility.request.item(
-                items=aniseed_toolkit.run("Get Shape List"),
-                title="Apply Shape",
-                message="Select Shape",
-                editable=False,
+            aniseed_toolkit.shapes.load_shape(
+                node=node,
+                data=data,
+                clear=clear,
+                color=color,
+                scale_by=scale_by,
             )
-
-        return aniseed_toolkit.shapes.load_shape(
-            node=node,
-            data=data,
-            clear=clear,
-            color=color,
-            scale_by=scale_by,
-        )
 
 
 class SaveAllRigControlShapesToFile(aniseed_toolkit.Tool):

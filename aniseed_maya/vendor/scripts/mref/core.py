@@ -1,8 +1,6 @@
 import re
-import types
 import typing
 import os
-import inspect
 import factories
 from maya import cmds
 from maya.api import OpenMaya as om
@@ -38,10 +36,7 @@ class TraitLibrary(factories.Factory):
     _instance = None
 
     def __init__(self):
-        super(
-            TraitLibrary,
-            self,
-        ).__init__(
+        super().__init__(
             abstract=Trait,
             paths=[
                 os.path.join(
@@ -50,15 +45,38 @@ class TraitLibrary(factories.Factory):
                 ),
             ]
         )
+        self._cached_plugins = None
 
     def plugins(self, include_disabled=False):
         """
         We re-implement this method as we always want to return the plugin list
-        based on the priority value
+        based on the priority value.
+
+        The sorted plugin list is cached on the default code path —
+        traits don't change after the library is initialised, and
+        re-discovering them on every ``ReferencedItem`` construction
+        is by far the largest cost in hot loops. Pass
+        ``include_disabled=True`` to bypass the cache.
         """
-        plugins = super(TraitLibrary, self).plugins(include_disabled=include_disabled)
-        plugins.sort(key=lambda x: x.priority)
-        return plugins
+        if include_disabled:
+            plugins = super().plugins(include_disabled=True)
+            plugins.sort(key=lambda x: x.priority)
+            return plugins
+
+        if self._cached_plugins is None:
+            plugins = super().plugins(include_disabled=False)
+            plugins.sort(key=lambda x: x.priority)
+            self._cached_plugins = plugins
+
+        return self._cached_plugins
+
+    def invalidate_plugin_cache(self):
+        """
+        Clears the cached plugin list. Call this if you've programmatically
+        registered or unregistered traits via the underlying factory and need
+        the next ``plugins()`` call to re-discover them.
+        """
+        self._cached_plugins = None
 
     @classmethod
     def singleton(cls):
@@ -92,27 +110,10 @@ class ReferencedItem:
             if trait.can_bind(self._pointer)
         ]
 
-        # -- This is where we will store all of the functions from all of the
-        ## -- traits. That way we can do a function look up very quickly.
-        self.func_mapping = dict()
-
-        for trait in self.traits:
-
-            # -- Get all the callables for the trait
-            for callable_item in inspect.getmembers(trait):
-
-                # -- Ignore private or built in methods
-                if callable_item[0].startswith("_"):
-                    continue
-
-                # -- Providing it is a method, we add it to the func mapping
-                # -- for printing as well as this classes internal dictionary.
-                if isinstance(callable_item[1], types.MethodType):
-                    self.func_mapping[callable_item[0]] = callable_item[1]
-                    self.__dict__[callable_item[0]] = callable_item[1]
-
     def __getattr__(self, name: str):
-        for trait in self.traits:
+        # -- Iterate traits in reverse so that the highest-priority trait
+        # -- wins when multiple traits define the same attribute.
+        for trait in reversed(self.traits):
             try:
                 return getattr(trait, name)
             except AttributeError:
@@ -149,45 +150,67 @@ class ReferencedItem:
         return False
 
     def __hash__(self) -> int:
-        """
-        This will return the has of the fully qualified name of this object.
-        """
-        if hasattr(self, "full_name"):
-            return hash(self.full_name())
+        if isinstance(self._pointer, om.MObject):
+            return om.MObjectHandle(self._pointer).hashCode()
 
-        if hasattr(self, "name"):
-            return hash(self.name())
+        if isinstance(self._pointer, om.MPlug):
+            return hash((
+                om.MObjectHandle(self._pointer.node()).hashCode(),
+                om.MObjectHandle(self._pointer.attribute()).hashCode(),
+            ))
 
         return hash(str(self))
 
     def __lt__(self, other) -> bool:
-        """
-        This will return whether this object is considered lower than the other.
-        We do this by looking at its string
-        """
-        return str(self) < str(other)
+        if isinstance(other, ReferencedItem):
+            return self._sort_key() < other._sort_key()
+        if isinstance(other, str):
+            return self._sort_key() < other
+        return NotImplemented
 
-    def assigned_traits(self) -> list[Trait]:
+    def _sort_key(self) -> str:
+        if hasattr(self, "full_name"):
+            return self.full_name()
+        if hasattr(self, "name"):
+            return self.name()
+        return str(self)
+
+    def assigned_traits(self) -> list[str]:
         """
         This will return a list of the traits assigned to this item
         """
-        return [trait.__name__ for trait in self.traits]
+        return [trait.__class__.__name__ for trait in self.traits]
 
     def print_methods(self) -> None:
         """
         This is a help function which will log all the functions from all the
         traits bound to this object.
         """
-        for method_name in sorted(self.func_mapping.keys()):
-            print(method_name)
+        seen = set()
+        for trait in self.traits:
+            for name in dir(trait):
+                if name.startswith("_"):
+                    continue
+                if not callable(getattr(trait, name, None)):
+                    continue
+                seen.add(name)
+
+        for name in sorted(seen):
+            print(name)
 
     @classmethod
-    def _resolve_pointer(cls, item: "ReferencedItem|str|om.MObject") -> om.MObject:
+    def _resolve_pointer(
+        cls,
+        item: "ReferencedItem|str|om.MObject|om.MPlug",
+    ) -> "om.MObject|om.MPlug":
         """
-        This will test the variable type coming in and resolve it down
-        to an mobject.
+        Resolve the incoming variable down to an MObject (for node-backed
+        items) or an MPlug (for attribute-backed items).
         """
         if isinstance(item, om.MObject):
+            return item
+
+        if isinstance(item, om.MPlug):
             return item
 
         if isinstance(item, ReferencedItem):
@@ -198,9 +221,14 @@ class ReferencedItem:
                 return cls.get_mplug(item)
             return cls._resolve_node(item)
 
-    def pointer(self) -> om.MObject:
+        raise TypeError(
+            f"Cannot resolve pointer from {type(item).__name__}: {item!r}"
+        )
+
+    def pointer(self) -> "om.MObject|om.MPlug":
         """
-        This will return the mobject represented by this object.
+        Returns the underlying Maya handle — an MObject for node-backed
+        items, or an MPlug for attribute-backed items.
         """
         return self._pointer
 
@@ -230,7 +258,7 @@ class ReferencedItem:
             sel = om.MSelectionList()
             sel.add(attr_string)
             return sel.getPlug(0)
-        except:
+        except RuntimeError:
             pass
 
         # -- To reach here we're dealing with an nested attribute or compound
@@ -300,6 +328,11 @@ def get(identifier: typing.Any) -> ReferencedItem|list[ReferencedItem]:
     This will take in either an object (in the form of a string, reference item or
     mobject) or a list of items in the same supported formats and return either the
     ReferenceItem or a list of ReferencedItems.
+
+    If the given identifier cannot be cast to a ReferencedItem (for example, a node
+    type that has no matching trait), the identifier is returned unchanged. This
+    keeps `get` usable across the full set of Maya nodes, but callers should be
+    prepared for a mixed return type (ReferencedItem or the original input).
     """
     if isinstance(identifier, list):
         return ReferenceList(
@@ -308,7 +341,7 @@ def get(identifier: typing.Any) -> ReferencedItem|list[ReferencedItem]:
         )
     try:
         return ReferencedItem(identifier)
-    except:
+    except (TypeError, RuntimeError):
         return identifier
 
 
@@ -327,20 +360,17 @@ def create(node_type, unique=True, *args, **kwargs) -> ReferencedItem|list[Refer
     parent = kwargs.get("parent", None)
 
     if parent and isinstance(parent, ReferencedItem):
-        parent = parent.name()
+        parent = parent.full_name()
+        kwargs["parent"] = parent
 
     result = cmds.createNode(node_type, *args, **kwargs)
-
     if isinstance(result, list):
         return ReferenceList(
             get(node)
             for node in result
         )
 
-    node = get(result)
-    if parent:
-        node.set_parent(parent)
-    return node
+    return get(result)
 
 
 def selected(**kwargs) -> list[ReferencedItem]:
@@ -379,16 +409,6 @@ def select(nodes: ReferencedItem|list[ReferencedItem]) -> None:
     cmds.select(nodes)
 
 
-def delete(nodes: ReferencedItem|list[ReferencedItem]) -> None:
-    if not isinstance(nodes, list):
-        nodes = [nodes]
-
-    for node in nodes:
-        if isinstance(node, ReferencedItem):
-            node = node.full_name()
-        cmds.delete(node)
-
-
 class ReferenceList(list):
 
     def names(self):
@@ -413,7 +433,7 @@ class ReferenceList(list):
 
 
 def unique_name(name):
-    counter = 1
+    counter = 0
     proposed_name = name
 
     while cmds.objExists(proposed_name):

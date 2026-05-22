@@ -63,10 +63,8 @@ class RotateShapes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if not node:
-            node = mc.ls(selection=True)[0]
-
-        return aniseed_toolkit.shapes.rotate(node, x, y, z)
+        for node in mc.ls(selection=True):
+            aniseed_toolkit.shapes.rotate(node, x, y, z)
 
 
 class OffsetShapes(aniseed_toolkit.Tool):
@@ -99,17 +97,14 @@ class OffsetShapes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-
-        if not node:
-            node = mc.ls(selection=True)[0]
-
-        return aniseed_toolkit.shapes.offset(
-            node=node,
-            offset_by=offset_by,
-            x=x,
-            y=y,
-            z=z,
-        )
+        for node in mc.ls(selection=True):
+            aniseed_toolkit.shapes.offset(
+                node=node,
+                offset_by=offset_by,
+                x=x,
+                y=y,
+                z=z,
+            )
 
 
 class ScaleShapes(aniseed_toolkit.Tool):
@@ -141,13 +136,11 @@ class ScaleShapes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        if not node:
-            node = mc.ls(selection=True)[0]
-
-        return aniseed_toolkit.shapes.scale(
-            node=node,
-            scale_by=scale_by,
-            x=x,
-            y=y,
-            z=z,
-        )
+        for node in mc.ls(selection=True):
+            aniseed_toolkit.shapes.scale(
+                node=node,
+                scale_by=scale_by,
+                x=x,
+                y=y,
+                z=z,
+            )

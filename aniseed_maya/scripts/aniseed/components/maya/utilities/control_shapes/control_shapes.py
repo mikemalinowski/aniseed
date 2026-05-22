@@ -165,10 +165,12 @@ class ApplyControlShapes(aniseed.RigComponent):
 
                     connection_pairs.append([driving_attribute, destination_attribute])
 
-            aniseed_toolkit.run(
-                "Apply Shape",
+            aniseed_toolkit.shapes.load_shape(
                 node=node,
                 data=shape_data,
+                clear=True,
+                color=None,
+                scale_by=1,
             )
 
             for connection_pair in connection_pairs:
@@ -250,10 +252,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                 continue
 
             shape_data.append(
-                aniseed_toolkit.run(
-                    "Read Shape From Node",
-                    node,
-                ),
+                aniseed_toolkit.shapes.shape_to_dict(node),
             )
             read.append(node)
 

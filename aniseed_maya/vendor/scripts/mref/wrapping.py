@@ -29,6 +29,10 @@ def _convert_to_mref(variable):
     """
     This will convert object names etc to mrefs and lists
     of object names to ReferenceLists of ReferencedItems.
+
+    Values that cannot be cast to a ReferencedItem (e.g. unsupported node types,
+    or non-node return values like ints/floats/bools from cmds queries) are
+    returned unchanged, mirroring `core.get`'s fallback behavior.
     """
     if isinstance(variable, core.ReferenceList):
         return variable
@@ -49,10 +53,7 @@ def _convert_to_mref(variable):
             ]
         )
 
-    try:
-        return core.get(variable)
-    except:
-        return variable
+    return core.get(variable)
 
 
 def _convert_to_cmds(variable):

@@ -61,6 +61,8 @@ class SaveSkinFile(aniseed_toolkit.Tool):
 
         for mesh in meshes:
             filepath = os.path.join(folderpath, f"{mesh}.skin")
+            print("filepath : %s" % filepath)
+            print("mesh : %s" % mesh)
             aniseed_toolkit.skin.save(mesh, filepath)
 
 

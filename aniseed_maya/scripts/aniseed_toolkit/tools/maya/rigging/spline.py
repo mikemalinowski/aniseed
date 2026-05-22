@@ -108,6 +108,9 @@ class SimpleSplineSetup:
         if self.option_hide_mechanicals:
             self.hide_mechanicals()
 
+        self.out_curve.lock_transform_attributes()
+        self.out_upvector_curve.lock_transform_attributes()
+
     def _create_orgs(self):
         """
         This will build the main organisational nodes for the setup

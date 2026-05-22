@@ -61,7 +61,7 @@ class StandardConfig(aniseed.RigConfiguration):
         return name.split("_")[0]
 
     def extract_description(self, name: str) -> str:
-        return name.split("_")[2]
+        return name.split("_")[1]
 
     def extract_counter(self, name: str) -> int:
         return int(name.split("_")[-2])

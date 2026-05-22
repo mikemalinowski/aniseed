@@ -48,7 +48,7 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
             [
                 node
                 for node in root_node.children(recursive=True)
-                if node.node_type() in allowable_types
+                if isinstance(node, mref.ReferencedItem) and node.node_type() in allowable_types
             ]
         )
         mref.editDisplayLayerMembers(layer_name, nodes.names(), noRecurse=True)

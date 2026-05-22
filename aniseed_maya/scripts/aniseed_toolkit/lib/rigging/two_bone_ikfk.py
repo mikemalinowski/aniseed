@@ -100,14 +100,6 @@ class TwoBoneIKFK:
         self.ik_upvector.match_to(self.ik_chain[1])
 
         for joint in self.ik_chain:
-            cmds.joint(
-                joint.full_name(),
-                edit=True,
-                oj="xyz",
-                sao="ydown",
-                ch=True,
-                zso=True,
-            )
             joint.rename(self.unique_name("ik"))
 
         # -- Setup the ik

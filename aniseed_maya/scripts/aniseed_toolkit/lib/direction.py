@@ -121,6 +121,19 @@ class Direction:
         if direction == self.PositiveZ: return [0, 0, 1]
         if direction == self.NegativeZ: return [0, 0, -1]
 
+    @classmethod
+    def from_string(cls, string_axis):
+        string_axis = string_axis.lower()
+
+        for axis in ["x", "y", "z"]:
+            if string_axis == axis:
+                return cls(getattr(cls, f"Positive{axis.upper()}"))
+
+            if string_axis.startswith("-") and string_axis.endswith(axis):
+                return cls(getattr(cls, f"Negative{axis.upper()}"))
+
+        return None
+
 
 def get_chain_facing_direction(start: str = "", end: str = "", epsilon: float = 0.01) -> Direction:
     """

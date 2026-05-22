@@ -4,6 +4,16 @@ from maya.api import OpenMaya as om
 
 
 class DagNode(mref.Trait):
+    """
+    Trait bound to any node with ``MFn.kDagNode`` — transforms, joints,
+    locators, all shape types, and anything else that lives in the DAG
+    hierarchy. Exposes parent/child traversal, DAG-path queries, shape
+    access, and constraint discovery.
+
+    Priority ``0`` (the default), so it sits above ``DependencyNode``
+    (``-1``) in the resolution order — ``full_name()`` returns the DAG
+    path rather than the short name for any DAG node.
+    """
 
     def __init__(self, *args, **kwargs):
         super(DagNode, self).__init__(*args, **kwargs)
@@ -25,17 +35,31 @@ class DagNode(mref.Trait):
         """
         return self._dag_node.fullPathName()
 
-    def children(self, recursive: bool = False, node_type: str = None, name_match: str = None) -> list[mref.ReferencedItem]:
+    def children(
+        self,
+        recursive: bool = False,
+        node_type: str = None,
+        name_match: str = None,
+        include_shapes: bool = True,
+    ) -> list[mref.ReferencedItem]:
         """
-        Returns a list of all children of the node
+        Returns a list of children of the node.
 
         Args:
-            recursive (bool, optional): If False (default) only immediate children
-                will be returned. If True all children will be returned.
-            node_type (str, optional): Only return children of the specified type
-            name_match:
+            recursive (bool, optional): If False (default) only immediate
+                children will be returned. If True all descendants will be
+                returned.
+            node_type (str, optional): Only return children of the specified
+                Maya node type.
+            name_match (str, optional): Substring filter on the child's short
+                name. Only children whose short name contains this substring
+                are returned. Matching is case-sensitive.
+            include_shapes (bool, optional): If True (default), shape children
+                are included in the result. Set to False to skip shapes —
+                useful when iterating only transform children.
+
         Returns:
-            A list of NodeReference objects
+            A list of mref.ReferencedItem instances.
         """
         additional_args = dict()
 
@@ -48,19 +72,18 @@ class DagNode(mref.Trait):
         return mref.ReferenceList(
             [
                 mref.get(node)
-                for node in cmds.listRelatives(self.full_name(), children=True, **additional_args) or []
+                for node in cmds.listRelatives(self.item.full_name(), children=True, **additional_args) or []
                 if not name_match or name_match in node.split("|")[-1]
+                if include_shapes or not cmds.objectType(node, isAType="shape")
             ],
         )
 
     def parent(self) -> mref.ReferencedItem|None:
         """
-        This will return the parent node
-
-        Args:
-            idx: You may give the index of the parent to return
+        Returns the parent of this node, or None if this node is at the
+        scene root.
         """
-        parents = cmds.listRelatives(self.full_name(), parent=True, fullPath=True)
+        parents = cmds.listRelatives(self.item.full_name(), parent=True, fullPath=True)
         if parents:
             return mref.get(parents[0])
         return None
@@ -82,13 +105,13 @@ class DagNode(mref.Trait):
             node = parent
 
 
-    def set_parent(self, parent: mref.ReferencedItem|str) -> None:
+    def set_parent(self, parent: mref.ReferencedItem|str|None) -> None:
         """
         This will set the parent of the current node. If the parent being
         passed is None, then this node will be parented to the scene root.
         """
-        if not parent:
-            cmds.parent(self.full_name(), world=True)
+        if parent is None:
+            cmds.parent(self.item.full_name(), world=True)
             return
 
         parent = mref.get(parent)
@@ -103,21 +126,48 @@ class DagNode(mref.Trait):
             parent.full_name(),
             absolute=True,
         )
-        # parent.dag().addChild(self.item.pointer())
 
     def add_child(self, child: mref.ReferencedItem|str) -> None:
         """
-        This will make the given node a child of this node.
+        This will make the given node a child of this node. Goes through
+        ``cmds.parent`` so the operation is recorded in Maya's undo stack.
+        No-ops if ``child`` is this node itself, or if ``child`` is
+        already parented to this node.
         """
         child = mref.get(child)
-        self._dag_node.addChild(child.pointer())
+
+        if child.pointer() == self._pointer:
+            return
+
+        if child.parent() == self.item:
+            return
+
+        cmds.parent(child.full_name(), self.item.full_name())
 
     def add_children(self, children: list[mref.ReferencedItem|str]) -> None:
         """
-        This will make all the given nodes a child of this node.
+        This will make all the given nodes children of this node. Issued
+        as a single ``cmds.parent`` call so the operation is recorded as
+        one entry in Maya's undo stack. Children that are this node
+        itself, or are already parented to this node, are silently
+        skipped — matching ``add_child``'s guard behaviour.
         """
+        if not children:
+            return
+
+        valid = []
         for child in children:
-            self.add_child(child)
+            child = mref.get(child)
+            if child.pointer() == self._pointer:
+                continue
+            if child.parent() == self.item:
+                continue
+            valid.append(child.full_name())
+
+        if not valid:
+            return
+
+        cmds.parent(*valid, self.item.full_name())
 
     def dag(self) -> om.MFnDagNode:
         """
@@ -131,26 +181,40 @@ class DagNode(mref.Trait):
         """
         return [
             mref.get(shape)
-            for shape in cmds.listRelatives(self.full_name(), shapes=True, fullPath=True) or []
+            for shape in cmds.listRelatives(self.item.full_name(), shapes=True, fullPath=True) or []
         ]
 
     def shape(self) -> mref.ReferencedItem|None:
         """
-        Returns the first found shape belonging to the current node
+        Returns the first shape belonging to this node, or None if it
+        has none.
         """
-        try:
-            return mref.get(cmds.listRelatives(self.full_name(), shapes=True)[0])
-        except IndexError:
-            return None
+        results = cmds.listRelatives(self.item.full_name(), shapes=True, fullPath=True) or []
+        if results:
+            return mref.get(results[0])
+        return None
 
-    def constraints(self) -> list[mref.ReferencedItem]:
+    def constraints(self) -> mref.ReferenceList:
         """
-        Returns a list of constraints constraining this node
+        Returns the constraint nodes parented under this node.
+
+        Limitation: only finds constraints that are direct children of
+        this node, which is the conventional Maya layout for constraints
+        driving a transform. Constraints that target this node but live
+        elsewhere in the scene (custom rigs, exported skeletons, certain
+        pipeline conventions) are not returned by this method. Walk the
+        connection graph (``listConnections`` on the constraint output
+        plugs) for those cases.
+
+        Uses Maya's type-inheritance check (``isAType="constraint"``)
+        rather than a substring match on the type name, so user-defined
+        nodes whose type name happens to contain ``"constraint"`` won't
+        be falsely included.
         """
-        results = []
+        results = mref.ReferenceList()
 
         for child in self.children():
-            if "constraint" in cmds.nodeType(child.full_name()).lower():
+            if cmds.objectType(child.full_name(), isAType="constraint"):
                 results.append(child)
 
         return results

@@ -482,7 +482,6 @@ def move_rotations_to_orients(joints: list[str] = None) -> None:
     Returns:
         None
     """
-    print("given joints %s"  % joints)
     if isinstance(joints, str):
         joints = [joints]
 

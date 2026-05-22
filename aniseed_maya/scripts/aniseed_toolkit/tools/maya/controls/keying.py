@@ -36,14 +36,15 @@ class SnapIKFK(aniseed_toolkit.Tool):
     ]
     
     def run(self, nodes=None):
-
         # -- Get the groups for all the nodes
         groups = []
         for node in nodes or cmds.ls(selection=True):
             groups.extend(snappy.groups(node))
         groups = list(set(groups))
 
-        start_time, end_time = None
+        start_time = None
+        end_time = None
+
         if mref.time.selected_number_of_frames() > 1:
             start_time = mref.time.selected_start_frame()
             end_time = mref.time.selected_end_frame()
