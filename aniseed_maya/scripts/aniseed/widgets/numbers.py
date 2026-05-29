@@ -6,7 +6,7 @@ class LimitedInteger(QtWidgets.QSpinBox):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, minimum=None, maximum=None, parent=None):
-        super(LimitedInteger, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         if minimum:
             self.setMinimum(minimum)
@@ -20,7 +20,7 @@ class VectorWidget(QtWidgets.QWidget):
     changed = QtCore.Signal()
 
     def __init__(self, parent=None):
-        super(VectorWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setLayout(QtWidgets.QHBoxLayout())
 

@@ -15,6 +15,41 @@ class StandaloneHost(aniseed.EmbeddedHost):
 
     priority = 0
 
+    def launch(self):
+        """
+        This is responsible for launching the application within the
+        current host.
+        """
+        if DockableMayaApp.instance():
+            DockableMayaApp.instance().show()
+            return True
+
+        DockableMayaApp.remove_workspace_control(
+            DockableMayaApp.OBJECT_NAME + "WorkspaceControl"
+        )
+
+        # -- Instance the tool
+        window = DockableMayaApp(
+            parent=qtility.windows.application(),
+        )
+
+        # -- Ensure its correctly docked in the ui
+        window.show(
+            dockable=True,
+            area='right',
+            floating=False,
+            # retain=False,
+        )
+
+        cmds.workspaceControl(
+            f'{window.objectName()}WorkspaceControl',
+            e=True,
+            ttc=["AttributeEditor", -1],
+            wp="preferred",
+            mw=150,
+        )
+        return True
+
     def environment_initialization(self):
         """
         This should hold any functionality required to be triggered when
@@ -185,6 +220,7 @@ class MenuBuilder:
     # noinspection PyUnresolvedReferences
     @classmethod
     def _menu_reload(cls, *args, **kwargs):
+        aniseed.Rig.clear_factory_cache()
         for package in cls.CRITICAL_MODULES:
             blackout.drop(package)
 
@@ -226,7 +262,7 @@ class MayaAppWidget(aniseed.AppWidget):
     on screen display of events.
     """
     def __init__(self, *args, **kwargs):
-        super(MayaAppWidget, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.options = dict(pos="botCenter", fade=True)
 
     def notify_component_added(self, *args, **kwargs):
@@ -253,8 +289,17 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
     OBJECT_NAME = "AniseedBuilderWindow"
 
+    # -- Class-level registry of every DockableMayaApp constructed in
+    # -- this session. Used by ``instance()`` instead of scanning
+    # -- ``gc.get_objects()`` — the gc scan grows with the number of
+    # -- Python objects in the interpreter and was the dominant cost
+    # -- of repeated launches.
+    _INSTANCES: list = []
+
     def __init__(self, *args, **kwargs):
-        super(DockableMayaApp, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+        DockableMayaApp._INSTANCES.append(self)
+
         # -- We update the ui based on various maya events. So we can correctly
         # -- unregister these, we store the event id's
         self.script_job_ids = list()
@@ -293,34 +338,45 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
         self.setCentralWidget(
             self.app,
         )
-        
-        # -- Register into the maya events system
-        self._register_script_jobs()
+
+        # -- Script jobs are registered in ``showEvent`` only, so the
+        # -- workspace control exists by the time we register and we can
+        # -- bind the jobs to it via ``parent=``.
 
     def _register_script_jobs(self):
         """
         Registers script jobs for maya events. If the events have already
         been registered they will not be re-registered.
+
+        Where possible, the script jobs are bound to this widget's
+        workspace control via ``parent=`` so they auto-clean when the
+        control is destroyed. Without that binding, jobs survive a
+        widget destruction and fire ``switch_rig`` on a dead self,
+        which crashes Maya.
         """
         # -- Only register if they are not already registered
         if self.script_job_ids:
             return
 
-        # -- Define the list of events we will register a refresh
-        # -- with
+        parent_control = f"{self.objectName()}WorkspaceControl"
+        parent_exists = cmds.workspaceControl(
+            parent_control,
+            q=True,
+            exists=True,
+        )
+
         events = [
             "SceneOpened",
             "NewSceneOpened",
         ]
 
         for event in events:
+            kwargs = dict(event=[event, self.app.switch_rig])
+            if parent_exists:
+                kwargs["parent"] = parent_control
+
             self.script_job_ids.append(
-                cmds.scriptJob(
-                    event=[
-                        event,
-                        self.app.switch_rig,
-                    ]
-                )
+                cmds.scriptJob(**kwargs)
             )
 
     def _unregister_script_jobs(self):
@@ -356,14 +412,21 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
     @classmethod
     def instance(cls):
-        import gc
+        try:
+            from shiboken6 import isValid
+        except ImportError:
+            from shiboken2 import isValid
 
-        for obj in gc.get_objects():
-            try:
-                if isinstance(obj, DockableMayaApp):
-                    return obj
-            except:
-                pass
+        # -- Iterate a snapshot so we can safely mutate the registry to
+        # -- evict sip-deleted shells we discover along the way. Maya
+        # -- can destroy the C++ side of a dockable widget during scene
+        # -- open / workspace-control rebuilds while Python still holds
+        # -- the wrapper; ``isValid`` filters those out.
+        for inst in list(cls._INSTANCES):
+            if isValid(inst):
+                return inst
+            cls._INSTANCES.remove(inst)
+        return None
 
     @classmethod
     def remove_workspace_control(cls, control):

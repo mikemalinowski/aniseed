@@ -1,7 +1,15 @@
 import crosswalk
-from maya import cmds
 
 from . import component
+
+
+class NamingConventionError(ValueError):
+    """
+    Raised when a name does not match the
+    [location]_[classification]_[description]_[counter] format that
+    :meth:`RigConfiguration.generate_name` produces.
+    """
+    pass
 
 
 class RigConfiguration(component.RigComponent):
@@ -51,21 +59,41 @@ class RigConfiguration(component.RigComponent):
             formatted_counter = str(counter).rjust(2, "0")
             name = f"{location.lower()}_{classification}_{description.lower()}_{formatted_counter}"
 
-            if not unique or not cmds.objExists(name):
+            if not unique or not crosswalk.items.exists(name):
                 return name
             counter += 1
 
     def extract_location(self, name: str) -> str:
-        return name.split("_")[0]
+        try:
+            return name.split("_")[0]
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract location from {name!r}"
+            ) from exc
 
     def extract_classification(self, name: str) -> str:
-        return name.split("_")[1]
+        try:
+            return name.split("_")[1]
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract classification from {name!r}"
+            ) from exc
 
     def extract_description(self, name: str) -> str:
-        return "_".join(name.split("_")[2:-1])
+        try:
+            return "_".join(name.split("_")[2:-1])
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract description from {name!r}"
+            ) from exc
 
     def extract_counter(self, name: str) -> int:
-        return int(name.split("_")[-1])
+        try:
+            return int(name.split("_")[-1])
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract counter from {name!r}"
+            ) from exc
 
     def decomposition(self, name):
         return dict(
@@ -105,7 +133,7 @@ class RigConfiguration(component.RigComponent):
         self.stack.build(build_below=edit_component)
 
         # -- Finally select the root joint for the user
-        cmds.select(created_joint)
+        crosswalk.selection.select(created_joint)
         return
 
     def create_editable_structure(self, parent, skeleton_org_name, control_org_name):

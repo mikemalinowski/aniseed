@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import typing
 import functools
@@ -39,7 +40,7 @@ class Stack:
         removed from the stack. Note, that this component will not show any more
         in Stack.components()
 
-    builder_order_changed(): Emitted when an item is moved in the order of execution
+    hierarchy_changed(): Emitted when an item is moved in the hierarchy or build order.
 
     changed(): Emitted whenever a component is added or removed or the build order
         is changed in any way.
@@ -68,10 +69,9 @@ class Stack:
         # -- This is where our components should be sourced from
         self.component_paths: typing.List = component_paths or list()
 
-        # -- Components is a dictionary where the key is a uuid and the
-        # -- value is a component instance
-
-        # -- The build hierarchy is a nested dictionary of uuid's
+        # -- The build hierarchy is held as a list of root components;
+        # -- each component owns its own children, so the full tree is
+        # -- reachable by walking from each root.
         self.root_components = list()
 
         # -- Declare our signals. These are useful for other classes
@@ -127,9 +127,7 @@ class Stack:
             parent: Component = None,
             child_index=None,
             force_uuid: str = None,
-            supress_events: bool = False,
-            _serialise: bool = True,
-
+            suppress_events: bool = False,
     ) -> Component or None:
         """
         This will add a component of the given component type to the stack with the given
@@ -163,21 +161,27 @@ class Stack:
                 uuid_=force_uuid,
             )
 
-        except:
+        except Exception:
             print(f"Failed to initialise component:  {component_type}")
             print(traceback.print_exc())
             return None
 
         # -- If we're given a parent, inherit any attributes that are flagged
-        # -- as expecting inheritence
+        # -- as expecting inheritance.
         if parent:
             for option in component_instance.options():
-                if option.should_inherit() and parent.option(option.name()):
-                    option.set(parent.option(option.name()).get())
+                if not option.should_inherit():
+                    continue
+                parent_option = parent.option(option.name())
+                if parent_option:
+                    option.set(parent_option.get())
 
             for input_ in component_instance.inputs():
-                if input_.should_inherit() and parent.input(input_.name()):
-                    input_.set(parent.input(input_.name()).get())
+                if not input_.should_inherit():
+                    continue
+                parent_input = parent.input(input_.name())
+                if parent_input:
+                    input_.set(parent_input.get())
 
         # -- Set any option values we were given
         for option_name, value in (options or dict()).items():
@@ -185,21 +189,30 @@ class Stack:
                 component_instance.option(option_name).set(value)
 
             except AttributeError:
-                pass
+                traceback.print_exc()
+                print(component_instance.options())
+                print(
+                    f"{option_name} does not exist as an "
+                    f"option for {component_type}"
+                )
+
         # -- Set any input values we were given
         for input_name, value in (inputs or dict()).items():
             try:
                 component_instance.input(input_name).set(value)
 
             except AttributeError:
-                pass
+                print(
+                    f"{input_name} does not exist as a "
+                    f"input for {component_type}"
+                )
 
         # -- Whenever we have value changes, ensure we save the result
         component_instance.changed.connect(self.changed.emit)
         component_instance.set_parent(parent, child_index=child_index)
 
         # -- Call the enter stack feature
-        if not supress_events:
+        if not suppress_events:
             component_instance.on_enter_stack()
 
         # -- Emit the fact that we have added the component and the
@@ -211,18 +224,22 @@ class Stack:
 
     def remove_component(self, component: Component) -> bool:
         """
-        This will remove the given component from the stack and the build order.
+        This will remove the given component, and recursively all of its
+        descendants, from the stack. Each removed component receives an
+        ``on_removed_from_stack`` callback and the stack emits a
+        ``component_removed`` signal per component.
         """
-        # -- To remove we simply need to remove it from our hierarchy at
-        # -- which point it will be garbage collected as soon as there
-        # -- are no references.
+        # -- Snapshot the children list before recursing — remove_component
+        # -- mutates parent.children, which would shift indices mid-iteration.
+        for child in list(component.children):
+            self.remove_component(child)
+
         component.set_parent(None)
         self.root_components.remove(component)
 
-        # -- Call the removed feature
         try:
             component.on_removed_from_stack()
-        except:
+        except Exception:
             traceback.print_exc()
 
         self.component_removed.emit()
@@ -246,16 +263,30 @@ class Stack:
             format="galaxy"
         )
 
-    def deserialize(self, data: typing.Dict):
+    def deserialize(self, data: typing.Dict, clear: bool = True):
         """
         This will take in a dictionary (of the format provided by the serialise
         method. The class will then be populated by all the data in that dictionary.
 
         Args:
             data: The dictionary of data to read the component list from
+            clear: If True (default), any existing components are removed
+                before deserialising. Pass False to append the loaded tree
+                to the existing components.
+
+        Note:
+            This method uses the American spelling for historical
+            reasons; the equivalent British-spelling alias
+            :meth:`deserialise` is available and fully equivalent.
+            Subclasses that need to extend the behaviour should
+            override ``deserialize`` (the canonical implementation);
+            both names will route through to the override.
 
         :return:
         """
+        if clear:
+            self.clear()
+
         # -- Ensure any legacy data format is converted
         # -- to the latest data format
         data = compat.to_latest(data)
@@ -269,23 +300,30 @@ class Stack:
                 options=root_data["options"],
                 force_uuid=root_data["uuid"],
                 parent=None,
-                supress_events=True,
-                _serialise=False,
+                suppress_events=True,
             )
             if not root_data.get("enabled", True):
                 root_component.set_enabled(False)
             self._add_child_components(parent=root_component, child_list=root_data["children"])
 
-    def _add_child_components(self, parent, child_list):
+    def deserialise(self, data: typing.Dict, clear: bool = True):
+        """
+        British-spelling alias for :meth:`deserialize`. Both methods
+        are fully equivalent — pick whichever matches your codebase's
+        convention. This alias routes through to ``deserialize`` so
+        subclass overrides on the canonical name continue to work.
+        """
+        return self.deserialize(data, clear=clear)
+
+    def _add_child_components(self, parent, child_list, regenerate_uuids=False):
         for child_data in child_list:
             created_component = self.add_component(
                 child_data["component_type"],
                 child_data["label"],
                 inputs=child_data["inputs"],
                 options=child_data["options"],
-                force_uuid=child_data["uuid"],
-                supress_events=True,
-                _serialise=False,
+                force_uuid=None if regenerate_uuids else child_data["uuid"],
+                suppress_events=True,
                 parent=parent,
             )
             # -- If the component was marked as disabled, then we disable it
@@ -294,7 +332,88 @@ class Stack:
                 created_component.set_enabled(False)
 
             # -- Create any children
-            self._add_child_components(created_component, child_data["children"])
+            self._add_child_components(
+                created_component,
+                child_data["children"],
+                regenerate_uuids=regenerate_uuids,
+            )
+
+    def import_subtree_under(self, parent: "Component|None", filepath: str) -> None:
+        """
+        Load a serialised subtree from a JSON file and add the root
+        components in that file as children of the given parent.
+
+        Accepts files produced by both ``Component.save_settings()``
+        (single-component shape) and ``Stack.save()`` (full-stack shape
+        with a ``tree`` key). In the latter case, every root component
+        in the file becomes a child of ``parent``.
+
+        All component UUIDs are regenerated to avoid collisions with
+        existing components in this stack. Labels are preserved, so any
+        internal cross-references (which are label-based) continue to
+        work after import. If a loaded component has a label that
+        already exists in this stack, a warning is printed — address
+        resolution will pick the first matching label, which may not be
+        the intended one.
+
+        :param parent: The Component to attach the loaded subtree to,
+            or None to add the loaded components as root components.
+        :param filepath: Absolute path to the JSON file.
+        """
+        if not filepath or not os.path.exists(filepath):
+            print(f"{filepath} does not exist")
+            return
+
+        with open(filepath, "r") as f:
+            data = json.load(f)
+
+        # -- Files saved via Component.save_settings() are a single
+        # -- component dict; files saved via Stack.save() are a stack
+        # -- dict with a "tree" key (or legacy "build_order"). Only run
+        # -- the compat upgrader on stack-format data — single-component
+        # -- dicts have no versioned format to raise.
+        if "tree" in data or "build_order" in data:
+            data = compat.to_latest(data)
+
+        if "tree" in data:
+            roots = data["tree"]
+        else:
+            roots = [data]
+
+        # -- Warn about any label collisions before adding the new
+        # -- components, since address resolution is label-based.
+        existing_labels = {
+            component.label()
+            for component in self.components()
+        }
+        incoming_labels = self._collect_labels(roots)
+        collisions = existing_labels & incoming_labels
+        if collisions:
+            print(
+                f"xstack.import_subtree_under: label collision(s) with existing "
+                f"components: {sorted(collisions)}. Address resolution may be "
+                f"ambiguous; consider renaming."
+            )
+
+        self._add_child_components(
+            parent=parent,
+            child_list=roots,
+            regenerate_uuids=True,
+        )
+
+        self.hierarchy_changed.emit()
+
+    @classmethod
+    def _collect_labels(cls, child_list: typing.List) -> set:
+        """
+        Walks a serialised child list and returns the set of every
+        label present in the tree.
+        """
+        labels = set()
+        for child_data in child_list:
+            labels.add(child_data["label"])
+            labels.update(cls._collect_labels(child_data.get("children", [])))
+        return labels
 
     def save(self, filepath, additional_data=None):
         """
@@ -319,18 +438,52 @@ class Stack:
 
     def clear(self):
         """
-        Removes all reference to all components and clears out
+        Removes every component from the stack, firing
+        ``component_removed`` and the component's
+        ``on_removed_from_stack`` callback for each one — symmetric
+        with :meth:`remove_component` so listeners and plugins see a
+        consistent teardown.
         """
+        # -- Snapshot the component list in build order before we
+        # -- start mutating anything. We need descendants too, not
+        # -- just root_components.
+        components = self.components()
+
+        for component in components:
+            try:
+                component.on_removed_from_stack()
+            except Exception:
+                traceback.print_exc()
+            self.component_removed.emit()
+
         self.root_components = []
         self.changed.emit()
 
     @classmethod
-    def open(cls, data: str or typing.Dict, component_paths: typing.List or None = None):
+    def open(
+            cls,
+            data: str or typing.Dict,
+            component_paths: typing.List or None = None,
+    ) -> "Stack":
+        """
+        Loads a Stack from either a JSON file path or an in-memory
+        dict produced by :meth:`serialise`.
 
+        :param data: Either a filepath to a JSON file, or the parsed
+            dict directly.
+        :param component_paths: Optional list of paths to add to the
+            new stack's component library on construction.
+        :raises FileNotFoundError: If ``data`` is a string but is
+            empty or refers to a missing file.
+        """
         if isinstance(data, str):
-            if not data or not os.path.exists(data):
-                print("%s does not exist" % data)
-                return
+            if not data:
+                raise FileNotFoundError(
+                    "Stack.open requires a non-empty filepath or a dict."
+                )
+
+            if not os.path.exists(data):
+                raise FileNotFoundError(f"Stack file not found: {data}")
 
             with open(data, "r") as f:
                 data = json.load(f)
@@ -340,11 +493,8 @@ class Stack:
             component_paths=component_paths or list(),
         )
 
-        # -- Clear the stack before we deserialise
-        stack.clear()
-
-        # -- Now we have the data in the right format, we can deserialise
-        # -- from it
+        # -- Deserialise into the freshly-constructed stack. ``deserialize``
+        # -- clears by default, but the stack has nothing to clear here.
         stack.deserialize(data)
 
         return stack
@@ -406,17 +556,38 @@ class Stack:
 
         return None
 
+    def get_component_by_type(self, of_type) -> Component or None:
+        """
+        This will cycle the hierarchy and search it for a component
+        with the given uuid.
+        """
+        for component in self.components():
+
+            # -- If we're specifically looking for a particular
+            # -- type then ignore anything which is not of that
+            # -- type.
+            if of_type == component.identifier:
+                return component
+        return None
+
     def _get_components_to_build(
             self,
             build_up_to: Component = None,
             build_only: Component = None,
-            build_below: Component = None,):
-        components = []
-
+            build_below: Component = None,
+    ):
+        # -- Pick the candidate set: the subtree below a given
+        # -- component (build_below), or the whole stack otherwise.
+        # -- The filter loop below runs the same way for both so
+        # -- ``is_enabled`` / ``build_up_to`` / ``build_only`` are
+        # -- honoured consistently regardless of entry point.
         if build_below:
-            return self.components(from_component=build_below)
+            candidates = self.components(from_component=build_below)
+        else:
+            candidates = self.components()
 
-        for component in self.components():
+        components = []
+        for component in candidates:
 
             if not component.is_enabled():
                 continue
@@ -465,6 +636,7 @@ class Stack:
         # -- Lets be positive and assume everything is ok until we're told
         # -- otherwise.
         invalid_result = False
+        overall_build_start = time.time()
 
         # -- Cycle the build order. Notice that we're not given the component
         # -- themselves but the uuid to retrieve the component. Note that we
@@ -498,7 +670,7 @@ class Stack:
 
                         component.set_status(Status.Invalid)
 
-            except:
+            except Exception:
                 print(f"{component.label()} failed during validation check")
                 print(traceback.print_exc())
                 component.set_status(
@@ -524,6 +696,7 @@ class Stack:
             # -- Emit a progression signal
             percentage = (float(idx) / len(components_to_build)) * 100
             self.build_progressed.emit(percentage)
+            start_time = time.time()
 
             # -- Just as during the validation, we're executing third party code, so
             # -- we wrap this process in a broad exception
@@ -534,9 +707,9 @@ class Stack:
                 component.describe()
                 result = component.wrapped_run()
                 component.describe_outputs()
-                print(f"Component Build Status : {component.status()}")
+                print(f"Component Build Status : {component.status()} ({time.time() - start_time:.3f}s)")
 
-            except:
+            except Exception:
 
                 print("Build failed. Please see the script editor for a traceback.")
                 print(traceback.print_exc())
@@ -549,7 +722,7 @@ class Stack:
 
         # -- Emit our completion
         self.run_events(components_to_build, "on_build_finished", True)
-        print("Build Succeeded.")
+        print(f"Build Succeeded. ({time.time() - overall_build_start:.3f}s)")
         self.build_progressed.emit(100)
         self.build_completed.emit()
 
@@ -561,7 +734,7 @@ class Stack:
                 func_ = getattr(component, event_name)
                 func_(*args, **kwargs)
 
-            except:
+            except Exception:
                 print(f"{component.label()} failed during its pre build")
                 print(traceback.print_exc())
 
@@ -607,7 +780,6 @@ class Stack:
             indices[child] = child.child_index()
 
         for child, child_index in indices.items():
-            print("got child : %s" % child.label())
             child.set_parent(new_component, child_index=child_index)
 
         # -- Now we can remove the component

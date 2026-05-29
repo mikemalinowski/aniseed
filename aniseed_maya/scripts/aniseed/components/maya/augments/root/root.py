@@ -7,6 +7,19 @@ import aniseed_toolkit
 
 
 class GlobalControlRoot(aniseed.RigComponent):
+    """
+    Creates a two-tier "global control" root: an SRT control that
+    carries the overall world transform of the rig, plus a Root
+    control parented under it which constrains the actual driving
+    joint.
+
+    On first add to the stack (controlled by the one-shot
+    ``Create Joint`` option), the component will also create the
+    driving joint itself, using the user's current Maya selection as
+    its parent if anything is selected. After the first add the
+    ``Create Joint`` and ``Has Initialised`` options are hidden so
+    they don't clutter the UI on subsequent edits.
+    """
 
     identifier = "Core : Global Control Root"
     icon = os.path.join(
@@ -15,7 +28,7 @@ class GlobalControlRoot(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
-        super(GlobalControlRoot, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -52,16 +65,30 @@ class GlobalControlRoot(aniseed.RigComponent):
             ),
         )
 
-        # -- This is a dynamic option which we only use to ask the user
-        # -- if they want us to create a joint. After the component is added
-        # -- to a stack it is never visible again
+        # -- One-shot option asked at add-time only: should we auto-create
+        # -- the driving joint? Hidden from the UI after the first
+        # -- ``on_enter_stack`` runs.
         self.declare_option(
             name="Create Joint",
+            description=(
+                "If enabled when the component is first added to the "
+                "stack, the driving joint is created automatically "
+                "(parented to the current Maya selection). Hidden after "
+                "first use."
+            ),
             value=True,
             pre_expose=True,
         )
+
+        # -- Internal flag tracking whether ``on_enter_stack`` has
+        # -- already done its one-shot setup. Hidden because the user
+        # -- should never need to touch it.
         self.declare_option(
             name="Has Initialised",
+            description=(
+                "Internal flag: True once the component's first-add "
+                "joint-creation has run. Should not be edited by hand."
+            ),
             value=False,
             hidden=True,
         )
@@ -72,7 +99,7 @@ class GlobalControlRoot(aniseed.RigComponent):
         it is the first time its been added, and if it is we will create the
         joint automatically if we're allowed to do so.
         """
-        super(GlobalControlRoot, self).on_enter_stack()
+        super().on_enter_stack()
 
         # -- Get the option and check if we have already been initialised
         initialised_option = self.option("Has Initialised")
@@ -91,7 +118,8 @@ class GlobalControlRoot(aniseed.RigComponent):
             return
 
         # -- To reach here the user would like us to create the joint.
-        parent = mref.selected()[0] if mref.selected() else None
+        selected = mref.selected()
+        parent = selected[0] if selected else None
         joint = mref.create("joint", parent=parent)
         joint.rename(
             self.config.generate_name(
@@ -100,22 +128,12 @@ class GlobalControlRoot(aniseed.RigComponent):
                 location=self.config.middle,
             )
         )
-        joint.set_parent(parent)
 
         # -- Finally set the input parameter
         self.input("Joint To Drive").set(joint.name())
 
-    def option_widget(self, option_name):
-        if option_name == "Shape":
-            return aniseed.widgets.ShapeSelector(
-                default_item=self.option("Shape").get()
-            )
-
     def input_widget(self, requirement_name):
-        if requirement_name == "Parent":
-            return aniseed.widgets.ObjectSelector(component=self)
-
-        if requirement_name == "Joint To Drive":
+        if requirement_name in ("Parent", "Joint To Drive"):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):

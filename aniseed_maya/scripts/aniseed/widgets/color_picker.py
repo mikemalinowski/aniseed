@@ -14,7 +14,7 @@ class ColorPicker(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, default_colour, size=30, parent=None):
-        super(ColorPicker, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Store our input values
         self._colour = default_colour

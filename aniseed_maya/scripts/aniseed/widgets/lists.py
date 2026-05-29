@@ -19,7 +19,7 @@ class ObjectList(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, default_items=None, button_size=30, parent=None):
-        super(ObjectList, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Store our input values
         self._button_size = button_size
@@ -81,8 +81,8 @@ class ObjectList(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def add(self):
-        for item in crosswalk.selection.selected():
-            item = QtWidgets.QListWidgetItem(item)
+        for selected in crosswalk.selection.selected():
+            item = QtWidgets.QListWidgetItem(crosswalk.items.get_name(selected))
             self.list_widget.addItem(item)
             self.added.emit(item)
 
@@ -105,23 +105,13 @@ class ObjectList(QtWidgets.QWidget):
         if not self.list_widget.currentItem():
             return
 
-        # -- Get the index of the process we want to shift
         index_to_shift = self.list_widget.currentRow()
+        if index_to_shift <= 0:
+            return  # already at the top
 
-        # -- Remove the process from the list
         item = self.list_widget.takeItem(index_to_shift)
-
-        # -- Re-insert it one level less (or the same level if its at the top
-        # -- of the list already)
-        shift_by = min(
-            index_to_shift - 1,
-            self.list_widget.count(),
-        )
-
-        self.list_widget.insertItem(
-            shift_by,
-            item,
-        )
+        shift_by = index_to_shift - 1
+        self.list_widget.insertItem(shift_by, item)
         self.list_widget.setCurrentRow(shift_by)
         self.changed.emit()
 
@@ -131,22 +121,13 @@ class ObjectList(QtWidgets.QWidget):
         if not self.list_widget.currentItem():
             return
 
-        # -- Get the index of the process we want to shift
         index_to_shift = self.list_widget.currentRow()
+        if index_to_shift >= self.list_widget.count() - 1:
+            return  # already at the bottom
 
-        # -- Remove the process from the list
         item = self.list_widget.takeItem(index_to_shift)
-
-        # -- Re-insert it one level less (or the same level if its at the top
-        # -- of the list already)
-        shift_by = max(
-            index_to_shift + 1,
-            0,
-        )
-        self.list_widget.insertItem(
-            shift_by,
-            item,
-        )
+        shift_by = index_to_shift + 1
+        self.list_widget.insertItem(shift_by, item)
         self.list_widget.setCurrentRow(shift_by)
         self.changed.emit()
 
@@ -191,7 +172,7 @@ class TextList(ObjectList):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, button_size=30, parent=None):
-        super(TextList, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
     # ----------------------------------------------------------------------------------
     def add(self, value=None):

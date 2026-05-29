@@ -4,15 +4,89 @@ from maya import cmds
 from maya.api import OpenMaya as om
 
 
+# -- Maya attribute type → Python type. Used by Attribute.python_type().
+# -- Lives at module level so adding new mappings is just a dict entry.
+# -- Types not in this dict (e.g. ``message``, unrecognised future types)
+# -- return None from python_type().
+_ATTRIBUTE_TYPE_TO_PYTHON_TYPE = {
+    # Floats
+    "double":       float,
+    "float":        float,
+    "doubleLinear": float,
+    "doubleAngle":  float,
+    "floatLinear":  float,
+    "floatAngle":   float,
+    "time":         float,
+
+    # Integers
+    "long":         int,
+    "short":        int,
+    "byte":         int,
+    "char":         int,
+    "enum":         int,
+
+    # Booleans
+    "bool":         bool,
+
+    # Strings
+    "string":       str,
+
+    # Compound numeric types
+    "double2":      list,
+    "double3":      list,
+    "float2":       list,
+    "float3":       list,
+    "long2":        list,
+    "long3":        list,
+    "short2":       list,
+    "short3":       list,
+
+    # Array data types
+    "doubleArray":  list,
+    "floatArray":   list,
+    "Int32Array":   list,
+    "vectorArray":  list,
+    "pointArray":   list,
+    "stringArray":  list,
+
+    # Matrices
+    "matrix":       list,
+    "fltMatrix":    list,
+}
+
+
 class Attribute(mref.Trait):
     """
-    This trait will bind and represent attributes.
+    Trait bound to any ``om.MPlug`` — every attribute on every node in
+    the scene. Exposes name / path resolution, value get/set,
+    connect/disconnect, type queries, and Python-type mapping.
+
+    Addressing forms:
+      * ``name(include_node=False)`` — bare attribute name
+        (``translateX``).
+      * ``name(include_node=True)`` — short form including the owning
+        node's short name (``cube.translateX``). Display-friendly but
+        ambiguous on DAG nodes with duplicate short names.
+      * ``full_name()`` / ``path()`` — fully qualified DAG path of the
+        owning node joined with the partial attribute name
+        (``|root|cube.translateX``). Safe for handing to ``cmds`` in
+        any scene. Both methods return the same string; ``path()`` is
+        an alias kept for backwards compat.
+
+    The owning node and the attribute's data type are both resolved
+    lazily on first access (``node()`` and ``get_type()``) so
+    constructing an Attribute is cheap.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._m_plug = self._pointer
+
+        # -- The plug's partial name doesn't change after construction,
+        # -- so cache it once. Saves an MPlug call on every name() /
+        # -- full_name() / path() invocation.
+        self._partial_name = self._pointer.partialName(useLongNames=True)
 
         # -- These are resolved lazily on first access to avoid the
         # -- per-Attribute cost of a recursive mref.get and a
@@ -22,13 +96,11 @@ class Attribute(mref.Trait):
         self._attribute_type_cache = None
 
     @classmethod
-    def can_bind(cls, pointer: om.MObject) -> bool:
+    def can_bind(cls, pointer: om.MObject | om.MPlug) -> bool:
         """
-        This determines whether this trait can be bound to the given object
+        Returns True if the given pointer is an MPlug.
         """
-        if isinstance(pointer, om.MPlug):
-            return True
-        return False
+        return isinstance(pointer, om.MPlug)
 
     def node(self) -> mref.ReferencedItem:
         """
@@ -53,24 +125,25 @@ class Attribute(mref.Trait):
             duplicate short names.
         """
         if include_node:
-            return f"{self.node().name()}.{self._m_plug.partialName(useLongNames=True)}"
+            return f"{self.node().name()}.{self._partial_name}"
         else:
-            return self._m_plug.partialName(useLongNames=True)
+            return self._partial_name
 
     def full_name(self) -> str:
         """
-        Returns the name of the attribute.
-
-        :param include_node: If True, will return the fully qualified name of the attribute.
+        Returns the fully qualified path of the attribute — the owning
+        node's DAG path joined with the attribute's partial name. This
+        is the safe, unambiguous form to hand to ``cmds`` in scenes
+        that may contain duplicate short names.
         """
-        return f"{self.node().full_name()}.{self._m_plug.partialName(useLongNames=True)}"
+        return f"{self.node().full_name()}.{self._partial_name}"
 
     def path(self) -> str:
         """
-        This will return the hierarchical path of the attribute (i.e, the objects full name
-        prefixing the attribute).
+        Alias for :meth:`full_name`. Both return the same fully
+        qualified attribute path.
         """
-        return f"{self.node().full_name()}.{self._m_plug.partialName(useLongNames=True)}"
+        return self.full_name()
 
     def set(self, *args, **kwargs) -> None:
         """
@@ -124,15 +197,34 @@ class Attribute(mref.Trait):
             **kwargs
         )
 
-    def connect_next(self, attribute: mref.ReferencedItem|str, force: bool = False, **kwargs) -> None:
+    def connect_next(
+        self,
+        attribute: mref.ReferencedItem | str,
+        force: bool = False,
+        **kwargs,
+    ) -> None:
+        """
+        Connect this attribute to the next free element of the given
+        multi-attribute. The target's existing logical indices are
+        queried; the new connection goes to ``max(existing) + 1``, or
+        ``[0]`` if the multi is currently empty.
 
-        existing_plugs = attribute.get(multiIndices=True) or []
-        next_index = max(existing_plugs) + 1 if existing_plugs else 0
+        :param attribute: A multi-attribute (or a string addressing one).
+            The target must be a multi (array) attribute — non-multi
+            attributes will fail at the ``cmds.connectAttr`` step with
+            a Maya error referencing the malformed indexed plug.
+        :param force: Forwarded to ``cmds.connectAttr``.
+        """
+        attribute = mref.get(attribute)
+
+        existing_indices = attribute.get(multiIndices=True) or []
+        next_index = max(existing_indices) + 1 if existing_indices else 0
+
         cmds.connectAttr(
             self.path(),
             f"{attribute.path()}[{next_index}]",
             force=force,
-            **kwargs
+            **kwargs,
         )
 
     def disconnect(self, attribute: mref.ReferencedItem | str | None = None) -> None:
@@ -162,69 +254,69 @@ class Attribute(mref.Trait):
 
     def inputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
-        Returns a list of inputs feeding into this attribute. Unit
-        conversion nodes are transparently skipped when
-        ``skip_converters`` is True (the default) via Maya's
-        ``skipConversionNodes`` flag — no Python-side recursion needed.
+        Returns a list of inputs feeding into this attribute.
+
+        :param node_type: If given, only include inputs whose owning
+            node matches this Maya node type (e.g. ``"transform"``,
+            ``"multiplyDivide"``). ``None`` (default) returns all
+            inputs.
+        :param skip_converters: When True (default), unitConversion
+            nodes are transparently skipped via Maya's
+            ``skipConversionNodes`` flag — no Python-side recursion
+            needed.
         """
+        kwargs = dict(
+            source=True,
+            destination=False,
+            plugs=True,
+            skipConversionNodes=skip_converters,
+        )
+        if node_type:
+            kwargs["type"] = node_type
+
         return [
             mref.get(attribute)
-            for attribute in cmds.listConnections(
-                self.path(),
-                source=True,
-                destination=False,
-                plugs=True,
-                skipConversionNodes=skip_converters,
-            ) or []
+            for attribute in cmds.listConnections(self.path(), **kwargs) or []
         ]
 
     def outputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
-        Returns a list of outputs being driven by this attribute. Unit
-        conversion nodes are transparently skipped when
-        ``skip_converters`` is True (the default) via Maya's
-        ``skipConversionNodes`` flag — no Python-side recursion needed.
+        Returns a list of outputs being driven by this attribute.
+
+        :param node_type: If given, only include outputs whose owning
+            node matches this Maya node type (e.g. ``"transform"``,
+            ``"multiplyDivide"``). ``None`` (default) returns all
+            outputs.
+        :param skip_converters: When True (default), unitConversion
+            nodes are transparently skipped via Maya's
+            ``skipConversionNodes`` flag — no Python-side recursion
+            needed.
         """
+        kwargs = dict(
+            source=False,
+            destination=True,
+            plugs=True,
+            skipConversionNodes=skip_converters,
+        )
+        if node_type:
+            kwargs["type"] = node_type
+
         return [
             mref.get(attribute)
-            for attribute in cmds.listConnections(
-                self.path(),
-                source=False,
-                destination=True,
-                plugs=True,
-                skipConversionNodes=skip_converters,
-            ) or []
+            for attribute in cmds.listConnections(self.path(), **kwargs) or []
         ]
-
-    def type(self):
-        """
-        Returns the type of the attribute value.
-        """
-        return self.get(type=True)
 
     def python_type(self):
         """
-        Returns the python type that most represents this attribute value.
-        :return:
+        Returns the Python type that most closely represents the value
+        of this attribute. Returns ``None`` for attribute types that
+        don't have a meaningful Python value (e.g. ``message``) or for
+        any attribute type not in the mapping.
+
+        Uses the cached :meth:`get_type` rather than re-querying Maya
+        on every call.
         """
-        attribute_type = self.get(type=True)
-
-        if attribute_type in ["doubleLinear", "float", "doubleAngle", "double"]:
-            return float
-
-        if attribute_type in ["int", "enum"]:
-            return int
-
-        if attribute_type in ["bool"]:
-            return bool
-
-        if attribute_type in ["double3", "float3"]:
-            return list
-
-        if attribute_type in ["string"]:
-            return str
-
-        return None
+        return _ATTRIBUTE_TYPE_TO_PYTHON_TYPE.get(self.get_type())
 
     def __repr__(self) -> str:
         """

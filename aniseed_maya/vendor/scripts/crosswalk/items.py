@@ -58,6 +58,15 @@ def get_name(item: object or str) -> str:
     """
     return ""
 
+def set_name(item: object or str, new_name: str) -> str:
+    """
+    This will rename the item and return the items new name.
+
+    Args:
+        item: The item to rename
+        new_name: The new name for the item
+    """
+    return ""
 
 def all_items_with_attribute(attribute_name: str) -> list[object]:
     """

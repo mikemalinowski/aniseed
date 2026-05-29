@@ -253,9 +253,10 @@ class HandComponent(aniseed.RigComponent):
             shortName="finger_visibility",
             attributeType='bool',
             defaultValue=1,
-            keyable=True,
+            keyable=False,
         )
         finger_visibility_attr = f"{hand.ctl}.finger_visibility"
+        cmds.setAttr(finger_visibility_attr, channelBox=True)
 
         curl_attr = self._add_multiplied_attr(
             hand.ctl,
@@ -466,9 +467,12 @@ class HandComponent(aniseed.RigComponent):
         thumb_label = self.option("Thumb Label").get()
         all_joints = []
 
+        if prefix:
+            prefix += "_"
+
         # -- Create the hand bone if required
         hand = aniseed_toolkit.joints.create(
-            description=f"{prefix}_hand",
+            description=f"{prefix}hand",
             location=location,
             parent=parent,
             config=self.config,
@@ -484,12 +488,12 @@ class HandComponent(aniseed.RigComponent):
             # -- By default the parent for our digits will be the
             # -- give parent
             digit_parent = hand
-            planar_offset = ranged_value * (spread / 4)
+            planar_offset = aniseed_toolkit.units.to_cm(ranged_value * (spread / 4))
             # -- Before we build the finger digits, build the metacarpal if we
             # -- need to
             if finger_index and use_metacarpals:
                 metacarpal = aniseed_toolkit.joints.create(
-                    description=f"{prefix}_Metacarpal_{label}",
+                    description=f"{prefix}metacarpal_{label}",
                     location=location,
                     parent=hand,
                     config=self.config,
@@ -498,7 +502,7 @@ class HandComponent(aniseed.RigComponent):
 
                 # -- Adjust the transform of the metacarpal
                 cmds.setAttr(f"{metacarpal}.translateZ", planar_offset)
-                cmds.setAttr(f"{metacarpal}.translateX", 1)
+                cmds.setAttr(f"{metacarpal}.translateX", aniseed_toolkit.units.to_cm(1))
                 # cmds.setAttr(f"{metacarpal}.rotateY", ranged_value)
 
                 # -- Ensure the metacarpal is the parent of the subsequent
@@ -509,7 +513,7 @@ class HandComponent(aniseed.RigComponent):
             for digit_index in range(digit_count):
 
                 digit = aniseed_toolkit.joints.create(
-                    description=f"{prefix}_finger_{label}",
+                    description=f"{prefix}finger_{label}",
                     location=location,
                     parent=digit_parent,
                     config=self.config,
@@ -523,7 +527,7 @@ class HandComponent(aniseed.RigComponent):
                     worldSpace=True,
                 )
 
-                length = spread * 2 if not digit_index else spread
+                length = aniseed_toolkit.units.to_cm(spread * 2 if not digit_index else spread)
                 cmds.setAttr(f"{digit}.translateX", length)
 
                 if finger_index == 0:  # -- Thumb

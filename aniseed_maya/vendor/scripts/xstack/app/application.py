@@ -27,10 +27,8 @@ class AppWidget(QtWidgets.QWidget):
     build_complete = QtCore.Signal()
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, app_config=None, allow_threading=True, parent: QtWidgets.QWidget = None, storage_identifier="xstack"):
-        super(AppWidget, self).__init__(parent=parent)
-
-        self.settings_id = "xstack_app"
+    def __init__(self, app_config=None, allow_threading=True, parent: QtWidgets.QWidget = None):
+        super().__init__(parent=parent)
 
         # -- Store the stack
         self.stack = None
@@ -97,7 +95,7 @@ class AppWidget(QtWidgets.QWidget):
                 build_only=build_only,
                 validate_only=validate_only,
             )
-            self.build_complete.emit() # CRASH
+            self.build_complete.emit()
 
     def update_progressbar(self, percentage):
         """
@@ -165,11 +163,16 @@ class AppWidget(QtWidgets.QWidget):
             self.layout(),
         )
 
+        # -- Always update self.stack so listeners and downstream code
+        # -- (e.g. subclasses' set_active_stack overrides) see the new
+        # -- state. Previously this assignment was skipped on the
+        # -- ``stack is None`` branch, leaving self.stack pointing at a
+        # -- now-stale previous stack.
+        self.stack = stack
+
         # -- If we have not been given a stack, we clear the layout and
         # -- rebuild the menu
         if not stack:
-
-
             self.tree_widget = None
             self.editor_widget = None
             self.splitter = None
@@ -179,9 +182,7 @@ class AppWidget(QtWidgets.QWidget):
 
             return
 
-        # -- We have been given a stack, so set the stack instance and rebuild
-        # -- the layout.
-        self.stack = stack
+        # -- We have been given a stack, so rebuild the layout.
         self.build_layout()
 
     # ----------------------------------------------------------------------------------
@@ -279,8 +280,8 @@ class AppWidget(QtWidgets.QWidget):
 
         self.tree_widget = tree.BuildTreeWidget(self.stack, self.app_config, app=self)
         self.splitter.addWidget(self.tree_widget)
-        self.tree_widget.is_updated.connect(self.propogate_component_selection)
-        self.tree_widget.currentItemChanged.connect(self.propogate_component_selection)
+        self.tree_widget.is_updated.connect(self.propagate_component_selection)
+        self.tree_widget.currentItemChanged.connect(self.propagate_component_selection)
 
         self.editor_widget = options.ComponentEditor(parent=self)
         self.splitter.addWidget(self.editor_widget)
@@ -320,7 +321,7 @@ class AppWidget(QtWidgets.QWidget):
         force_vertical = False
         force_horizontal = False
 
-        if not self.app_config.get_setting("auto_adjust_orientiation"):
+        if not self.app_config.get_setting("auto_adjust_orientation"):
 
             if self.app_config.get_setting("use_vertical_alignment"):
                 force_vertical = True
@@ -353,7 +354,7 @@ class AppWidget(QtWidgets.QWidget):
             self.splitter.setOrientation(QtCore.Qt.Vertical)
 
     # ----------------------------------------------------------------------------------
-    def create_new_stack(self, **kwargs):
+    def create_new_stack(self):
         """
         This will take the user through the flow of generating a new stack
 
@@ -373,7 +374,6 @@ class AppWidget(QtWidgets.QWidget):
         new_stack = self.app_config.stack_class(
             label=name,
             component_paths=self.app_config.component_paths,
-            **kwargs
         )
 
         self.set_active_stack(new_stack)
@@ -439,7 +439,7 @@ class AppWidget(QtWidgets.QWidget):
         )
 
     # ----------------------------------------------------------------------------------
-    def propogate_component_selection(self, *args, **kwargs):
+    def propagate_component_selection(self, *args, **kwargs):
         """
         We use this as a pass-through mechanism, so that when a component is selected
         in the tree view we call the set_component in the editor panel.
@@ -453,7 +453,7 @@ class AppWidget(QtWidgets.QWidget):
         """
         Wen the window is resized check out layout orientation
         """
-        super(AppWidget, self).resizeEvent(event)
+        super().resizeEvent(event)
         self.set_layout_orientation()
 
 
@@ -462,7 +462,7 @@ class AppWidget(QtWidgets.QWidget):
 class AppWindow(qtility.windows.MemorableWindow):
 
     def __init__(self, app_config=None, allow_threading=True, storage_identifier="xstack", *args, **kwargs):
-        super(AppWindow, self).__init__(storage_identifier=storage_identifier, *args, **kwargs)
+        super().__init__(storage_identifier=storage_identifier, *args, **kwargs)
 
         self.app_config = app_config or config.AppConfig
 
@@ -498,12 +498,12 @@ def launch(app_config=None, blocking: bool = True, load_file: str = None, run_on
     w.show()
 
     if load_file:
-        w.core.import_stack(filepath=load_file, silent=True)
+        w.core.open(filepath=load_file, silent=True)
 
     if active_stack:
         w.core.set_active_stack(active_stack)
 
-    if run_on_launch and self.core.stack:
+    if run_on_launch and w.core.stack:
         w.core.build()
 
     if blocking:

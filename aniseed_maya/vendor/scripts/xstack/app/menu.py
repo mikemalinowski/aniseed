@@ -15,7 +15,7 @@ def show(item, app_config, app, parent):
 class TreeMenu(QtWidgets.QMenu):
 
     def __init__(self, item=None, app_config=None, app=None, parent=None):
-        super(TreeMenu, self).__init__("ASD", parent=parent)
+        super().__init__("", parent=parent)
 
         # -- Store our inputs
         self._parent = parent
@@ -81,8 +81,8 @@ class TreeMenu(QtWidgets.QMenu):
         )
         actions_menu.addAction(enable_disable_action)
 
-        # -- Action to export settings
-        export_action = QtWidgets.QAction(f"Export Settings", self._parent)
+        # -- Action to export the component (and its subtree) to a JSON file
+        export_action = QtWidgets.QAction(f"Export to File", self._parent)
         export_action.triggered.connect(
             functools.partial(
                 self.app.tree_widget.save_component_settings,
@@ -91,15 +91,26 @@ class TreeMenu(QtWidgets.QMenu):
         )
         actions_menu.addAction(export_action)
 
-        # -- Action to Import settings
-        import_action = QtWidgets.QAction(f"Export Settings", self._parent)
-        import_action.triggered.connect(
+        # -- Action to apply just this component's inputs/options from a JSON file
+        apply_settings_action = QtWidgets.QAction(f"Apply Settings from File", self._parent)
+        apply_settings_action.triggered.connect(
             functools.partial(
                 self.app.tree_widget.load_component_settings,
                 item=self.item,
             ),
         )
-        actions_menu.addAction(import_action)
+        actions_menu.addAction(apply_settings_action)
+
+        # -- Action to load a JSON file and add its contents as children
+        # -- of this component, regenerating UUIDs on load.
+        import_subtree_action = QtWidgets.QAction(f"Import as Children", self._parent)
+        import_subtree_action.triggered.connect(
+            functools.partial(
+                self.app.tree_widget.import_subtree,
+                item=self.item,
+            ),
+        )
+        actions_menu.addAction(import_subtree_action)
 
         # -- Finally we add the menu
         self.addMenu(actions_menu)
@@ -229,7 +240,7 @@ class TreeMenu(QtWidgets.QMenu):
         validate_section.triggered.connect(
             functools.partial(
                 self.app.build,
-                validate_below=self.component,
+                build_below=self.component,
                 validate_only=True,
             ),
         )
@@ -254,7 +265,7 @@ class TreeMenu(QtWidgets.QMenu):
         validate_just_this.triggered.connect(
             functools.partial(
                 self.app.build,
-                build_up_to=self.component,
+                build_only=self.component,
                 validate_only=True,
             ),
         )
@@ -277,8 +288,7 @@ class TreeMenu(QtWidgets.QMenu):
         validate_action.triggered.connect(
             functools.partial(
                 self.app.build,
-                None,
-                True, # -- Validate Only
+                validate_only=True,
             ),
         )
         self.addAction(validate_action)
@@ -289,7 +299,7 @@ class TreeMenu(QtWidgets.QMenu):
 
         # -- Now add the functionality to add a component
         label = f"Add {self.component_label}"
-        add_action = QtWidgets.QAction(self.execute_icon, label, self._parent)
+        add_action = QtWidgets.QAction(QtGui.QIcon(self.app_config.add_icon), label, self._parent)
         add_action.triggered.connect(
             functools.partial(
                 self.app.tree_widget.add_component,

@@ -18,7 +18,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, stack: "xstack.Stack", app_config, app: QtWidgets.QWidget = None):
-        super(BuildTreeWidget, self).__init__(parent=app)
+        super().__init__(parent=app)
 
         self.app = app
         self.app_config = app_config
@@ -196,7 +196,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         # -- Get the item that is dropped, and the item its being dropped on to
         item_being_dropped = self.currentItem()
 
-        super(BuildTreeWidget, self).dropEvent(event)
+        super().dropEvent(event)
 
         new_parent_item = item_being_dropped.parent()
 
@@ -224,7 +224,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         Tstackgered when a mouse is clicked in the view. This allows the users to edit
         and manipulate the components
         """
-        super(BuildTreeWidget, self).mousePressEvent(event)
+        super().mousePressEvent(event)
 
         if not self.allow_interaction:
             return
@@ -277,6 +277,25 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         component.load_settings(filepath=filepath)
 
     # ----------------------------------------------------------------------------------
+    def import_subtree(self, item):
+        """
+        Load a JSON file and add its contents as children of the
+        right-clicked component. Regenerates UUIDs on load.
+        """
+        component = item.component
+
+        filepath = qtility.request.filepath(
+            title="Import as Children",
+            filter_="*.json (*.json)",
+            save=False,
+        )
+
+        if not filepath:
+            return
+
+        component.import_subtree(filepath=filepath)
+
+    # ----------------------------------------------------------------------------------
     def toggle_enable(self, item):
         component = item.component
         component.set_enabled(not component.is_enabled())
@@ -298,7 +317,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         try:
             return func()
 
-        except:
+        except Exception:
             print(f"Function failed to execute : {func}")
             print(traceback.print_exc())
 

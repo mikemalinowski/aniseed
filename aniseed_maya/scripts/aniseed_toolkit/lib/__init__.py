@@ -18,3 +18,5 @@ from . import containts
 from . import direction
 from . import sets
 from . import component
+from . import space
+from . import units

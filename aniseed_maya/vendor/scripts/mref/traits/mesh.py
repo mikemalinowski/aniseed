@@ -4,11 +4,27 @@ from maya.api import OpenMaya as om
 
 
 class Mesh(mref.Trait):
+    """
+    Trait bound to any node with ``MFn.kMesh`` — polygon mesh shape
+    nodes. Provides vertex position queries (single and bulk),
+    polygon and edge counts, skin cluster discovery, and the
+    skinnable-shape protocol used by ``SkinCluster`` to read and
+    write weights.
 
+    Unlike ``Transform``, this trait supports the full set of Maya
+    transformation spaces (``"object"``, ``"world"``, ``"local"``,
+    ``"pretransform"``, ``"posttransform"``, ``"last"``) via the
+    underlying ``MFnMesh`` API — see :meth:`vertex_positions` and the
+    other space-aware methods.
+    """
+
+    # -- Map of space-name strings to MSpace enums. Exposed as a class
+    # -- attribute so callers can enumerate supported space names if
+    # -- they need to (e.g. for UI dropdowns).
     spaces = mref.constants.spaces
 
     def __init__(self, *args, **kwargs):
-        super(Mesh, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._mesh = om.MFnMesh(self._pointer)
 
     @classmethod
@@ -16,8 +32,7 @@ class Mesh(mref.Trait):
         """
         This determines whether this trait can be bound to the given object
         """
-        if isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kMesh):
-            return True
+        return isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kMesh)
 
     def vertex_count(self) -> int:
         """
@@ -42,7 +57,7 @@ class Mesh(mref.Trait):
         This returns a list containing a list of three components correlating to
         the x, y, z positions of the vertices.
         """
-        points = self._mesh.getPoints(self.spaces[space])
+        points = self._mesh.getPoints(self._resolve_space(space))
         return [
             [p.x, p.y, p.z]
             for p in points
@@ -61,8 +76,14 @@ class Mesh(mref.Trait):
         ]
 
         Where each triplet list defines the position of the vertex id in the
-        list order.
+        list order. ``positions`` must have exactly ``vertex_count()``
+        entries — anything else raises ``ValueError``.
         """
+        if len(positions) != self.vertex_count():
+            raise ValueError(
+                f"Number of vertices ({self.vertex_count()}) does not match "
+                f"length of positions ({len(positions)})"
+            )
 
         point_array = om.MPointArray()
         point_array.setLength(len(positions))
@@ -71,14 +92,14 @@ class Mesh(mref.Trait):
             point_array[i] = om.MPoint(x, y, z)
 
         # Apply all positions in one call
-        self._mesh.setPoints(point_array, self.spaces[space])
+        self._mesh.setPoints(point_array, self._resolve_space(space))
 
     def vertex_position(self, vertex_id: int, space: str = "object") -> list[float]:
         """
         This returns a list containing the three components correlating to
         the x, y, z positions of the vertex.
         """
-        point = self._mesh.getPoint(vertex_id, self.spaces[space])
+        point = self._mesh.getPoint(vertex_id, self._resolve_space(space))
         return [point.x, point.y, point.z]
 
 
@@ -90,26 +111,48 @@ class Mesh(mref.Trait):
 
         The vertex with the given id will then have its position set to those values.
         """
-        self._mesh.setPoint(vertex_id, om.MPoint(*position), self.spaces[space])
+        self._mesh.setPoint(vertex_id, om.MPoint(*position), self._resolve_space(space))
 
     def skin(self) -> mref.ReferencedItem|None:
         """
-        This will return a ReferencedItem for the SkinCluster if one is bound
-        to this mesh.
+        Returns a ReferencedItem for the SkinCluster bound to this
+        mesh, or None if no skin cluster is connected.
         """
-        try:
-            return self.item.inputs(type="skinCluster")[0]
-        except IndexError:
-            return None
+        skins = self.item.inputs(type="skinCluster")
+        if skins:
+            return skins[0]
+        return None
 
     def component_count(self) -> int:
         """
-        This will return the vertex count
+        Returns the number of vertices in the mesh.
+
+        Part of the skinnable-shape protocol consumed by
+        :class:`SkinCluster`: ``component_count()`` is the number of
+        weights that need to be supplied per influence.
         """
         return self.vertex_count()
 
     def component_path(self, component_index: int) -> str:
         """
-        This will return the fully qualified path of the component id
+        Returns the fully qualified path to the component with the
+        given index — for meshes, this is ``<full_path>.vtx[N]``.
+
+        Part of the skinnable-shape protocol consumed by
+        :class:`SkinCluster`.
         """
         return f"{self.item.full_name()}.vtx[{component_index}]"
+
+    def _resolve_space(self, space: str):
+        """
+        Maps a space-name string to the corresponding ``om.MSpace``
+        enum. Raises ``ValueError`` for unknown space names with a
+        clear message listing the supported values, rather than the
+        bare ``KeyError`` a dict lookup would produce.
+        """
+        if space not in self.spaces:
+            raise ValueError(
+                f"Unknown space {space!r}; expected one of "
+                f"{tuple(self.spaces.keys())}"
+            )
+        return self.spaces[space]

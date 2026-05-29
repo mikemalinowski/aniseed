@@ -284,7 +284,7 @@ class FKSpineComponent(aniseed.RigComponent):
         except:
             parent = None
 
-        increment = 25 / (joint_count - 1)
+        increment = aniseed_toolkit.units.to_cm(25) / (joint_count - 1)
 
         all_joints = []
         hip_joint = aniseed_toolkit.run(

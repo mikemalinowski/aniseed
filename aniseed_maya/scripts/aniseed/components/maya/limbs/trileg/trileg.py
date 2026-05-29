@@ -361,26 +361,6 @@ class TriLegComponent(aniseed.RigComponent):
             rotate_shape=[0, 0, 0],
         )
 
-        cmds.addAttr(
-            config_control.ctl,
-            shortName="show_ik",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=1,
-            keyable=True,
-        )
-        cmds.addAttr(
-            config_control.ctl,
-            shortName="show_fk",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=0,
-            keyable=True,
-        )
-
-
         deformation_joints = aniseed_toolkit.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
@@ -1162,10 +1142,10 @@ class TriLegComponent(aniseed.RigComponent):
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["upper"] = {"jointOrientX": 90, "jointOrientY": -20, "jointOrientZ": -90}
-        joint_data["mid"] = {"tx": 42, "jointOrientZ": -50}
-        joint_data["lower"] = {"tx": 42, "jointOrientZ": 50}
-        joint_data["Foot"] = {"tx": 22, "jointOrientZ": 70}
-        joint_data["Toe"] = {"tx": 10}
+        joint_data["mid"] = {"tx": aniseed_toolkit.units.from_cm(42), "jointOrientZ": -50}
+        joint_data["lower"] = {"tx": aniseed_toolkit.units.from_cm(42), "jointOrientZ": 50}
+        joint_data["Foot"] = {"tx": aniseed_toolkit.units.from_cm(22), "jointOrientZ": 70}
+        joint_data["Toe"] = {"tx": aniseed_toolkit.units.from_cm(10)}
 
         all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
             joint_data=joint_data,

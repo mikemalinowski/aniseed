@@ -17,7 +17,7 @@ class ComponentEditor(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, parent=None):
-        super(ComponentEditor, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setLayout(
             qtility.layouts.slimify(
@@ -82,7 +82,7 @@ class ComponentEditor(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def redraw(self):
-        if self.component():
+        if self.component and self.component():
             self.set_component(self.component())
 
 # --------------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ class OptionsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, pre_expose_only=False, parent: QtWidgets.QWidget = None):
-        super(OptionsWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- This determines if we show all options, or only options that
         # -- are marked as pre-expsure
@@ -231,8 +231,8 @@ class OptionsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     # noinspection PyUnusedLocal
-    @classmethod
-    def reflect_option_change(cls, widget, option_name, component, *args, **kwargs):
+    @staticmethod
+    def reflect_option_change(widget, option_name, component, *args, **kwargs):
         """
         This is called whenever an option ui element is changed. Within this function
         we must push the changed value back into the component
@@ -267,7 +267,7 @@ class InputsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, pre_expose_only=False, parent: QtWidgets.QWidget = None):
-        super(InputsWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- This determines if we show all inputs, or only inputs that
         # -- are marked as pre-expsure
@@ -406,8 +406,8 @@ class InputsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     # noinspection PyUnusedLocal
-    @classmethod
-    def reflect_input_change(cls, widget, option_name, component, *args, **kwargs):
+    @staticmethod
+    def reflect_input_change(widget, option_name, component, *args, **kwargs):
         """
         This is called whenever an option ui element is changed. Within this function
         we must push the changed value back into the component
@@ -437,7 +437,7 @@ class OutputWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, output, parent: QtWidgets.QWidget = None):
-        super(OutputWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self._output_attribute = output
 
@@ -494,7 +494,7 @@ class OutputsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, parent: QtWidgets.QWidget = None):
-        super(OutputsWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setLayout(
             qtility.layouts.slimify(
@@ -601,8 +601,8 @@ class OutputsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     # noinspection PyUnusedLocal
-    @classmethod
-    def reflect_option_change(cls, widget, option_name, component, *args, **kwargs):
+    @staticmethod
+    def reflect_option_change(widget, option_name, component, *args, **kwargs):
         """
         This is called whenever an option ui element is changed. Within this function
         we must push the changed value back into the component

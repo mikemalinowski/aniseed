@@ -1,10 +1,11 @@
 import mref
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+
+from maya import cmds
 
 
-class InsetParentControlComponent(aniseed.RigComponent):
+class InsertParentControlComponent(aniseed.RigComponent):
     """
     Creates a control as a child of the nodes parent and then makes
     the given node a child of the new control.
@@ -13,10 +14,15 @@ class InsetParentControlComponent(aniseed.RigComponent):
     identifier = "Augment : Add Parent Control"
 
     def __init__(self, *args, **kwargs):
-        super(InsetParentControlComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Node",
+            description=(
+                "The node to insert a new parent control above. The "
+                "new control will take the node's existing parent as "
+                "its own parent."
+            ),
             value="",
             validate=True,
             group="Required Joint",
@@ -24,12 +30,18 @@ class InsetParentControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Match Transform To",
+            description=(
+                "Optional node whose world transform the new control "
+                "will be matched to. Leave empty to match the input "
+                "node's parent."
+            ),
             value="",
             group="Behaviour",
         )
 
         self.declare_option(
             name="Name",
+            description="Descriptive name token used when generating the control's name.",
             value="",
             group="Naming",
             pre_expose=True,
@@ -37,7 +49,12 @@ class InsetParentControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Location",
-            value="md",
+            description=(
+                "Location token (e.g. c/l/r/f/b) used when generating "
+                "the control's name. Inherited from the parent "
+                "component when added to the stack."
+            ),
+            value=self.config.middle,
             group="Naming",
             should_inherit=True,
             pre_expose=True,
@@ -45,12 +62,14 @@ class InsetParentControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Shape",
+            description="Aniseed-toolkit control shape used for the inserted control.",
             value="core_cube",
             group="Visuals",
         )
 
         self.declare_output(
             "Control",
+            description="The newly-created control node.",
         )
 
     def option_widget(self, option_name: str):
@@ -65,7 +84,7 @@ class InsetParentControlComponent(aniseed.RigComponent):
         if option_name == "Match Transform To":
             return aniseed.widgets.ObjectSelector(component=self)
 
-    def input_widget(self, requirement_name: str) :
+    def input_widget(self, requirement_name: str):
         if requirement_name == "Node":
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -80,18 +99,21 @@ class InsetParentControlComponent(aniseed.RigComponent):
     def run(self) -> bool:
 
         node = self.input("Node").get()
-        parent = mref.get(node).parent()
+        node_parent = mref.get(node).parent()
+        # -- A node at the world root has no parent; pass None through
+        # -- so the toolkit creates the control under the world.
+        parent_name = node_parent.name() if node_parent else None
 
         control = aniseed_toolkit.run("Create Control",
             description=self.option("Name").get(),
             location=self.option("Location").get(),
-            parent=parent.name(),
+            parent=parent_name,
             config=self.config,
             shape=self.option("Shape").get(),
             match_to=self.option("Match Transform To").get(),
         )
 
-        mc.parent(
+        cmds.parent(
             node,
             control.ctl,
         )

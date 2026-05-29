@@ -1,8 +1,23 @@
 import aniseed
+from aniseed.config import NamingConventionError
 from maya import cmds
 
 
 class StandardConfig(aniseed.RigConfiguration):
+    """
+    A naming configuration that produces names in the format
+
+        ``[CLASSIFICATION]_[Description]_[##]_[LOCATION]``
+
+    For example: ``CTL_LeftArm_01_LF``.
+
+    Classification and location tokens are uppercase short codes
+    defined as class attributes (``left``, ``right``, ``middle``,
+    ``control``, ``joint``, etc.). The description is CamelCased on
+    underscore boundaries by :meth:`generate_name`, so the final name
+    always has the description in a single underscore-separated slot.
+    """
+
     identifier = "Rig Configuration : Standard"
 
     # -- Locations
@@ -29,10 +44,16 @@ class StandardConfig(aniseed.RigConfiguration):
             unique: bool = True,
     ) -> str:
         """
-        This function will generate a name based on the rules defined in the config.
+        Generate a name in the format
+        ``[CLASSIFICATION]_[Description]_[##]_[LOCATION]``.
 
-        If unique is True then the counter will be incremented until a name is found
-        that is unique to the scene.
+        If ``location`` or ``classification`` matches the name of a
+        class attribute (e.g. ``"left"`` or ``"control"``), the
+        corresponding token is looked up on ``self``. The description
+        is CamelCased on underscore boundaries.
+
+        When ``unique`` is True, the counter is incremented until the
+        resulting name does not exist in the current Maya scene.
         """
         if hasattr(self, location):
             location = getattr(self, location)
@@ -55,13 +76,36 @@ class StandardConfig(aniseed.RigConfiguration):
             counter += 1
 
     def extract_location(self, name: str) -> str:
-        return name.split("_")[-1]
+        try:
+            return name.split("_")[-1]
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract location from {name!r}"
+            ) from exc
 
     def extract_classification(self, name: str) -> str:
-        return name.split("_")[0]
+        try:
+            return name.split("_")[0]
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract classification from {name!r}"
+            ) from exc
 
     def extract_description(self, name: str) -> str:
-        return name.split("_")[1]
+        # -- generate_name CamelCases the description on underscore
+        # -- boundaries, so the description always occupies a single
+        # -- token in the produced name.
+        try:
+            return name.split("_")[1]
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract description from {name!r}"
+            ) from exc
 
     def extract_counter(self, name: str) -> int:
-        return int(name.split("_")[-2])
+        try:
+            return int(name.split("_")[-2])
+        except (IndexError, ValueError) as exc:
+            raise NamingConventionError(
+                f"Could not extract counter from {name!r}"
+            ) from exc

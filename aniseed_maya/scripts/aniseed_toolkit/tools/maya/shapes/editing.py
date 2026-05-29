@@ -118,7 +118,7 @@ class ScaleShapes(aniseed_toolkit.Tool):
     def run(
         self,
         node: str = "",
-        scale_by: float = 1,
+        scale_by: float = 1.0,
         x: float = 1.0,
         y:float = 1.0,
         z: float = 1.0,

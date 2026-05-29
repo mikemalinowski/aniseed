@@ -69,8 +69,6 @@ def original_to_galaxy(data):
         # -- Add the children
         add_children(galaxy_component_data, build_order_item)
 
-    import json
-    print(json.dumps(new_data, indent=4))
     return new_data
 
 def _convert_block_to_galaxy(block):

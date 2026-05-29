@@ -317,20 +317,21 @@ class SplineSpine(aniseed.RigComponent):
             )
 
         # -- Add the FK and Ik Visibility Attributes
-        cmds.addAttr(
-            master_control.ctl,
-            shortName="ik_visibility",
-            attributeType="bool",
-            defaultValue=True,
-            keyable=True,
+        ik_visibility = mref.get(master_control.ctl).add_attribute(
+            "ik_visibility",
+            attribute_type="bool",
+            value=True,
+            keyable=False,
         )
-        cmds.addAttr(
-            master_control.ctl,
-            shortName="fk_visibility",
-            attributeType="bool",
-            defaultValue=False,
-            keyable=True,
+        ik_visibility.set(channelBox=True)
+
+        fk_visibility = mref.get(master_control.ctl).add_attribute(
+            "fk_visibility",
+            attribute_type="bool",
+            value=False,
+            keyable=False,
         )
+        fk_visibility.set(channelBox=True)
 
         # -- Create the IK controls
         ik_controls = self.setup_ik_controls(
@@ -349,32 +350,54 @@ class SplineSpine(aniseed.RigComponent):
             fk_control = mref.get(fk_controls[idx].ctl)
             joint = mref.get(joints[idx])
 
+            # -- Create the tweaker
+            fk_tweak = mref.get(
+                aniseed_toolkit.control.create(
+                    description=f"{descriptive}FkOffset",
+                    location=location,
+                    parent=fk_control.full_name(),
+                    shape=self.option("Shape").get(),
+                    shape_scale=control_scale,
+                    config=self.config,
+                    match_to=fk_control.full_name(),
+                ).ctl,
+            )
+
+            show_offset_attribute = fk_control.add_attribute(
+                "show_offset",
+                attribute_type="bool",
+                keyable=True,
+                value=False if idx else True,
+            )
+            show_offset_multiplier = mref.create("floatMath")
+            show_offset_multiplier.operation.set(2)  # -- Mutliply
+            fk_visibility.connect(show_offset_multiplier.floatA)
+            show_offset_attribute.connect(show_offset_multiplier.floatB)
+
             cmds.parentConstraint(
-                fk_control.full_name(),
+                fk_tweak.full_name(),
                 joint.full_name(),
                 maintainOffset=True,
             )
             cmds.scaleConstraint(
-                fk_control.full_name(),
+                fk_tweak.full_name(),
                 joint.full_name(),
                 maintainOffset=True,
             )
 
             # -- Hook up the visibility
             for nurbs_shape in fk_control.shapes():
-                cmds.connectAttr(
-                    f"{master_control.ctl}.fk_visibility",
-                    f"{nurbs_shape.full_name()}.visibility",
-                )
+                fk_visibility.connect(f"{nurbs_shape.full_name()}.visibility")
+
+            show_offset_multiplier.outFloat.connect(
+                f"{fk_tweak.full_name()}.visibility",
+            )
 
         for ik_control in ik_controls:
             ik_control = mref.get(ik_control.ctl)
             for nurbs_shape in ik_control.shapes():
                 try:
-                    cmds.connectAttr(
-                        f"{master_control.ctl}.ik_visibility",
-                        f"{nurbs_shape.full_name()}.visibility",
-                    )
+                    ik_visibility.connect(f"{nurbs_shape.full_name()}.visibility")
                 except: pass
 
         # -- Finally we set our output variables
@@ -397,16 +420,15 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Define our running parent
         parent = master_control.ctl
-
+        print("reload test")
         tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
-            "TweakerVisibility",
+            "tweaker_visibility",
             value=False,
             attribute_type="bool",
-            keyable=True,
+            keyable=False,
         )
-        print("------------------------")
-        print(tweaker_vis_attribute.path())
-        print(tweaker_vis_attribute)
+        tweaker_vis_attribute.set(channelBox=True)
+
         # -- We need to keep track of the ik controls we build
         ik_controls = []
 
@@ -457,7 +479,6 @@ class SplineSpine(aniseed.RigComponent):
         """
         Creates our FK controllers
         """
-        print("CREATING FKFKFKFKFK")
         # -- Read out our option data
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -476,17 +497,6 @@ class SplineSpine(aniseed.RigComponent):
         fk_controls = []
 
         for idx, trace_joint in enumerate(spline_setup.out_anchor_points):
-
-            # aligner = mref.get(
-            #     aniseed_toolkit.transforms.create(
-            #         classification="mech",
-            #         description=f"{descriptive}FkAlign",
-            #         location=location,
-            #         parent=next_parent,
-            #         config=self.config,
-            #     ),
-            # )
-            # aligner.match_to(next_parent)
 
             # -- Create the actual control hierarcy
             fk_control = aniseed_toolkit.control.create(
@@ -821,7 +831,7 @@ class SplineSpine(aniseed.RigComponent):
         to guide data.
         """
         # --
-        base_number = 50.0
+        base_number = aniseed_toolkit.units.from_cm(50.0)
         identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
         data = dict(
@@ -1037,11 +1047,12 @@ class TriSplineSpine(SplineSpine):
         control_scale = 10.0
 
         tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
-            "TweakerVisibility",
+            "tweaker_visibility",
             value=False,
             attribute_type="bool",
-            keyable=True,
+            keyable=False,
         )
+        tweaker_vis_attribute.set(channelBox=True)
 
         # -- Now we can start building our actual controls.
         hip_control, hip_control_tweaker = self.create_doubled_control(

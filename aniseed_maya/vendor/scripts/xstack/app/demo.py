@@ -33,7 +33,7 @@ def launch_demo(blocking: bool = True, load_file: str = None, run_on_launch: boo
     w.show()
 
     if load_file:
-        w.core.import_stack(filepath=load_file, silent=True)
+        w.core.open(filepath=load_file, silent=True)
 
     if run_on_launch and w.core.stack:
         w.core.build()

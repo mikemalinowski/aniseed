@@ -13,7 +13,7 @@ class ButtonWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, button_name, func, parent=None):
-        super(ButtonWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Store our input values
         self._func = func

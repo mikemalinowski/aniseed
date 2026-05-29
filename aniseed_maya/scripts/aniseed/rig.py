@@ -4,6 +4,7 @@ import json
 import xstack
 import typing
 import crosswalk
+import factories
 import traceback
 
 from . import host as host_
@@ -33,8 +34,15 @@ class Rig(xstack.Stack):
     # ----------------------------------------------------------------------------------
     def __init__(self, label="", host=None, configuration: str = None, component_paths: typing.List or None = None):
 
-        # -- Ensure we're adding our default path locations
-        component_paths = component_paths or []
+        # -- Copy the incoming list before mutating it. Without this, if
+        # -- the caller hands us a shared list (typically
+        # -- ``AppConfig.component_paths`` — a class attribute), every
+        # -- Rig construction would append another copy of
+        # -- aniseed/components to that shared list. The list would grow
+        # -- without bound, and the Factory cache key (which includes the
+        # -- paths) would miss every time, forcing a full re-import of
+        # -- every component module on every scene change.
+        component_paths = list(component_paths) if component_paths else []
         component_paths.append(
             os.path.join(
                 os.path.dirname(__file__),
@@ -42,7 +50,7 @@ class Rig(xstack.Stack):
             ),
         )
 
-        super(Rig, self).__init__(
+        super().__init__(
             label=label,
             component_paths=component_paths,
             component_base_class=component.RigComponent,
@@ -51,28 +59,22 @@ class Rig(xstack.Stack):
         # -- If we're not given a host, then we need to add one
         if not host:
             host = self._create_host(label)
-            is_new_rig = True
-
-        else:
-            is_new_rig = False
-
 
         # -- Store our host
         self._host = host
 
-        # -- Add our rig configuration class to the component library. We do this because
-        # -- we always need one rig configuration class to be present
-        self.component_library.register(
-            config.RigConfiguration,
-        )
+        # -- Note: RigConfiguration registration and aniseed env-var paths
+        # -- are handled by the cached ``component_library`` property below.
 
-        # -- Ensure we add any paths set by the environment
-        path_string = os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, "")
-        paths = re.split(";|,", path_string)
-
-        for path in paths:
-            if path:
-                self.component_library.add_path(path)
+        # -- If the host is missing the recipe attribute (legacy hosts, or
+        # -- hosts not originally created by aniseed), add it now so
+        # -- subsequent reads and writes have something to work with.
+        if not crosswalk.attributes.has_attribute(self.host(), "recipe"):
+            crosswalk.attributes.add_string_attribute(
+                item=self.host(),
+                attribute_name="recipe",
+                value="{}",
+            )
 
         self.deserialize(
             json.loads(
@@ -105,17 +107,33 @@ class Rig(xstack.Stack):
     @property
     def label(self):
         """
-        We always want to return the name of the host when getting the label
+        We always want to return the name of the host when getting the label.
+
+        Returns an empty string when the host has been cleared (e.g. via
+        :meth:`dispose`), so paint events for tear-down widgets that
+        access ``stack.label`` don't blow up on ``get_name(None)``.
         """
+        if not self._host:
+            return ""
         return crosswalk.items.get_name(self.host())
 
     # ----------------------------------------------------------------------------------
     @label.setter
     def label(self, v):
         """
-        Our label is always defined by the name of the host
+        Setting the label renames the host node. The getter returns the
+        host's name, so the rig's label and the host's name stay in sync
+        by design — renaming via either route is equivalent.
+
+        Silently ignored if there is no host yet (e.g. during
+        ``xstack.Stack.__init__``, which assigns ``self.label = label``
+        *before* aniseed's :class:`Rig.__init__` has had a chance to
+        create or attach a host) or if ``v`` is empty.
         """
-        pass
+        host = getattr(self, "_host", None)
+        if not host or not v:
+            return
+        crosswalk.items.set_name(host, v)
 
     # ----------------------------------------------------------------------------------
     def config(self):
@@ -135,7 +153,7 @@ class Rig(xstack.Stack):
         We subclass the serialise function so that we can take the serialised
         data and store it within the host object
         """
-        data = super(Rig, self).serialise()
+        data = super().serialise()
 
         crosswalk.attributes.set_value(
             item=self.host(),
@@ -195,12 +213,12 @@ class Rig(xstack.Stack):
                 print("Failed to validate the rig configuration. Stopping build.")
                 return False
 
-        except:
+        except Exception:
             print(f"Failed to run validation for {self.config()}")
-            print(traceback.print_exc())
+            traceback.print_exc()
             return False
 
-        result = super(Rig, self).build(
+        result = super().build(
             build_up_to,
             build_only,
             build_below,
@@ -219,13 +237,13 @@ class Rig(xstack.Stack):
             results.append(cls(host=rig_host))
         return results
 
-    def deserialize(self, data: typing.Dict):
+    def deserialize(self, data: typing.Dict, clear: bool = True):
         if isinstance(data, str):
             with open(data, 'r') as f:
                 data = json.load(f)
 
         # -- Call the parent class which manages the load
-        super(Rig, self).deserialize(data)
+        super().deserialize(data, clear=clear)
 
         # -- Store the data on the host node
         crosswalk.attributes.set_value(
@@ -257,7 +275,7 @@ class Rig(xstack.Stack):
         additional_data.update(host_data)
 
         # -- Finally save the file
-        super(Rig, self).save(
+        super().save(
             filepath,
             additional_data,
         )
@@ -269,6 +287,126 @@ class Rig(xstack.Stack):
         for execute_block in self.components(of_type="Stack : Execution Block"):
             if execute_block.label() == block_name:
                 return self.build(build_below=execute_block)
+
+    def dispose(self):
+        """
+        Aggressively tear down internal signal connections and
+        parent/child cross-references so the rig, its components, and
+        the widgets that were connected to its signals all become
+        refcount-collectable immediately — without waiting for
+        Python's cyclic GC.
+
+        Two reasons this matters:
+
+        1. **Safety.** The rig's ``changed -> serialise`` chain writes
+           to the Maya host attribute. After scene close the host
+           MObject is invalid, so any later emit would crash Maya.
+        2. **Speed.** Without aggressive disposal, every scene
+           transition leaves a generation of cycle garbage (50+
+           Components × signal tables × widgets), and the next
+           transition pays a growing GC cost. Empirically this added
+           ~0.7s per scene change.
+
+        After dispose the rig is gutted — calling anything on it
+        (``components()``, ``serialise()``) will return empty/None.
+        Nothing should be calling a disposed rig.
+        """
+        # -- Snapshot the component list before we mutate the tree.
+        components = list(self.components())
+
+        # -- Clear per-component signal tables (and break parent/child
+        # -- cycles), so each Component drops its references to the
+        # -- rig, to other components, and to whatever widgets had
+        # -- listeners connected to it.
+        for c in components:
+            try:
+                c.changed.disconnect()
+                for attr in list(c.options()) + list(c.inputs()) + list(c.outputs()):
+                    attr.value_changed.disconnect()
+            except Exception:
+                pass
+            c.parent = None
+            c.children = []
+
+        # -- Clear the rig's own signal tables.
+        for signal_name in (
+            "changed",
+            "component_added",
+            "component_removed",
+            "hierarchy_changed",
+            "build_started",
+            "build_progressed",
+            "build_completed",
+        ):
+            try:
+                getattr(self, signal_name).disconnect()
+            except Exception:
+                pass
+
+        # -- Drop the rig's structural references to components and
+        # -- the host.
+        self.root_components = []
+        self._host = None
+
+    # ----------------------------------------------------------------------------------
+    # -- Class-level Factory cache. Component discovery is the dominant
+    # -- cost of instantiating a Rig (importing ~hundreds of component
+    # -- modules from disk takes ~10s+ in a studio-sized install). We
+    # -- override xstack.Stack.component_library here to share a single
+    # -- Factory across every Rig built from the same paths, so the
+    # -- first Rig in a session pays the cost and every subsequent Rig
+    # -- — including each scene-switch — is effectively instant.
+    _FACTORY_CACHE: typing.Dict[tuple, "factories.Factory"] = {}
+
+    @property
+    def component_library(self) -> "factories.Factory":
+        """
+        Returns the component factory for this rig.
+
+        Cached at the class level, keyed by ``(base_class, sorted paths)``.
+        Paths include the rig's ``component_paths`` plus both the xstack
+        and aniseed env-var path lists, so add_path doesn't need to be
+        called separately after construction.
+
+        If you've edited a component .py file on disk and want the
+        running session to pick it up, call
+        :meth:`Rig.clear_factory_cache` — or use the Reload menu, which
+        drops the aniseed modules entirely and forces a full re-scan.
+        """
+        paths = self.component_paths[:]
+        paths.extend(
+            os.environ.get(xstack.constants.COMPONENT_PATHS_ENVVAR, "").split(",")
+        )
+        paths.extend(
+            re.split(";|,", os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, ""))
+        )
+        # -- Dedupe via set, then sort, so duplicates in the input list
+        # -- (or different ordering) hit the same cache entry.
+        paths = tuple(sorted({p for p in paths if p}))
+
+        key = (self.component_base_class, paths)
+        cached = Rig._FACTORY_CACHE.get(key)
+        if cached is None:
+            cached = factories.Factory(
+                abstract=self.component_base_class,
+                paths=list(paths),
+                plugin_identifier="identifier",
+            )
+            cached.register(config.RigConfiguration)
+            Rig._FACTORY_CACHE[key] = cached
+
+        return cached
+
+    @classmethod
+    def clear_factory_cache(cls):
+        """
+        Drop the class-level component-Factory cache. The next Rig
+        instantiation will re-scan component paths and re-import every
+        component module from disk. Use this if you've edited
+        component code and want the running Maya session to pick the
+        change up without a restart.
+        """
+        cls._FACTORY_CACHE.clear()
 
 
 def get_rig(node):
@@ -298,13 +436,10 @@ def get_rig(node):
     >>> # -- Now lets build the control rig
     >>> rig.build(build_below=build_rig)
     """
-    def _get_top_parent(n):
-        parent_of_parent = crosswalk.items.get_parent(n)
-        if not parent_of_parent:
-            return n
+    current = node
+    while current is not None:
+        if crosswalk.attributes.has_attribute(current, "aniseed_rig"):
+            return Rig(host=current)
+        current = crosswalk.items.get_parent(current)
 
-        return _get_top_parent(parent_of_parent)
-
-    root_node = _get_top_parent(node)
-    rig = Rig(host=root_node)
-    return rig
+    return None

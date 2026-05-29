@@ -16,7 +16,7 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, stack: "xstack.Stack", app_config, parent=None):
-        super(ComponentItemDelegate, self).__init__(parent)
+        super().__init__(parent)
 
         # -- When we instance this class, we need to construct all our brushes
         self.icon_pixmap = QtGui.QPixmap(
@@ -287,7 +287,6 @@ class ComponentItemDelegate(QtWidgets.QStyledItemDelegate):
 
         self.paint_border(component, painter, option, index)
 
-        painter.setPen(self.drag_target_pen)
     # ----------------------------------------------------------------------------------
     def sizeHint(self, option, index):
         return QtCore.QSize(1, self.item_size * self.factor)

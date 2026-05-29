@@ -16,9 +16,14 @@ def select(item: object or str):
             for i in item
         ]
     else:
-        item = items.get(item)
+        item = [items.get(item)]
 
-    mc.select(item)
+    mc.select(
+        [
+            items.get_name(single_item)
+            for single_item in item
+        ]
+    )
 
 
 def selected() -> list[object]:

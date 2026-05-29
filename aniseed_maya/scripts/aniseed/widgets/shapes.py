@@ -10,7 +10,7 @@ class ShapeSelector(QtWidgets.QComboBox):
     """
 
     def __init__(self, default_item, parent=None):
-        super(ShapeSelector, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         current_index = 0
 

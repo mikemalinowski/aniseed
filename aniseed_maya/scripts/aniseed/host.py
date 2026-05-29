@@ -47,7 +47,7 @@ class EmbeddedHosts(factories.Factory):
     _HOST = None
 
     def __init__(self):
-        super(EmbeddedHosts, self).__init__(
+        super().__init__(
             abstract=EmbeddedHost,
             paths=[
                 os.path.join(
@@ -66,11 +66,12 @@ class EmbeddedHosts(factories.Factory):
     @classmethod
     def get_host(cls):
         if cls._HOST is None:
-            for plugin in sorted(cls.as_singleton().plugins(), key=lambda p: p.priority):
+            plugins = cls.as_singleton().plugins()
+            if plugins:
+                plugin = min(plugins, key=lambda p: p.priority)
                 cls._HOST = plugin()
-                break
         return cls._HOST
 
 
 def get() -> EmbeddedHost:
-    return EmbeddedHosts().as_singleton().get_host()
+    return EmbeddedHosts.as_singleton().get_host()

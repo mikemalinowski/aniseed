@@ -95,7 +95,7 @@ class EyesComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Aim Distance",
-            value=30,
+            value=aniseed_toolkit.units.to_cm(30),
             group="Behaviour",
         )
 
@@ -514,7 +514,7 @@ class EyeComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Aim Distance",
-            value=30,
+            value=aniseed_toolkit.units.to_cm(30),
             group="Behaviour",
         )
 

@@ -1,5 +1,7 @@
 import os
 import qtility
+import subprocess
+
 from Qt import QtWidgets, QtCore, QtGui
 
 from .. import resources
@@ -16,7 +18,7 @@ class FilepathSelector(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, default_value="", button_size=30, parent=None):
-        super(FilepathSelector, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Store our input values
         self._button_size = button_size
@@ -91,9 +93,9 @@ class FilepathSelector(QtWidgets.QWidget):
         if not os.path.exists(path):
             path = os.path.dirname(path)
 
-        os.system(
-            f"explorer.exe /select, \"{path}\""
-        )
+        # -- Pass the path as a separate argv entry so quotes / spaces /
+        # -- other shell metacharacters can't break the command.
+        subprocess.Popen(["explorer.exe", f"/select,{path}"])
 
     # ----------------------------------------------------------------------------------
     def update_size(self):

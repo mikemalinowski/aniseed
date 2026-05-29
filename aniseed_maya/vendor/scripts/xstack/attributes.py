@@ -105,8 +105,7 @@ class _Attribute:
 
     # ----------------------------------------------------------------------------------
     def is_address(self):
-        if address.is_address(self._value):
-            return True
+        return address.is_address(self._value)
 
     # ----------------------------------------------------------------------------------
     def hidden(self):
@@ -132,8 +131,8 @@ class _Attribute:
             if not isinstance(tags, list):
                 tags = [tags]
 
-            for tag in tags:
-                for output in self._component.parent.outputs():
+            for output in self._component.parent.outputs():
+                for tag in tags:
                     if tag in output.name().lower():
                         self.set(output.address())
                         return
@@ -187,7 +186,7 @@ class Input(_Attribute):
     def address(self):
         return address.form_address(
             self,
-            "requirement",
+            "input",
         )
 
 

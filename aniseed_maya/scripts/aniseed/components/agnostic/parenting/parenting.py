@@ -4,21 +4,30 @@ import aniseed
 
 # --------------------------------------------------------------------------------------
 class ReParentComponent(aniseed.RigComponent):
+    """
+    Re-parents a scene node under another. If "New Parent" is empty,
+    the node is moved to the world (i.e. unparented).
+    """
 
     identifier = "Utility : Reparent"
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
-        super(ReParentComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Node To Re-Parent",
+            description="The scene node whose parent will be changed.",
             validate=True,
             group="Required Nodes",
         )
 
         self.declare_input(
             name="New Parent",
+            description=(
+                "The node to make the new parent. Leave empty to "
+                "unparent the node to the world."
+            ),
             validate=False,
             group="Required Nodes",
         )
@@ -26,10 +35,7 @@ class ReParentComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def input_widget(self, requirement_name):
 
-        if requirement_name == "Node To Re-Parent":
-            return aniseed.widgets.ObjectSelector(component=self)
-
-        if requirement_name == "New Parent":
+        if requirement_name in ("Node To Re-Parent", "New Parent"):
             return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
@@ -41,8 +47,11 @@ class ReParentComponent(aniseed.RigComponent):
         try:
             crosswalk.items.set_parent(
                 node_to_reparent,
-                new_parent
+                new_parent,
             )
 
-        except:
-            pass
+        except Exception:
+            print(
+                f"[aniseed] Reparent failed: "
+                f"{node_to_reparent!r} -> {new_parent!r}"
+            )

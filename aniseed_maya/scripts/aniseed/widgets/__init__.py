@@ -10,9 +10,6 @@ from .color_picker import ColorPicker
 from .objects import ObjectMap
 from .objects import ObjectSelector
 
-from .graphical import GraphicalItemSelector
-from .graphical import GraphicalItemSelectorEditor
-
 from .lists import TextList
 from .lists import ObjectList
 

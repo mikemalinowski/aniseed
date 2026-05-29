@@ -13,6 +13,7 @@ from maya import cmds
 INTENTIONAL_SHADOWS = frozenset({
     "select",  # mref.select converts ReferencedItem -> full_name before cmds.select
     "time",    # mref.time is a submodule of frame-range helpers
+    "test",    # mref.test() runs the test suite (shortcut for mref.tests.run)
 })
 
 

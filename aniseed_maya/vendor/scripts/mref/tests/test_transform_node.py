@@ -62,7 +62,7 @@ class TestTransformNode(unittest.TestCase):
     def test_position_invalid_space_raises(self):
         node = mref.create("transform")
         with self.assertRaises(ValueError):
-            node.position(space="bogus")
+            node.get_position(space="bogus")
 
     # ------------------------------------------------------------------
     # position / rotation / scale convenience
@@ -72,7 +72,7 @@ class TestTransformNode(unittest.TestCase):
         node = mref.create("transform")
         node.set_position([2.0, 4.0, 6.0])
 
-        result = node.position()
+        result = node.get_position()
         for actual, expected in zip(result, [2.0, 4.0, 6.0]):
             self.assertAlmostEqual(actual, expected, places=4)
 
@@ -83,14 +83,14 @@ class TestTransformNode(unittest.TestCase):
         child = mref.create("transform", name="child_xform", parent="parent_xform")
         child.set_position([0.0, 5.0, 0.0], space="object")
 
-        for actual, expected in zip(child.position(space="world"), [10.0, 5.0, 0.0]):
+        for actual, expected in zip(child.get_position(space="world"), [10.0, 5.0, 0.0]):
             self.assertAlmostEqual(actual, expected, places=4)
 
     def test_rotation_round_trip(self):
         node = mref.create("transform")
         node.set_rotation([30.0, 45.0, 90.0])
 
-        result = node.rotation()
+        result = node.get_rotation()
         for actual, expected in zip(result, [30.0, 45.0, 90.0]):
             self.assertAlmostEqual(actual, expected, places=4)
 
@@ -98,7 +98,7 @@ class TestTransformNode(unittest.TestCase):
         node = mref.create("transform")
         node.set_scale([2.0, 3.0, 4.0])
 
-        result = node.scale()
+        result = node.get_scale()
         for actual, expected in zip(result, [2.0, 3.0, 4.0]):
             self.assertAlmostEqual(actual, expected, places=4)
 
@@ -128,7 +128,7 @@ class TestTransformNode(unittest.TestCase):
 
         a.match_to(b)
 
-        for av, bv in zip(a.position(space="world"), b.position(space="world")):
+        for av, bv in zip(a.get_position(space="world"), b.get_position(space="world")):
             self.assertAlmostEqual(av, bv, places=4)
 
     def test_match_to_snaps_worldspace_rotation(self):
@@ -138,7 +138,7 @@ class TestTransformNode(unittest.TestCase):
 
         a.match_to(b)
 
-        for av, bv in zip(a.rotation(space="world"), b.rotation(space="world")):
+        for av, bv in zip(a.get_rotation(space="world"), b.get_rotation(space="world")):
             self.assertAlmostEqual(av, bv, places=4)
 
     def test_match_to_object_space(self):
@@ -148,7 +148,7 @@ class TestTransformNode(unittest.TestCase):
 
         a.match_to(b, space="object")
 
-        for av, bv in zip(a.position(), b.position()):
+        for av, bv in zip(a.get_position(), b.get_position()):
             self.assertAlmostEqual(av, bv, places=4)
 
 

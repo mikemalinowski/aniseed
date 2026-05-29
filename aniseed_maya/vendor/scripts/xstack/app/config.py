@@ -67,7 +67,7 @@ class AppConfig:
     status_unknown_color = [100, 100, 255]
     status_disabled_color = [0, 0, 0]
 
-    text_font = "Ariel"
+    text_font = "Arial"
     text_size = 8
     item_size = 40
     component_paths = []
@@ -84,7 +84,7 @@ class AppConfig:
     @classmethod
     def default_settings(cls):
         internal_settings = {
-            "auto_adjust_orientiation": False,
+            "auto_adjust_orientation": False,
             "use_vertical_alignment": True,
         }
         internal_settings.update(cls.additional_settings)

@@ -20,7 +20,7 @@ class AddComponentWidget(QtWidgets.QDialog):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, stack, component_parent, app_config, parent=None):
-        super(AddComponentWidget, self).__init__(parent)
+        super().__init__(parent)
 
         # -- We track the currently selected component in a variable, as we
         # -- want to reflect changes in options/inputs of a component
@@ -190,7 +190,6 @@ class AddComponentWidget(QtWidgets.QDialog):
 
         # -- If that is not valid, do nothing
         if not component_type:
-            print("no component type found")
             return
 
         # -- Ask the user to provide a label for the component
@@ -203,7 +202,6 @@ class AddComponentWidget(QtWidgets.QDialog):
 
         # -- If the user cancelled, do nothing more
         if not label:
-            print("no label provided")
             return
 
         # -- We need to extract any option and requirement data that the user
@@ -258,7 +256,7 @@ class SwitchComponentTypeDialog(QtWidgets.QDialog):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, component, app_config, parent=None):
-        super(SwitchComponentTypeDialog, self).__init__(parent)
+        super().__init__(parent)
 
         self.component = component
         self.app_config = app_config

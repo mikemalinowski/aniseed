@@ -23,6 +23,23 @@ from . import wrapping
 from maya import cmds
 from maya import mel
 
+def test(verbosity: int = 2, target: str = None):
+    """
+    Run the mref test suite — convenience shortcut for
+    :func:`mref.tests.run`. The test package is imported lazily so
+    importing ``mref`` itself doesn't pull in ``maya.standalone``.
+
+    :param verbosity: ``0`` (silent), ``1`` (dots), ``2`` (one line
+        per test, default).
+    :param target: Optionally limit the run to a subset
+        (e.g. ``"test_mesh"`` or
+        ``"test_mesh.TestMesh.test_vertex_count"``).
+    :return: The ``unittest.TestResult`` from the run.
+    """
+    from .tests import run
+    return run(verbosity=verbosity, target=target)
+
+
 def __getattr__(name):
     """
     Auto-resolve unknown ``mref`` attributes against ``maya.cmds``.

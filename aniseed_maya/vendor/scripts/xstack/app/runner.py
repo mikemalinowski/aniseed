@@ -12,7 +12,7 @@ class ThreadedRun(QtCore.QThread):
     build_progressed = QtCore.Signal(float)
 
     def __init__(self, stack, build_up_to=None, build_below=None, build_only=None, validate_only=False, *args, **kwargs):
-        super(ThreadedRun, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.stack = stack
         self.build_up_to = build_up_to
         self.build_below = build_below
@@ -24,13 +24,12 @@ class ThreadedRun(QtCore.QThread):
     def run(self):
         self.stack.build_progressed.connect(self.build_progressed.emit)
 
-        result = self.stack.build(
+        self.stack.build(
             build_up_to=self.build_up_to,
             build_below=self.build_below,
             build_only=self.build_only,
             validate_only=self.validate_only,
         )
-        return result
 
     def disconnect_signals(self):
         self.stack.build_progressed.disconnect(self.build_progressed.emit)

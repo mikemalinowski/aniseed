@@ -4,9 +4,17 @@ from maya.api import OpenMaya as om
 
 
 class Constraint(mref.Trait):
+    """
+    Trait bound to any node with ``MFn.kConstraint`` — point, orient,
+    parent, scale, aim, pole-vector, and any other constraint type
+    derived from Maya's constraint base. Exposes the constrained node
+    (:meth:`driven`), the nodes driving the constraint
+    (:meth:`drivers`), and the per-target weight attributes
+    (:meth:`weight_attributes`).
+    """
 
     def __init__(self, *args, **kwargs):
-        super(Constraint, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._dependency_node = om.MFnDependencyNode(self._pointer)
 
@@ -15,9 +23,7 @@ class Constraint(mref.Trait):
         """
         This determines whether this trait can be bound to the given object
         """
-        if isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kConstraint):
-            return True
-        return False
+        return isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kConstraint)
 
     def driven(self) -> mref.ReferencedItem|None:
         """
@@ -40,12 +46,15 @@ class Constraint(mref.Trait):
 
         return None
 
-    def drivers(self) -> list[mref.ReferencedItem]:
+    def drivers(self) -> mref.ReferenceList:
         """
-        Returns the list of drivers for the constraint
+        Returns the list of driver nodes feeding this constraint's
+        target inputs. The constraint's own target hierarchy
+        connections (``targetParentMatrix``) are excluded — only true
+        driver transforms are returned.
         """
         target_plug = self._dependency_node.findPlug("target", False)
-        drivers = []
+        drivers = mref.ReferenceList()
 
         for i in range(target_plug.numElements()):
             element = target_plug.elementByPhysicalIndex(i)
@@ -53,7 +62,12 @@ class Constraint(mref.Trait):
             for child_index in range(element.numChildren()):
                 child = element.child(child_index)
 
-                if child.partialName(useLongNames=False).endswith("targetParentMatrix"):
+                # -- Skip targetParentMatrix; it's the parent of the
+                # -- target transform (metadata) not a driver. Use
+                # -- useLongNames=True so the suffix check matches
+                # -- the long attribute name rather than the short
+                # -- alias (``tpm``).
+                if child.partialName(useLongNames=True).endswith("targetParentMatrix"):
                     continue
 
                 source = child.source()
@@ -70,18 +84,18 @@ class Constraint(mref.Trait):
 
         return drivers
 
-    def weight_attributes(self) -> list[mref.ReferencedItem|str]:
+    def weight_attributes(self) -> mref.ReferenceList:
         """
-        Returns a list of weight attributes for the constraint
+        Returns the per-target weight attributes for the constraint.
+        The result is a ``ReferenceList`` of attribute ReferencedItems,
+        one entry per target.
         """
         constraint_type = cmds.nodeType(self.item.full_name())
 
         constraint_func = getattr(cmds, constraint_type)
         attribute_names = constraint_func(self.item.full_name(), query=True, weightAliasList=True)
 
-        return mref.get(
-            [
-                mref.get(f"{self.item.full_name()}.{attribute_name}")
-                for attribute_name in attribute_names
-            ]
+        return mref.ReferenceList(
+            mref.get(f"{self.item.full_name()}.{attribute_name}")
+            for attribute_name in attribute_names
         )

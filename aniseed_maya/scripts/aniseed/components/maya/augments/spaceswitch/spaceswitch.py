@@ -6,10 +6,24 @@ import collections
 import aniseed_toolkit
 
 from Qt import QtCore, QtWidgets, QtGui
-import maya.cmds as mc
+from maya import cmds
 
 
 class SpaceSwitchComponent(aniseed.RigComponent):
+    """
+    Adds an enum "spaces" attribute to a host node and drives the
+    target node through a stack of parent (and optional scale)
+    constraints, switched by that attribute.
+
+    Each "space" is a target the driven node can follow. The ``Snap
+    To`` per-space option lets a space's rest pose be matched to a
+    separate transform rather than the target itself. The
+    ``Position Only`` / ``Orientation Only`` flags are *global* to
+    the whole space switch (see :meth:`set_position_only` /
+    :meth:`set_orientation_only`); they're stored per-space for
+    schema-compatibility but applied across all constraints when the
+    component builds.
+    """
 
     identifier = "Augment : Space Switch"
 
@@ -19,7 +33,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
-        super(SpaceSwitchComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="To Be Driven",
@@ -36,6 +50,12 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="_Data",
+            description=(
+                "Internal storage for the space-switch configuration "
+                "(list of spaces, default space, per-space target / "
+                "snap-to / flags). Edited via the SpaceSwitchUi "
+                "widget rather than directly."
+            ),
             value=None,
             group="Behaviour",
         )
@@ -45,10 +65,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             return SpaceSwitchUi(self)
 
     def input_widget(self, requirement_name: str):
-        if requirement_name == "To Be Driven":
-            return aniseed.widgets.ObjectSelector(component=self)
-
-        if requirement_name == "Attribute Host":
+        if requirement_name in ("To Be Driven", "Attribute Host"):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):
@@ -98,7 +115,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             for space in data.get("spaces", list())
         ]
 
-        mc.addAttr(
+        cmds.addAttr(
             host,
             shortName="spaces",
             at="enum",
@@ -143,26 +160,26 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             # -- If we're given a target transform, we should move the
             # -- node to drive to this transform before constraining
             if target_transform:
-                target = mc.createNode("transform")
-                target = mc.rename(
+                target = cmds.createNode("transform")
+                target = cmds.rename(
                     target,
                     self.config.generate_name(
                         classification="loc",
-                    description="target_point",
+                        description="target_point",
                         location=self.config.middle,
                     ),
                 )
 
-                matrix_to_restore = mc.xform(
+                matrix_to_restore = cmds.xform(
                     node_to_drive.org,
                     query=True,
                     matrix=True,
                     worldSpace=True,
                 )
 
-                mc.xform(
+                cmds.xform(
                     target,
-                    matrix=mc.xform(
+                    matrix=cmds.xform(
                         target_transform,
                         query=True,
                         matrix=True,
@@ -176,17 +193,16 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             constraints = list()
 
             constraints.append(
-                mc.parentConstraint(
+                cmds.parentConstraint(
                     target,
                     node_to_drive.org,
                     maintainOffset=maintain_offset,
                 )[0]
             )
 
-            scale_cns = None
             if space["include_scale"]:
                 constraints.append(
-                    mc.scaleConstraint(
+                    cmds.scaleConstraint(
                         target,
                         node_to_drive.org,
                         maintainOffset=maintain_offset,
@@ -195,34 +211,34 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
             for constraint in constraints:
 
-                condition = mc.createNode("condition")
+                condition = cmds.createNode("condition")
 
-                mc.setAttr(
+                cmds.setAttr(
                     f"{condition}.secondTerm",
                     idx,
                 )
 
-                mc.setAttr(
+                cmds.setAttr(
                     f"{condition}.colorIfTrueR",
                     1,
                 )
 
-                mc.setAttr(
+                cmds.setAttr(
                     f"{condition}.colorIfFalseR",
                     0,
                 )
 
-                mc.connectAttr(
+                cmds.connectAttr(
                     f"{host}.spaces",
                     f"{condition}.firstTerm",
                 )
 
-                func = mc.parentConstraint
+                func = cmds.parentConstraint
 
                 if "scale" in constraint:
-                    func = mc.scaleConstraint
+                    func = cmds.scaleConstraint
 
-                mc.connectAttr(
+                cmds.connectAttr(
                     f"{condition}.outColorR",
                     constraint + "." + func(
                         constraint,
@@ -232,7 +248,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                 )
 
             if matrix_to_restore:
-                mc.xform(
+                cmds.xform(
                     node_to_drive.org,
                     matrix=matrix_to_restore,
                     worldSpace=True,
@@ -244,29 +260,31 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             for constraint in all_constraints:
                 for axis in ["X", "Y", "Z"]:
                     try:
-                        mc.disconnectAttr(
+                        cmds.disconnectAttr(
                             f"{constraint}.constraintRotate.constraintRotate{axis}",
                             f"{node_to_drive.org}.rotate.rotate{axis}",
                         )
 
-                    except: pass
+                    except RuntimeError:
+                        # -- Channel wasn't connected on this constraint;
+                        # -- nothing to disconnect, fine to skip.
+                        pass
 
         if orientation_only:
             for constraint in all_constraints:
                 for axis in ["X", "Y", "Z"]:
                     try:
-                        mc.disconnectAttr(
+                        cmds.disconnectAttr(
                             f"{constraint}.constraintTranslate.constraintTranslate{axis}",
                             f"{node_to_drive.org}.translate.translate{axis}",
                         )
 
-                    except:
-                        # import traceback
-                        # print(traceback.print_exc())
-                        # print("couldnt orient")
+                    except RuntimeError:
+                        # -- Channel wasn't connected on this constraint;
+                        # -- nothing to disconnect, fine to skip.
                         pass
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{host}.spaces",
             default_space_idx,
         )
@@ -336,11 +354,17 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         uuid_ = space_data["uuid_"]
         uuids = self.get_uuids()
 
-        index_at = -1
-
         if uuid_ in uuids:
+            # -- Existing space — preserve its position in the list.
             index_at = uuids.index(uuid_)
             self.remove_space(uuid_)
+        else:
+            # -- New space — append to the end. A literal -1 here would
+            # -- insert *before* the last element (list.insert(-1, x)
+            # -- semantics), not append; that bug used to leave the
+            # -- visible widget order out of sync with the stored order
+            # -- once the option widget rebuilt itself.
+            index_at = len(uuids)
 
         data = self.get_data()
         data["spaces"].insert(index_at, space_data)
@@ -357,11 +381,44 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         for idx, space_data in enumerate(data["spaces"]):
 
             if space_data["uuid_"] == uuid_:
+                new_idx = idx + move_by
+
+                # -- Clamp to valid range. Without this, moving the first
+                # -- item up (new_idx = -1) would call list.insert(-1, x)
+                # -- and silently slot it in before the last element
+                # -- rather than no-op cleanly.
+                if new_idx < 0 or new_idx >= len(data["spaces"]):
+                    return
+
                 data["spaces"].pop(idx)
-                data["spaces"].insert(idx + move_by, space_data)
+                data["spaces"].insert(new_idx, space_data)
 
                 self.option("_Data").set(data)
                 return
+
+    def set_position_only(self, value: bool) -> None:
+        """
+        Sets the ``position_only`` flag on every space at once.
+
+        The space-switch build (see :meth:`run`) applies this flag
+        globally to all constraints rather than per-space, so the
+        per-space ``position_only`` entries are kept in sync by this
+        helper so the UI matches what build does.
+        """
+        data = self.get_data()
+        for space in data["spaces"]:
+            space["position_only"] = bool(value)
+        self.option("_Data").set(data)
+
+    def set_orientation_only(self, value: bool) -> None:
+        """
+        Sets the ``orientation_only`` flag on every space at once.
+        See :meth:`set_position_only` for the rationale.
+        """
+        data = self.get_data()
+        for space in data["spaces"]:
+            space["orientation_only"] = bool(value)
+        self.option("_Data").set(data)
 
 
 # noinspection PyUnresolvedReferences,DuplicatedCode
@@ -375,7 +432,7 @@ class SpaceList(QtWidgets.QWidget):
     uuid_selected = QtCore.Signal(str)
 
     def __init__(self, component, button_size=30, parent=None):
-        super(SpaceList, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.component = component
 
@@ -427,9 +484,9 @@ class SpaceList(QtWidgets.QWidget):
         self.up_button.clicked.connect(self.move_up)
         self.down_button.clicked.connect(self.move_down)
 
-        self.list_widget.currentItemChanged.connect(self.propogate_uuid_change)
+        self.list_widget.currentItemChanged.connect(self.propagate_uuid_change)
 
-    def propogate_uuid_change(self, item):
+    def propagate_uuid_change(self, item):
         if item:
             self.uuid_selected.emit(item.uuid_)
 
@@ -488,26 +545,14 @@ class SpaceList(QtWidgets.QWidget):
         if not self.list_widget.currentItem():
             return
 
-        # -- Get the index of the process we want to shift
         index_to_shift = self.list_widget.currentRow()
+        if index_to_shift <= 0:
+            return  # already at the top
 
-        # -- Remove the process from the list
         item = self.list_widget.takeItem(index_to_shift)
-
-        # -- Re-insert it one level less (or the same level if its at the top
-        # -- of the list already)
-        shift_by = min(
-            index_to_shift - 1,
-            self.list_widget.count(),
-        )
-
-        self.list_widget.insertItem(
-            shift_by,
-            item,
-        )
-
+        shift_by = index_to_shift - 1
+        self.list_widget.insertItem(shift_by, item)
         self.component.move_space(item.uuid_, -1)
-
         self.list_widget.setCurrentRow(shift_by)
         self.changed.emit()
 
@@ -516,24 +561,14 @@ class SpaceList(QtWidgets.QWidget):
         if not self.list_widget.currentItem():
             return
 
-        # -- Get the index of the process we want to shift
         index_to_shift = self.list_widget.currentRow()
+        if index_to_shift >= self.list_widget.count() - 1:
+            return  # already at the bottom
 
-        # -- Remove the process from the list
         item = self.list_widget.takeItem(index_to_shift)
-
-        # -- Re-insert it one level less (or the same level if its at the top
-        # -- of the list already)
-        shift_by = max(
-            index_to_shift + 1,
-            0,
-        )
-        self.list_widget.insertItem(
-            shift_by,
-            item,
-        )
+        shift_by = index_to_shift + 1
+        self.list_widget.insertItem(shift_by, item)
         self.component.move_space(item.uuid_, 1)
-
         self.list_widget.setCurrentRow(shift_by)
         self.changed.emit()
 
@@ -578,7 +613,7 @@ class OptionsBlock(QtWidgets.QWidget):
     label_changed = QtCore.Signal(str)
 
     def __init__(self, component, parent=None):
-        super(OptionsBlock, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setLayout(
             qtility.layouts.slimify(
@@ -604,11 +639,22 @@ class OptionsBlock(QtWidgets.QWidget):
         widgets_to_wrap["Target"] = self.target
         widgets_to_wrap["Snap To"] = self.target_transform
         widgets_to_wrap["-"] = None
-        widgets_to_wrap["Position Only"] = self.position_only
-        widgets_to_wrap["Orientation Only"] = self.orientation_only
+        widgets_to_wrap["Position Only (all spaces)"] = self.position_only
+        widgets_to_wrap["Orientation Only (all spaces)"] = self.orientation_only
         widgets_to_wrap["Include Scale"] = self.include_scale
         widgets_to_wrap["--"] = None
         widgets_to_wrap["Is Default Space"] = self.is_default
+
+        # -- Position-only / orientation-only flags are applied globally
+        # -- by SpaceSwitchComponent.run (see ``set_position_only`` /
+        # -- ``set_orientation_only``); the tooltip is here to make that
+        # -- explicit so a user doesn't expect a per-space behaviour.
+        self.position_only.setToolTip(
+            "Applies to every space in this switch. Toggling here updates all spaces."
+        )
+        self.orientation_only.setToolTip(
+            "Applies to every space in this switch. Toggling here updates all spaces."
+        )
 
         for label, widget_to_wrap in widgets_to_wrap.items():
 
@@ -650,6 +696,7 @@ class OptionsBlock(QtWidgets.QWidget):
         self.position_only.setChecked(False)
         self.orientation_only.setChecked(False)
         self.include_scale.setChecked(True)
+        self.is_default.setChecked(False)
 
         self._active_uuid = None
         self._ignore_serialisation = False
@@ -669,8 +716,15 @@ class OptionsBlock(QtWidgets.QWidget):
         self.label.setText(space_data["label"])
         self.target.set_value(space_data["target"])
         self.target_transform.set_value(space_data["target_transform"])
-        self.position_only.setChecked(space_data["position_only"])
-        self.orientation_only.setChecked(space_data["orientation_only"])
+
+        # -- position_only and orientation_only are global at build
+        # -- time; display the OR-aggregate across every space so the
+        # -- UI matches build behaviour even when older saved data has
+        # -- inconsistent per-space values.
+        all_spaces = self.component.get_data()["spaces"]
+        self.position_only.setChecked(any(s.get("position_only") for s in all_spaces))
+        self.orientation_only.setChecked(any(s.get("orientation_only") for s in all_spaces))
+
         self.include_scale.setChecked(space_data["include_scale"])
         self.is_default.setChecked(space_data["label"] == self.component.get_default_space())
 
@@ -695,6 +749,12 @@ class OptionsBlock(QtWidgets.QWidget):
 
         self.component.add_space(data)
 
+        # -- position_only and orientation_only are applied globally
+        # -- across all constraints by SpaceSwitchComponent.run, so
+        # -- propagate the toggle to every space's data here too.
+        self.component.set_position_only(self.position_only.isChecked())
+        self.component.set_orientation_only(self.orientation_only.isChecked())
+
         if self.is_default.isChecked():
             self.component.set_default_space(data["label"])
 
@@ -706,7 +766,7 @@ class SpaceSwitchUi(QtWidgets.QWidget):
     dont_label = True
 
     def __init__(self, component, parent=None):
-        super(SpaceSwitchUi, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.component: SpaceSwitchComponent = component
 

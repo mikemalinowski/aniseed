@@ -10,7 +10,7 @@ class ItemSelector(QtWidgets.QComboBox):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, items, default_item, parent=None):
-        super(ItemSelector, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         idx_to_apply = 0
 
@@ -32,7 +32,7 @@ class LocationSelector(QtWidgets.QComboBox):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, config, value=None, parent=None):
-        super(LocationSelector, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         locations = [
             config.middle,
@@ -59,7 +59,7 @@ class AxisSelector(QtWidgets.QComboBox):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, parent=None):
-        super(AxisSelector, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         for iterative_idx, item in enumerate(["X", "Y", "Z"]):
             self.addItem(item)

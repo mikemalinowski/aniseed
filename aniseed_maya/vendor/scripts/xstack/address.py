@@ -8,7 +8,7 @@ Addresses always take the form of
 """
 import re
 
-ADDRESS_REGEX = re.compile(r"(\[.*\].\[(option|requirement|output)].\[.*\])")
+ADDRESS_REGEX = re.compile(r"\[.*\]\.\[(option|input|output)\]\.\[.*\]")
 
 
 # --------------------------------------------------------------------------------------
@@ -76,8 +76,8 @@ def get_attribute(address, stack):
     if category == "option":
         return component.option(attribute_name)
 
-    if category == "requirement":
-        return component.requirement(attribute_name)
+    if category == "input":
+        return component.input(attribute_name)
 
     if category == "output":
         return component.output(attribute_name)
@@ -122,11 +122,8 @@ def _get_uuid_from_label(label, stack):
     """
     Given a component label, this will return the uuid of that component
     """
-    for component in stack.components():
-        if component.label() == label:
-            return component.uuid()
-
-    return None
+    component = _get_component_with_label(label, stack)
+    return component.uuid() if component else None
 
 
 # --------------------------------------------------------------------------------------

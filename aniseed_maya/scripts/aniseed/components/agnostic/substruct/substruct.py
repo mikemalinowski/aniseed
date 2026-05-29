@@ -5,6 +5,18 @@ import aniseed
 
 # --------------------------------------------------------------------------------------
 class AddSubStructureComponent(aniseed.RigComponent):
+    """
+    Adds a set of organisational child nodes under a given parent.
+
+    The names of the children are drawn from the "Sub Nodes" option;
+    each one is resolved through the rig's naming convention as an
+    organisational node at the middle location. Existing children with
+    matching names are reused rather than recreated.
+
+    Outputs for each sub-node are declared dynamically inside ``run()``
+    based on the current "Sub Nodes" list, so other components can
+    reference them by sub-node name after the build has been run.
+    """
 
     identifier = "Utility : Add Sub Structure"
     icon = os.path.join(
@@ -14,7 +26,7 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
-        super(AddSubStructureComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -25,6 +37,11 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Sub Nodes",
+            description=(
+                "List of sub-node names to create beneath the parent. "
+                "Each entry produces an organisational node and an "
+                "output of the same name."
+            ),
             value=[],
             group="Behaviour",
         )
@@ -63,7 +80,7 @@ class AddSubStructureComponent(aniseed.RigComponent):
             if resolved_name in existing_nodes:
                 continue
 
-            node = crosswalk.items.create(
+            crosswalk.items.create(
                 name=resolved_name,
                 parent=parent,
             )
@@ -73,6 +90,10 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
 # --------------------------------------------------------------------------------------
 class DeleteChildren(aniseed.RigComponent):
+    """
+    Deletes the immediate children of a given node, and optionally the
+    node itself. No-op if the node does not exist.
+    """
 
     identifier = "Utility : Delete Children"
     icon = os.path.join(
@@ -82,16 +103,22 @@ class DeleteChildren(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
-        super(DeleteChildren, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Node",
-            value="",
+            description="The node whose children should be deleted.",
+            group="Required Nodes",
         )
 
         self.declare_option(
             name="Include Self",
+            description=(
+                "If enabled, the node itself is also deleted after its "
+                "children have been removed."
+            ),
             value=False,
+            group="Behaviour",
         )
 
     # ----------------------------------------------------------------------------------
@@ -108,10 +135,13 @@ class DeleteChildren(aniseed.RigComponent):
             return True
 
         for child in crosswalk.items.get_children(node):
+            # -- Deleting one child can cascade-delete its siblings
+            # -- (instances, constrained nodes, etc.), so the explicit
+            # -- existence check here is intentional — by the time we
+            # -- reach later iterations the name may already be gone.
             if crosswalk.items.exists(child):
                 crosswalk.items.delete(child)
 
         if self.option("Include Self").get():
             crosswalk.items.delete(node)
-
         return True

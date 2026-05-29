@@ -5,6 +5,7 @@ import functools
 from maya import cmds
 from . import mutils
 from . import rig
+from . import units
 import maya.api.OpenMaya as om
 
 from .. import resources
@@ -416,12 +417,13 @@ def shape_to_dict(node: str = "") -> typing.Dict:
     for shape in shapes:
         pointer = mutils.get_mobject(shape)
         nurbs_fn = om.MFnNurbsCurve(pointer)
+        cvs = [list(p)[:3] for p in nurbs_fn.cvPositions(om.MSpace.kObject)]
 
         node_data = dict(
             form=cmds.getAttr(f"{shape}.form"),
             degree=cmds.getAttr(f"{shape}.degree"),
             knots=[n for n in nurbs_fn.knots()],
-            cvs=[list(p)[:3] for p in nurbs_fn.cvPositions(om.MSpace.kObject)],
+            cvs=cvs,
         )
 
         data["curves"].append(node_data)
@@ -531,11 +533,19 @@ def load_shape(
     # -- Cycle over each curve element in the data
     for curve_data in data["curves"]:
         # -- Create a curve with the given cv"s
+        points = []
+
+        for p in curve_data["cvs"]:
+
+            points.append(
+                [
+                    units.from_cm(v)
+                    for v in p
+                ]
+            )
+
         transform = cmds.curve(
-            point=[
-                p
-                for p in curve_data["cvs"]
-            ],
+            point=points,
             degree=curve_data["degree"],
             knot=curve_data["knots"],
         )

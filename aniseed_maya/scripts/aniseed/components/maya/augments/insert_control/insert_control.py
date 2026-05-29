@@ -1,17 +1,29 @@
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+
+from maya import cmds
 
 
 class InsertControlComponent(aniseed.RigComponent):
+    """
+    Inserts a new control between a parent node and its existing
+    children. The control is created as a child of ``Parent`` and,
+    if "Move All Children Under Control" is enabled, every transform
+    child of ``Parent`` is re-parented under the new control so the
+    control sits in the middle of the hierarchy.
+    """
 
     identifier = "Augment : Insert Control"
 
     def __init__(self, *args, **kwargs):
-        super(InsertControlComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
+            description=(
+                "The node above the point where the new control will "
+                "be inserted. The control becomes a child of this node."
+            ),
             value="",
             validate=True,
             group="Required Joint",
@@ -19,18 +31,27 @@ class InsertControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Move All Children Under Control",
+            description=(
+                "If enabled, every transform child of ``Parent`` is "
+                "re-parented under the new control after creation."
+            ),
             value=True,
             group="Behaviour",
         )
 
         self.declare_option(
             name="Match Transform To",
+            description=(
+                "Optional node whose world transform the new control "
+                "will be matched to. Leave empty to match the parent."
+            ),
             value="",
             group="Behaviour",
         )
 
         self.declare_option(
             name="Name",
+            description="Descriptive name token used when generating the control's name.",
             value="",
             group="Naming",
             pre_expose=True,
@@ -38,7 +59,12 @@ class InsertControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Location",
-            value="md",
+            description=(
+                "Location token (c/l/r/f/b) used when generating the "
+                "control's name. Inherited from the parent component "
+                "when added to the stack."
+            ),
+            value=self.config.middle,
             group="Naming",
             should_inherit=True,
             pre_expose=True,
@@ -46,12 +72,14 @@ class InsertControlComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Shape",
+            description="Aniseed-toolkit control shape used for the inserted control.",
             value="core_cube",
             group="Visuals",
         )
 
         self.declare_output(
             "Control",
+            description="The newly-created control node.",
         )
 
     def option_widget(self, option_name: str):
@@ -66,7 +94,7 @@ class InsertControlComponent(aniseed.RigComponent):
         if option_name == "Match Transform To":
             return aniseed.widgets.ObjectSelector(component=self)
 
-    def input_widget(self, requirement_name: str) :
+    def input_widget(self, requirement_name: str):
         if requirement_name == "Parent":
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -81,8 +109,7 @@ class InsertControlComponent(aniseed.RigComponent):
     def run(self) -> bool:
 
         parent = self.input("Parent").get()
-        children = mc.listRelatives(parent, children=True) or list()
-        shapes = mc.listRelatives(parent, shapes=True) or list()
+        children = cmds.listRelatives(parent, children=True, type="transform") or list()
 
         control = aniseed_toolkit.run("Create Control",
             description=self.option("Name").get(),
@@ -97,11 +124,7 @@ class InsertControlComponent(aniseed.RigComponent):
 
         if self.option("Move All Children Under Control").get():
             for child in children:
-
-                if child in shapes:
-                    continue
-
-                mc.parent(
+                cmds.parent(
                     child,
                     control,
                 )

@@ -213,9 +213,7 @@ class Component:
                 parent.children.append(self)
         else:
             if child_index is not None:
-                print("here")
                 self.stack.root_components.insert(child_index, self)
-                print(self.stack.root_components)
             else:
                 self.stack.root_components.append(self)
 
@@ -240,9 +238,9 @@ class Component:
             self.run()
             self.set_status(Status.Success)
 
-        except:
+        except Exception:
             self.set_status(Status.Failed)
-            print(traceback.print_exc())
+            traceback.print_exc()
             result = False
 
         self.build_complete.emit()
@@ -523,6 +521,8 @@ class Component:
         print(f"    Identifier : {self.uuid()}")
         print(f"    Options    :")
 
+        value_limit = 200
+
         option_len = max(
             [
                 len(option.name())
@@ -531,8 +531,12 @@ class Component:
         )
 
         for option in self.options():
+            resolved_value = str(self.option(option.name()).get())
+            if len(resolved_value) > value_limit:
+                resolved_value = resolved_value[:value_limit - 3] + "..."
+
             print(
-                f"        {option.name().ljust(option_len + 2, ' ')} : {self.option(option.name()).get()}")
+                f"        {option.name().ljust(option_len + 2, ' ')} : {resolved_value}")
 
         print(f"    Inputs :")
 
@@ -544,13 +548,18 @@ class Component:
         )
 
         for input_ in self.inputs():
+            resolved_value = str(self.input(input_.name()).get())
+            if len(resolved_value) > value_limit:
+                resolved_value = resolved_value[:value_limit - 3] + "..."
+
             print(
-                f"        {input_.name().ljust(inputs_len + 2, ' ')} : {self.input(input_.name()).get()}")
+                f"        {input_.name().ljust(inputs_len + 2, ' ')} : {resolved_value}")
 
     # ----------------------------------------------------------------------------------
     def describe_outputs(self):
 
         print(f"    Outputs :")
+        value_limit = 200
 
         output_len = max(
             [
@@ -560,8 +569,12 @@ class Component:
         )
 
         for output in self.outputs():
+            resolved_value = str(self.output(output.name()).get())
+            if len(resolved_value) > value_limit:
+                resolved_value = resolved_value[:value_limit - 3] + "..."
+
             print(
-                f"        {output.name().ljust(output_len + 2, ' ')} : {self.output(output.name()).get()}")
+                f"        {output.name().ljust(output_len + 2, ' ')} : {resolved_value}")
 
     # ----------------------------------------------------------------------------------
     def serialise(self) -> dict:
@@ -623,48 +636,75 @@ class Component:
         with open(filepath, "r") as f:
             data = json.load(f)
 
-        # -- Backward compat with old format of inputs. Note that all
-        # -- serialisation is done with inputs, not inputs.
-        for input_data in data.get("inputs", list()):
-            name = input_data["name"]
-            value = input_data["value"]
+        for name, value in data.get("inputs", {}).items():
+            input_ = self.input(name)
+            if input_:
+                input_.set(value)
 
-            self.input(name).set(value)
-
-        for option_data in data.get("options", list()):
-            name = option_data["name"]
-            value = option_data["value"]
-
-            self.option(name).set(value)
+        for name, value in data.get("options", {}).items():
+            option = self.option(name)
+            if option:
+                option.set(value)
 
         self.changed.emit()
 
     # ----------------------------------------------------------------------------------
-    def duplicate(self, input_overrides=None, option_overrides=None):
+    def import_subtree(self, filepath: str) -> None:
         """
-        This will create a duplicate of this component in the stack. It will not
-        duplicate its children.
+        Load a serialised subtree from a JSON file and add the contents
+        as children of this component. UUIDs are regenerated to avoid
+        collisions; labels are preserved.
+
+        Convenience wrapper for ``self.stack.import_subtree_under(
+        self, filepath)``.
+
+        :param filepath: Absolute path to a JSON file produced by
+            ``save_settings()`` or ``Stack.save()``.
+        """
+        self.stack.import_subtree_under(parent=self, filepath=filepath)
+
+    # ----------------------------------------------------------------------------------
+    def duplicate(self, input_overrides=None, option_overrides=None, include_children=True):
+        """
+        Create a duplicate of this component in the stack.
+
+        By default the entire subtree is duplicated — this component and all
+        its descendants — and parented as a sibling of the original. Pass
+        ``include_children=False`` to copy only this component without its
+        children.
+
+        ``input_overrides`` and ``option_overrides`` apply only to the
+        top-level duplicate; descendants keep their original values.
         """
         # -- Instance the new component
         new_component = self.stack.add_component(
             component_type=self.identifier,
             label=self.label(),
-            supress_events=True,
+            suppress_events=True,
         )
 
         # -- Copy all the data
         new_component.copy(self)
 
-        # -- Apply any overrides
+        # -- Apply any overrides (top-level only)
         for name, value in (input_overrides or dict()).items():
             new_component.input(name).set(value)
         for name, value in (option_overrides or dict()).items():
             new_component.option(name).set(value)
 
-        # -- Set the parenting of the component
+        # -- Set the parenting of the component (sibling of the original)
         new_component.set_parent(
             parent=self.parent,
         )
+
+        # -- Recursively duplicate children under the new component. Snapshot
+        # -- self.children first because child.duplicate() temporarily inserts
+        # -- the new child into its source parent (self) before we reparent
+        # -- it under new_component below.
+        if include_children:
+            for child in list(self.children):
+                child_duplicate = child.duplicate(include_children=True)
+                child_duplicate.set_parent(parent=new_component)
 
         # -- Trigger its events
         new_component.on_enter_stack()
@@ -698,11 +738,11 @@ class Component:
 
             if option_to_copy:
                 self.option(option.name()).set(
-                    option_to_copy.get(resolved=False),
+                    copy.deepcopy(option_to_copy.get(resolved=False)),
                 )
 
-        self.set_label(copy.deepcopy(other_component.label()))
-        self.set_enabled(copy.deepcopy(other_component.is_enabled()))
+        self.set_label(other_component.label())
+        self.set_enabled(other_component.is_enabled())
 
     # ----------------------------------------------------------------------------------
     def documentation(self):

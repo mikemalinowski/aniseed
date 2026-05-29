@@ -519,7 +519,7 @@ class MouthComponent(aniseed.RigComponent):
             match_to=jaw_joint,
             config=self.config,
         )
-        cmds.setAttr(f"{lower_lip_joint}.tz", 4)
+        cmds.setAttr(f"{lower_lip_joint}.tz", aniseed_toolkit.units.from_cm(4))
 
         # -- If we have a parent, then snap the jaw to the parent position
         if parent:

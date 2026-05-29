@@ -188,7 +188,7 @@ class FaceComponent(aniseed.RigComponent):
         )
         self.declare_option(
             name="Eye Target Distance",
-            value=30,
+            value=30.0,
         )
 
         # -- Now we declare our outputs
@@ -236,7 +236,8 @@ class FaceComponent(aniseed.RigComponent):
                     config=self.config,
                 )
             )
-            bone.set_matrix(bone_description["matrix"])
+            bone_matrix = bone_description["matrix"]
+            bone.set_matrix(bone_matrix)
 
             # -- Set the bone as an input
             self.input(bone_label).set(bone.name())
@@ -298,8 +299,10 @@ class FaceComponent(aniseed.RigComponent):
             name="direct_control_visibility",
             value=0,
             attribute_type="bool",
-            keyable=True,
+            keyable=False,
         )
+        visibility_attribute.set(channelBox=True)
+        print("i am in here")
 
         # -- Create the mouth using the mouth component rather than duplicate
         # -- the code.
@@ -464,15 +467,7 @@ class FaceComponent(aniseed.RigComponent):
                         aniseed_toolkit.control.get(direct_controls[control_label]).org,
                         mouth_component.output(f"{section.title()} Lip Control").get(),
                     )
-            # cmds.parent(
-            #     aniseed_toolkit.control.get(direct_controls["upper_lip_middle"]).org,
-            #     mouth_component.output("Upper Lip Control").get(),
-            # )
-            #
-            # cmds.parent(
-            #     aniseed_toolkit.control.get(direct_controls["lower_lip_middle"]).org,
-            #     mouth_component.output("Lower Lip Control").get(),
-            # )
+
         # ----------------------------------------------------
         # -- Get the jaw as an mref object
         m_jaw = mref.get(mouth_component.output("Jaw Control").get())
@@ -550,6 +545,21 @@ class FaceComponent(aniseed.RigComponent):
         # -- Create the high level control rig which drives everything.
         high_level_control_rig = HighLevelControlRig(component=self)
         high_level_control_rig.create(m_jaw)
+
+        # -- Finally, we expose some attributes to show/hide the tongue and teeth. This will be
+        # -- driven by an attribute on the jaw
+        attribute = mref.get(mouth_component.output("Jaw Control").get()).add_attribute(
+            "show_teeth_and_tongue",
+            attribute_type="bool",
+            value=False,
+            keyable=False,
+        )
+        attribute.set(channelBox=True)
+
+        for control in direct_controls.keys():
+            if "teeth" in control or "tongue" in control:
+                for shape in mref.get(direct_controls[control]).shapes():
+                    attribute.connect(shape.visibility)
 
         # -- Set the outputs
         self.output("FaceRig").set(org.name())

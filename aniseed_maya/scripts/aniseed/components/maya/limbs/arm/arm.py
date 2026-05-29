@@ -1,5 +1,6 @@
 import os
 import mref
+import uuid
 import snappy
 import typing
 import aniseed
@@ -101,7 +102,13 @@ class ArmComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
         )
-        
+        self.declare_option(
+            name="Apply Space Switches",
+            value=True,
+            group="Behaviour",
+            pre_expose=True,
+        )
+
         # -- Delcare our options which make it easier and quicker to generate
         # -- a skeleton if needed
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
@@ -159,12 +166,14 @@ class ArmComponent(aniseed.RigComponent):
         build_skeleton = self.option("Build Skeleton")
         upper_twist_count = self.option("Upper Twist Count")
         lower_twist_count = self.option("Lower Twist Count")
+        apply_spaceswitches = self.option("Apply Space Switches")
 
         # -- To reach here, we have not - so lets mark this as being processed
         # -- regardless of whether or not we need to build the skeleton
         build_skeleton.set_hidden(True)
         upper_twist_count.set_hidden(True)
         lower_twist_count.set_hidden(True)
+        apply_spaceswitches.set_hidden(True)
 
         # -- If we do not need to build the skeleton, we can exit
         if not build_skeleton.get():
@@ -183,6 +192,9 @@ class ArmComponent(aniseed.RigComponent):
 
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent(tags=["fk tip", "chest", "tip"])
+
+        if apply_spaceswitches.get():
+            self.setup_spaceswitches()
 
     def on_removed_from_stack(self):
         """
@@ -362,7 +374,7 @@ class ArmComponent(aniseed.RigComponent):
 
         # -- Set up the space switches on teh fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
+            aniseed_toolkit.space.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -630,15 +642,15 @@ class ArmComponent(aniseed.RigComponent):
         # # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["shoulder"] = {"jointOrientX": -90}
-        joint_data["upperarm"] = {"tx": 9, "jointOrientX": 7, "jointOrientY": 50}
-        joint_data["lowerarm"] = {"tx": 24, "jointOrientZ": -20,}
-        joint_data["hand"] = {"tx": 24}
+        joint_data["upperarm"] = {"tx": aniseed_toolkit.units.to_cm(9), "jointOrientX": 7, "jointOrientY": 50}
+        joint_data["lowerarm"] = {"tx": aniseed_toolkit.units.to_cm(24), "jointOrientZ": -20,}
+        joint_data["hand"] = {"tx": aniseed_toolkit.units.to_cm(24)}
 
         joint_data = collections.OrderedDict()
         joint_data["shoulder"] = {}
-        joint_data["upperarm"] = {"tx": 9, "jointOrientX": 7, "jointOrientZ": -50}
-        joint_data["lowerarm"] = {"tx": 24, "jointOrientY": -20,}
-        joint_data["hand"] = {"tx": 24}
+        joint_data["upperarm"] = {"tx": aniseed_toolkit.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
+        joint_data["lowerarm"] = {"tx": aniseed_toolkit.units.to_cm(24), "jointOrientY": -20,}
+        joint_data["hand"] = {"tx": aniseed_toolkit.units.to_cm(24)}
 
         all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -711,6 +723,109 @@ class ArmComponent(aniseed.RigComponent):
         all_joints = arm_joints + upper_twists + lower_twists
 
         return [joint for joint in all_joints if joint]
+
+    def setup_spaceswitches(self):
+        global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
+
+        if not global_srt_component:
+            print("No global srt found, skipping spaceswitch setup")
+            return
+
+        hand_spaceswitch = self.stack.add_component(
+            component_type="Augment : Space Switch",
+            label=self.label() + " Hand Space Switch",
+            parent=self,
+            inputs={
+                "To Be Driven": self.output("Ik Hand").address(),
+                "Attribute Host": self.output("Ik Hand").address(),
+            },
+        )
+        hand_spaceswitch.option("_Data").set(
+            {
+                "default_space": "World",
+                "spaces": [
+                    {
+                        "target": global_srt_component.output("Main Control").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "World",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Parent").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Component Parent",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Shoulder").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Shoulder",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                ]
+            }
+        )
+        upvector_spaceswitch = self.stack.add_component(
+            component_type="Augment : Space Switch",
+            label=self.label() + " Upvector Space Switch",
+            parent=self,
+            inputs={
+                "To Be Driven": self.output("Upvector").address(),
+                "Attribute Host": self.output("Upvector").address(),
+            },
+        )
+        upvector_spaceswitch.option("_Data").set(
+            {
+                "default_space": "Hand",
+                "spaces": [
+                    {
+                        "target": global_srt_component.output("Main Control").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "World",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Parent").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Parent",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Shoulder").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Shoulder",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.output("Ik Hand").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Hand",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                ]
+            }
+        )
 
     def _clear_values(self):
 

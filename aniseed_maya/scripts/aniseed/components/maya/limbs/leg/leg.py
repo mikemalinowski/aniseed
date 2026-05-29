@@ -1,4 +1,6 @@
 import os
+import uuid
+
 import mref
 import snappy
 import aniseed
@@ -136,6 +138,12 @@ class LegComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
         )
+        self.declare_option(
+            name="Apply Space Switches",
+            value=True,
+            group="Behaviour",
+            pre_expose=True,
+        )
 
         # -- These options are hidden and for intialisation only
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
@@ -182,12 +190,14 @@ class LegComponent(aniseed.RigComponent):
         build_skeleton = self.option("Build Skeleton")
         upper_twist_count = self.option("Upper Twist Count")
         lower_twist_count = self.option("Lower Twist Count")
+        apply_spaceswitches = self.option("Apply Space Switches")
 
         # -- To reach here, we have not - so lets mark this as being processed
         # -- regardless of whether or not we need to build the skeleton
         build_skeleton.set_hidden(True)
         upper_twist_count.set_hidden(True)
         lower_twist_count.set_hidden(True)
+        apply_spaceswitches.set_hidden(True)
 
         # -- If we do not need to build the skeleton, we can exit
         if not build_skeleton.get():
@@ -225,6 +235,9 @@ class LegComponent(aniseed.RigComponent):
 
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent(tags=["fk root", "fk hip", "hip"])
+
+        if apply_spaceswitches.get():
+            self.setup_spaceswitches()
 
     def on_removed_from_stack(self):
         """
@@ -582,7 +595,7 @@ class LegComponent(aniseed.RigComponent):
 
             cmds.parent(
                 tip_marker,
-                self.ik_pivot_endpoint,
+                self.ik_heel_control.ctl, #self.ik_pivot_endpoint,
             )
 
             cmds.xform(
@@ -623,25 +636,6 @@ class LegComponent(aniseed.RigComponent):
         """
         NK is the chain that is constrained between the IK and the FK
         """
-        cmds.addAttr(
-            self.config_control.ctl,
-            shortName="show_ik",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=1,
-            keyable=True,
-        )
-        cmds.addAttr(
-            self.config_control.ctl,
-            shortName="show_fk",
-            attributeType='float',
-            minValue=0,
-            maxValue=1,
-            defaultValue=0,
-            keyable=True,
-        )
-
         blend_chain_setup = aniseed_toolkit.rigging.create_blend_chain(
             parent=self.org,
             transforms_a=self.ik_bindings,
@@ -901,9 +895,9 @@ class LegComponent(aniseed.RigComponent):
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["UpperLeg"] = {"jointOrientX": 90, "jointOrientY": -4, "jointOrientZ": -90}
-        joint_data["LowerLeg"] = {"tx": 42, "jointOrientZ": -11}
-        joint_data["Foot"] = {"tx": 42, "jointOrientZ": 55}
-        joint_data["Toe"] = {"tx": 10, "jointOrientZ": 42}
+        joint_data["LowerLeg"] = {"tx": aniseed_toolkit.units.to_cm(42), "jointOrientZ": -11}
+        joint_data["Foot"] = {"tx": aniseed_toolkit.units.to_cm(42), "jointOrientZ": 55}
+        joint_data["Toe"] = {"tx": aniseed_toolkit.units.to_cm(10), "jointOrientZ": 42}
 
         all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -979,6 +973,91 @@ class LegComponent(aniseed.RigComponent):
         for guide_tag in self.guide_tags:
             results.append(self.input(f"{guide_tag} Guide").get())
         return results
+
+    def setup_spaceswitches(self):
+        global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
+
+        if not global_srt_component:
+            print("No global srt found, skipping spaceswitch setup")
+            return
+
+        foot_spaceswitch = self.stack.add_component(
+            component_type="Augment : Space Switch",
+            label=self.label() + " Foot Space Switch",
+            parent=self,
+            inputs={
+                "To Be Driven": self.output("Ik Foot").address(),
+                "Attribute Host": self.output("Ik Foot").address(),
+            },
+        )
+        foot_spaceswitch.option("_Data").set(
+            {
+                "default_space": "World",
+                "spaces": [
+                    {
+                        "target": global_srt_component.output("Main Control").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "World",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Parent").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Parent",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                ]
+            }
+        )
+        upvector_spaceswitch = self.stack.add_component(
+            component_type="Augment : Space Switch",
+            label=self.label() + " Upvector Space Switch",
+            parent=self,
+            inputs={
+                "To Be Driven": self.output("Upvector").address(),
+                "Attribute Host": self.output("Upvector").address(),
+            },
+        )
+        upvector_spaceswitch.option("_Data").set(
+            {
+                "default_space": "Foot",
+                "spaces": [
+                    {
+                        "target": global_srt_component.output("Main Control").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "World",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.input("Parent").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Parent",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                    {
+                        "target": self.output("Ik Foot").address(),
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": "Foot",
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    },
+                ]
+            }
+        )
 
     def _clear_values(self):
         self.prefix: str = ""

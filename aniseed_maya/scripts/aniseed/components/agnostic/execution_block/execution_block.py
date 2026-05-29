@@ -17,20 +17,10 @@ class ExecutionBlock(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
-        super(ExecutionBlock, self).__init__(*args, **kwargs)
-        self.declare_option(
-            name="Icon",
-            value="",
-        )
-
-    def is_valid(self):
-        return True
-
-    def run(self):
-        return True
+        super().__init__(*args, **kwargs)
 
 
-class RunExectionBlock(aniseed.RigComponent):
+class RunExecutionBlock(aniseed.RigComponent):
     """
     This will instigate the run of a block during the execution of another
     block.
@@ -38,13 +28,19 @@ class RunExectionBlock(aniseed.RigComponent):
     identifier = "Stack : Run Execution Block"
 
     def __init__(self, *args, **kwargs):
-        super(RunExectionBlock, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.declare_input(
             name="Execution Block Label",
+            description=(
+                "The label of the Execution Block to run. Only blocks "
+                "that are not ancestors of this component are listed, "
+                "to avoid the most obvious recursion case."
+            ),
             value="",
         )
 
     def input_widget(self, requirement_name: str):
+        if requirement_name == "Execution Block Label":
             return aniseed.widgets.ItemSelector(
                 items=self.get_valid_execution_blocks(),
                 default_item="",
@@ -100,6 +96,9 @@ class RunExectionBlock(aniseed.RigComponent):
         )
 
         if not component:
-            return
+            return False
 
-        self.stack.build(build_below=component)
+        # -- Propagate the nested build's success/failure up to the
+        # -- outer build. Without this, a failed sub-build would be
+        # -- silently masked as success at this layer.
+        return self.stack.build(build_below=component)

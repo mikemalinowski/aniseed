@@ -6,6 +6,7 @@ from maya import cmds
 from maya.api import OpenMaya as om
 
 from . import direction
+from . import units
 
 
 def timed_function_call(func):
@@ -455,7 +456,6 @@ def get_relative_matrix(node: str = "", relative_to: str = "") -> list[float]:
         query=True,
         matrix=True,
     )
-
     cmds.delete(parent_buffer)
 
     return relative_matrix
@@ -962,7 +962,7 @@ class TransformMixer:
 
                 for target_data in pose_data["targets"]:
                     target = mixer.get_target(pose_data["name"], target_data["name"])
-                    target.set_matrix(target_data["transform"])
+                    target.set_matrix(units.matrix_from_cm(target_data["transform"]))
 
         return mixer
 

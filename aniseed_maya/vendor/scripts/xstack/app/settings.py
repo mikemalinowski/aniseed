@@ -12,7 +12,7 @@ class SettingsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, app_config, parent=None):
-        super(SettingsWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.app_config = app_config
 
@@ -67,7 +67,7 @@ class SettingsWidget(QtWidgets.QWidget):
 class SettingsWindow(QtWidgets.QMainWindow):
 
     def __init__(self, app_config, parent=None):
-        super(SettingsWindow, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setWindowTitle("Aniseed Preferences")
         self.setWindowIcon(

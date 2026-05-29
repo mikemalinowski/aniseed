@@ -1,4 +1,3 @@
-import os
 import xstack
 import typing
 import qtility
@@ -44,13 +43,10 @@ class AppConfig(xstack.app.AppConfig):
     # -- Colouring
     default_text_color = [255, 255, 255]
 
-    # -- Always add our own components folder to the component paths
-    component_paths = [
-        os.path.join(
-            os.path.dirname(__file__),
-            "components",
-        ),
-    ]
+    # -- Note: the aniseed/components path is added inside Rig.__init__
+    # -- itself, so AppConfig does not need to redeclare it here. Add
+    # -- extra paths to ``component_paths`` only for project-specific
+    # -- overrides.
 
     # -- Override some of the colouring
     item_highlight_color = [100, 255, 100]
@@ -74,7 +70,7 @@ class AppWidget(xstack.app.AppWidget):
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         self.buttons = None
-        super(AppWidget, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._host = ""
 
@@ -87,7 +83,7 @@ class AppWidget(xstack.app.AppWidget):
 
     # ----------------------------------------------------------------------------------
     def set_active_stack(self, stack: "xstack.Stack" or None):
-        super(AppWidget, self).set_active_stack(stack)
+        super().set_active_stack(stack)
 
         # -- We dynamically show a button for each execution block component
         # -- in the stack.
@@ -99,9 +95,16 @@ class AppWidget(xstack.app.AppWidget):
         This creates a button widget which shows a button for each execution component
         in the stack
         """
-        if self.buttons:
-            self.buttons.setParent(None)
-            self.buttons.deleteLater()
+        if self.buttons is not None:
+            try:
+                self.buttons.setParent(None)
+                self.buttons.deleteLater()
+            except RuntimeError:
+                # -- C++ side was already deleted by qtility.layouts.empty's
+                # -- deleteLater pump catching up. The Python wrapper is
+                # -- the only thing left; we just drop it.
+                pass
+            self.buttons = None
 
         if not self.stack:
             return
@@ -119,7 +122,7 @@ class AppWidget(xstack.app.AppWidget):
         When a new stack is created through the ui we should check the users preferences
         on whether they want a configuration to be generated automatically.
         """
-        stack = super(AppWidget, self).create_new_stack()
+        stack = super().create_new_stack()
 
         default_config = self.app_config.get_setting(
             "default_rig_config",
@@ -217,15 +220,31 @@ class AppWidget(xstack.app.AppWidget):
         This will update the active stack to represent the rig the user
         has selected
         """
+        import time
+        s = time.time()
         if not rig_host:
             try:
                 rig_host = self.all_rigs()[0]
-                if crosswalk.items.get_name(self._host) == crosswalk.items.get_name(rig_host):
-                    # -- Last log before crash is here
-                    return
             except IndexError:
+                # -- New scene has no rigs; tear the current stack down
+                # -- cleanly so we don't leave OLD rig signals wired up
+                # -- to widgets that are about to be ``deleteLater``'d.
+                self._teardown_stack()
                 self.set_active_stack(stack=None)
+                self._host = ""
                 return
+
+            # -- Compare by name string. self._host stores the name of the
+            # -- previous rig host; comparing names avoids touching any
+            # -- stale MObject from a now-closed scene, which is undefined
+            # -- behaviour in the Maya API and crashes after a few scene
+            # -- changes.
+            if self._host == crosswalk.items.get_name(rig_host):
+                return
+
+        # -- Drop signal connections + host reference on the previous
+        # -- stack before we replace it.
+        self._teardown_stack()
 
         rig: Rig = self.app_config.stack_class(
             host=rig_host,
@@ -235,7 +254,7 @@ class AppWidget(xstack.app.AppWidget):
         self.set_active_stack(
             stack=rig
         )
-        self._host = rig_host
+        self._host = crosswalk.items.get_name(rig_host)
 
         # -- Hook up signals and slots for implementation notifiers
         self.stack.component_added.connect(self.notify_component_added)
@@ -243,23 +262,77 @@ class AppWidget(xstack.app.AppWidget):
         self.stack.build_started.connect(self.notify_build_started)
         self.stack.build_completed.connect(self.notify_build_finished)
 
+        e = time.time()
+        print("Time to switch rig : %s" % (e-s))
+
+    # ----------------------------------------------------------------------------------
+    def _teardown_stack(self):
+        """
+        Drop ``notify_*`` signals from the current stack and ask the
+        stack to dispose of any host references it holds. Used when
+        switching to a different rig or to an empty scene so the old
+        rig's signal chain can't fire ``serialise`` on a stale Maya
+        host MObject.
+        """
+        if not self.stack:
+            return
+
+        try:
+            self.stack.component_added.disconnect(self.notify_component_added)
+            self.stack.component_removed.disconnect(self.notify_component_removed)
+            self.stack.build_started.disconnect(self.notify_build_started)
+            self.stack.build_completed.disconnect(self.notify_build_finished)
+        except Exception:
+            pass
+
+        dispose = getattr(self.stack, "dispose", None)
+        if callable(dispose):
+            try:
+                dispose()
+            except Exception:
+                pass
+
+    # ----------------------------------------------------------------------------------
+    # Override hooks. The base implementations are intentionally no-ops;
+    # subclasses may override these to surface stack events to the user
+    # (status bars, toasts, viewport messages, etc.). See the maya host's
+    # ``MayaAppWidget`` for an example that pipes them into
+    # ``cmds.inViewMessage``.
+    # ----------------------------------------------------------------------------------
     def notify_component_added(self, *args, **kwargs):
+        """
+        Called when a component is added to the active stack.
+
+        Args:
+            component: The Component that was added (passed as
+                ``args[0]`` by ``stack.component_added``).
+        """
         pass
 
     def notify_component_removed(self, *args, **kwargs):
+        """
+        Called when a component is removed from the active stack. The
+        ``stack.component_removed`` signal currently passes no arguments.
+        """
         pass
 
     def notify_build_started(self, *args, **kwargs):
+        """
+        Called when a stack build begins. No arguments are passed.
+        """
         pass
 
     def notify_build_finished(self, *args, **kwargs):
+        """
+        Called when a stack build completes. No arguments are passed.
+        """
         pass
 
 
 class ButtonWidget(QtWidgets.QWidget):
 
     def __init__(self, app_widget, *args, **kwargs):
-        super(ButtonWidget, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.app_widget = app_widget
 
@@ -294,7 +367,7 @@ class AppWindow(qtility.windows.MemorableWindow):
     """
 
     def __init__(self, app_config=AppConfig, allow_threading=True, *args, **kwargs):
-        super(AppWindow, self).__init__(storage_identifier=f"aniseed_{qtility.windows.host()}", *args, **kwargs)
+        super().__init__(storage_identifier=f"aniseed_{qtility.windows.host()}", *args, **kwargs)
 
         self.app_config = app_config
 
@@ -329,7 +402,7 @@ class AppWindow(qtility.windows.MemorableWindow):
 
 # ------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,PyUnusedLocal
-def launch(app_config=None, blocking: bool = False, *args, **kwargs):
+def launch(app_config=None, blocking: bool = False, parent=None, *args, **kwargs):
     """
     This function should be called to invoke the app ui in maya
     """
@@ -344,7 +417,7 @@ def launch(app_config=None, blocking: bool = False, *args, **kwargs):
     w = AppWindow(
         app_config=app_config or AppConfig,
         allow_threading=False,
-        parent=qtility.windows.application(),
+        parent=parent if parent is not None else qtility.windows.application(),
         *args,
         **kwargs
     )

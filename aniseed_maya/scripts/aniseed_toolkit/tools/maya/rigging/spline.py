@@ -221,7 +221,11 @@ class SimpleSplineSetup:
 
             # - Set the u value based on the calculated increment
             mc.cutKey(motion_path + ".uValue")
-            mc.setAttr(motion_path + ".uValue", increment * idx)
+            print(increment)
+            print(idx)
+
+            print(increment * idx)
+            mc.setAttr(motion_path + ".uValue", aniseed_toolkit.units.from_cm(increment * idx))
 
             # -- The pathAnimaiton command is a pain - it adds a bunch
             # -- of keyframes. So we clear those off
@@ -502,9 +506,9 @@ class SimpleSplineSetup:
         Read out the position components of the matrix.
         """
         return [
-            matrix[-4],
-            matrix[-3],
-            matrix[-2],
+            aniseed_toolkit.units.from_cm(matrix[-4]),
+            aniseed_toolkit.units.from_cm(matrix[-3]),
+            aniseed_toolkit.units.from_cm(matrix[-2]),
         ]
 
     def hide_mechanicals(self):
