@@ -262,6 +262,7 @@ class HandComponent(aniseed.RigComponent):
             hand.ctl,
             "curl",
             90,
+            min=-0.25,
             proxy_to=self.option("Expose Attributes To Nodes").get(),
         )
 
@@ -333,10 +334,8 @@ class HandComponent(aniseed.RigComponent):
                 m_finger_root = mref.get(finger_root)
                 m_metacarpal = m_finger_root.parent()
                 metacarpal_joint = m_metacarpal.full_name()
-                print("Metacarpal Joint : %s" % m_metacarpal.name())
 
                 description = self.config.extract_description(m_metacarpal.name())
-                print("description : %s" % description)
                 # -- If this metacarpal joint is already built, skip it. This is because
                 # -- multiple fingers can share a metacarpal
                 if m_metacarpal.constraints():
@@ -367,6 +366,18 @@ class HandComponent(aniseed.RigComponent):
             ranged_value = self._get_ranged_value(
                 finger_index_excluding_thumb,
                 finger_tips,
+            )
+
+            # -- Create the attribute for curling the individual finger
+            finger_label = finger_labels[finger_idx]
+
+            m_hand = mref.get(hand.ctl)
+            finger_curl_attribute = self._add_multiplied_attr(
+                hand.ctl,
+                f"{finger_label}_curl",
+                90,
+                min=-0.25,
+                proxy_to=self.option("Expose Attributes To Nodes").get(),
             )
 
             # -- Cycle all the digits
@@ -403,7 +414,16 @@ class HandComponent(aniseed.RigComponent):
 
                 control_parent = finger_control.ctl
 
-            if not is_thumb:
+            if is_thumb:
+                self.setup_thumb(
+                    finger_controls,
+                    ranged_value,
+                    cup_attr,
+                    curl_attr,
+                    spread_attr,
+                    finger_curl_attribute,
+                )
+            else:
                 self.setup_finger(
                     finger_controls,
                     metacarpal,
@@ -411,14 +431,24 @@ class HandComponent(aniseed.RigComponent):
                     cup_attr,
                     curl_attr,
                     spread_attr,
+                    finger_curl_attribute,
+                    is_last=finger_idx == len(all_tips_including_thumb) - 2
                 )
 
-    def setup_finger(self, finger_controls, metacarpal, ranged_value, cup_attr, curl_attr, spread_attr):
+    def setup_thumb(self, finger_controls, cup_attr, ranged_value, curl_attr, spread_attr, finger_curl_attribute):
+        for control in finger_controls:
+            self._connect_with_inversion(
+                [finger_curl_attribute],
+                f"{control.off}.rotateZ",
+                -0.333,
+            )
+
+    def setup_finger(self, finger_controls, metacarpal, ranged_value, cup_attr, curl_attr, spread_attr, finger_curl_attribute, is_last):
 
         # -- Setup the cup
         for control in finger_controls:
             self._connect_with_inversion(
-                curl_attr,
+                [curl_attr, finger_curl_attribute],
                 f"{control.off}.rotateZ",
                 -1,
             )
@@ -426,20 +456,34 @@ class HandComponent(aniseed.RigComponent):
         # -- Do the cup
         cup_control = metacarpal or finger_controls[0]
         self._connect_with_inversion(
-            cup_attr,
+            [cup_attr, curl_attr],
             f"{cup_control.off}.rotateX",
             1,
             multiplier=ranged_value * 0.25,
         )
 
         # -- Setup the spread
-        spread_control = metacarpal or finger_controls[0]
+        spread_factor = -0.4
+
+        if metacarpal:
+            spread_factor *= 0.5
+            self._connect_with_inversion(
+                [spread_attr],
+                f"{metacarpal.off}.rotateY",
+                1,
+                multiplier=ranged_value * spread_factor,
+            )
+
+        if is_last:
+            spread_factor *= 2
+
         self._connect_with_inversion(
-            spread_attr,
-            f"{spread_control.off}.rotateY",
+            [spread_attr],
+            f"{finger_controls[0].off}.rotateY",
             1,
-            multiplier=ranged_value * -0.1,
+            multiplier=ranged_value * spread_factor,
         )
+
 
     def get_parent(self, node: str, parent_index: int) -> str:
         """
@@ -588,14 +632,14 @@ class HandComponent(aniseed.RigComponent):
         )
 
     @classmethod
-    def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None):
+    def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None, min=-1.0, max=1.0):
 
         cmds.addAttr(
             host,
             shortName=name,
             attributeType='float',
-            minValue=-1,
-            maxValue=1,
+            minValue=min,
+            maxValue=max,
             defaultValue=0,
             keyable=True,
         )
@@ -619,32 +663,42 @@ class HandComponent(aniseed.RigComponent):
         return f"{multiply_node}.outFloat"
 
     @classmethod
-    def _connect_with_inversion(cls, connect_this, to_this, inversion, multiplier=1.0):
+    def _connect_with_inversion(cls, connect_these, to_this, inversion, multiplier=1.0):
 
-        inversion_node = cmds.createNode("floatMath")
-        cmds.setAttr(inversion_node + ".operation", 2)  # -- Multiply
-        cmds.setAttr(inversion_node + ".floatB", inversion)
-        cmds.connectAttr(
-            connect_this,
-            f"{inversion_node}.floatA",
-        )
+        # -- Create an add node
+        add_node = mref.create("plusMinusAverage")
 
-        multiply_node = cmds.createNode("floatMath")
-        cmds.setAttr(multiply_node + ".operation", 2)  # -- Multiply
-        cmds.setAttr(multiply_node + ".floatB", multiplier)
+        for connect_this in connect_these:
+            # -- Connect_this needs to go into the add node
+            mref.get(connect_this).connect_next(add_node.attr("input1D"))
 
-        cmds.connectAttr(
-            f"{inversion_node}.outFloat",
-            f"{multiply_node}.floatA"
-        )
+            # --
+            inversion_node = cmds.createNode("floatMath")
+            cmds.setAttr(inversion_node + ".operation", 2)  # -- Multiply
+            cmds.setAttr(inversion_node + ".floatB", inversion)
 
-        try:
+            # -- connect_this here needs switching to the add node
             cmds.connectAttr(
-                f"{multiply_node}.outFloat",
-                to_this
+                add_node.attr("output1D").path(),
+                f"{inversion_node}.floatA",
             )
-        except:
-            pass
+
+            multiply_node = cmds.createNode("floatMath")
+            cmds.setAttr(multiply_node + ".operation", 2)  # -- Multiply
+            cmds.setAttr(multiply_node + ".floatB", multiplier)
+
+            cmds.connectAttr(
+                f"{inversion_node}.outFloat",
+                f"{multiply_node}.floatA"
+            )
+
+            try:
+                cmds.connectAttr(
+                    f"{multiply_node}.outFloat",
+                    to_this
+                )
+            except:
+                pass
 
         return multiply_node
 

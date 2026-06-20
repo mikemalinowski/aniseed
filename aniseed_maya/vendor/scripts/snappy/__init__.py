@@ -84,12 +84,16 @@ SOFTWARE.
 """
 from .core import new
 from .core import new_forced_attribute
+from .core import add_empty_members
 from .core import get
 from .core import snap
 from .core import snappable
 from .core import groups
 from .core import groups_in_namespace
 from .core import members
+from .core import get_data
+from .core import set_data
+from .core import get_node_to_snap_to
 
 from . app import launch
 

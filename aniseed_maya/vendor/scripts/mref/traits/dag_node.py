@@ -72,7 +72,7 @@ class DagNode(mref.Trait):
         return mref.ReferenceList(
             [
                 mref.get(node)
-                for node in cmds.listRelatives(self.item.full_name(), children=True, **additional_args) or []
+                for node in cmds.listRelatives(self.item.full_name(), children=True, path=True, **additional_args) or []
                 if not name_match or name_match in node.split("|")[-1]
                 if include_shapes or not cmds.objectType(node, isAType="shape")
             ],

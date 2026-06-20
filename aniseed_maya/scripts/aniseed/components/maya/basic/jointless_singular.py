@@ -1,16 +1,15 @@
-import re
 import mref
 import aniseed
 import aniseed_toolkit
 from maya import cmds
 
 
-class Singular(aniseed.RigComponent):
+class JointlessSingular(aniseed.RigComponent):
     """
     A basic component which creates a single joint and a single control
     """
 
-    identifier = "Basic : Singular"
+    identifier = "Basic : Singular (Jointless)"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -23,10 +22,10 @@ class Singular(aniseed.RigComponent):
         )
 
         self.declare_input(
-            name="Joint",
+            name="Guide",
             value="",
-            description="Name of the joint to drive",
-            group="Joints",
+            description="Name of the guide for placement",
+            group="Control Rig",
         )
 
         self.declare_option(
@@ -70,18 +69,6 @@ class Singular(aniseed.RigComponent):
         )
 
         self.declare_option(
-            name="Create Joint",
-            description=(
-                "If enabled when the component first enters the stack, a "
-                "driving joint is created automatically (parented to the "
-                "current Maya selection) and wired into the ``Joint`` input."
-            ),
-            value=True,
-            group="Creation",
-            pre_expose=True,
-        )
-
-        self.declare_option(
             name="Align Control To World",
             description=(
                 "If enabled, the generated control is aligned to world "
@@ -89,16 +76,6 @@ class Singular(aniseed.RigComponent):
             ),
             value=False,
             group="Behaviour",
-        )
-
-        self.declare_option(
-            name="Has Initialised",
-            description=(
-                "Internal flag: True once the component's first-add "
-                "joint-creation has run. Should not be edited by hand."
-            ),
-            value=False,
-            hidden=True,
         )
 
         self.declare_output(
@@ -116,27 +93,7 @@ class Singular(aniseed.RigComponent):
         )
 
     def suggested_label(self):
-        description = self.option("Description").get()
-        description = re.sub(
-            r"(?<!^)(?=[A-Z])",
-            " ",
-            description.replace("_", " "),
-        ).title()
-
-        # -- Now add the location
-        location = self.option("Location").get()
-        label = f"{description} {location}"
-
-        # -- Finally, we want to check if there are already components in the rig
-        # -- with this label and form an identifier
-        existing_labels = {
-            component.label()
-            for component in self.rig.components(of_type=self.identifier)
-        }
-        counter = 1
-        while f"{label}{counter:02d}" in existing_labels:
-            counter += 1
-        return f"{label} {counter:02d}"
+        return self.option("Description").get()
 
     def option_widget(self, option_name):
 
@@ -149,42 +106,13 @@ class Singular(aniseed.RigComponent):
         return None
 
     def input_widget(self, requirement_name):
-        if requirement_name in ["Parent", "Joint"]:
+        if requirement_name in ["Parent", "Guide"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
         return None
 
     def on_enter_stack(self):
         super().on_enter_stack()
-
-        initialised_option = self.option("Has Initialised")
-        joint_option = self.option("Create Joint")
-        if initialised_option.get():
-            return
-
-        initialised_option.set(True)
-        joint_option.set_hidden(True)
-
-        if not joint_option.get():
-            return
-
-        selection = mref.selected()
-        parent = selection[0] if selection else None
-
-        joint = mref.create("joint", parent=parent)
-        joint.rename(
-            self.config.generate_name(
-                classification=self.config.joint,
-                description=self.option("Description").get(),
-                location=self.option("Location").get(),
-            ),
-        )
-        if parent:
-            joint.match_to(parent)
-
-        self.input("Joint").set(joint.name())
-
-        # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
     def is_valid(self) -> bool:
@@ -192,9 +120,9 @@ class Singular(aniseed.RigComponent):
             print("You must specify a Parent")
             return False
 
-        joint = self.input("Joint").get()
-        if not joint or not cmds.objExists(joint):
-            print("You must specify a valid joint")
+        guide = self.input("Guide").get()
+        if not guide or not cmds.objExists(guide):
+            print("You must specify a valid Guide")
             return False
 
         return True
@@ -206,7 +134,7 @@ class Singular(aniseed.RigComponent):
         location = self.option("Location").get()
         shape = self.option("Shape").get()
         parent = self.input("Parent").get()
-        joint = self.input("Joint").get()
+        guide = self.input("Guide").get()
 
         control = aniseed_toolkit.control.create(
             description=description,
@@ -214,7 +142,7 @@ class Singular(aniseed.RigComponent):
             config=self.config,
             shape=shape,
             parent=parent,
-            match_to=joint,
+            match_to=guide,
         )
         driving_control = control
 
@@ -226,37 +154,15 @@ class Singular(aniseed.RigComponent):
             )
 
         if self.option("Add Offset Control").get():
-            attribute = mref.get(control.ctl).add_attribute(
-                "show_offset",
-                value=False,
-                attribute_type="bool",
-                keyable=False,
-            )
-            attribute.set(channelBox=True)
-
             driving_control = aniseed_toolkit.control.create(
                 description=description + "_offset",
                 location=location,
                 config=self.config,
                 shape=shape,
                 parent=control.ctl,
-                match_to=joint,
+                match_to=guide,
             )
             self.output("Offset Control").set(driving_control.ctl)
 
-            for shape in mref.get(driving_control.ctl).shapes():
-                attribute.connect(shape.visibility)
-
-        cmds.parentConstraint(
-            driving_control.ctl,
-            joint,
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            driving_control.ctl,
-            joint,
-            maintainOffset=True,
-        )
-
         self.output("Control").set(control.ctl)
+        return True

@@ -112,6 +112,17 @@ class TreeMenu(QtWidgets.QMenu):
         )
         actions_menu.addAction(import_subtree_action)
 
+        # -- Action to search/replace a string across this component's
+        # -- label, string inputs and string options (optionally recursive)
+        search_replace_action = QtWidgets.QAction(f"Search And Replace", self._parent)
+        search_replace_action.triggered.connect(
+            functools.partial(
+                self.app.tree_widget.search_and_replace,
+                item=self.item,
+            ),
+        )
+        actions_menu.addAction(search_replace_action)
+
         # -- Finally we add the menu
         self.addMenu(actions_menu)
 

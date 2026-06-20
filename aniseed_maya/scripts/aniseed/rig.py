@@ -130,10 +130,7 @@ class Rig(xstack.Stack):
         *before* aniseed's :class:`Rig.__init__` has had a chance to
         create or attach a host) or if ``v`` is empty.
         """
-        host = getattr(self, "_host", None)
-        if not host or not v:
-            return
-        crosswalk.items.set_name(host, v)
+        return
 
     # ----------------------------------------------------------------------------------
     def config(self):

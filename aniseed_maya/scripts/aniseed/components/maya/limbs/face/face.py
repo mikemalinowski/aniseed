@@ -302,7 +302,6 @@ class FaceComponent(aniseed.RigComponent):
             keyable=False,
         )
         visibility_attribute.set(channelBox=True)
-        print("i am in here")
 
         # -- Create the mouth using the mouth component rather than duplicate
         # -- the code.
@@ -561,6 +560,29 @@ class FaceComponent(aniseed.RigComponent):
                 for shape in mref.get(direct_controls[control]).shapes():
                     attribute.connect(shape.visibility)
 
+        # -- Push mouth and eye keyables into the attribute host
+        attribute_host = mref.get(self.input("Attribute Host").get())
+        left_eye_control = mref.get(eyes_component.output("Left Eye Control").get())
+        right_eye_control = mref.get(eyes_component.output("Right Eye Control").get())
+
+        attribute_host.add_separator_attribute()
+        for attr in left_eye_control.attributes(userDefined=True):
+            if not attr.name(include_node=False).replace("_", ""):
+                continue
+            try:
+                attribute_host.add_proxy("left_" + attr.name(include_node=False), attr)
+            except Exception:
+                pass
+
+        attribute_host.add_separator_attribute()
+        for attr in right_eye_control.attributes(userDefined=True):
+            if not attr.name(include_node=False).replace("_", ""):
+                continue
+            try:
+                attribute_host.add_proxy("right_" + attr.name(include_node=False), attr)
+            except Exception:
+                pass
+
         # -- Set the outputs
         self.output("FaceRig").set(org.name())
 
@@ -576,11 +598,14 @@ class FaceComponent(aniseed.RigComponent):
         :param jaw_control: The jaw control
         :param org: This will be the parent of all the created nodes
         """
-
+        attribute_host = mref.get(self.input('Attribute Host').get())
         # -- Add our smooth attributes - the animator can use these
         # -- to dial this behaviour in and out
-        jaw_control.add_attribute("smooth_lips_left", attribute_type="float", keyable=True, value=1)
-        jaw_control.add_attribute("smooth_lips_right", attribute_type="float", keyable=True, value=1)
+        attribute_host.add_separator_attribute()
+        left_attr = jaw_control.add_attribute("smooth_lips_left", attribute_type="float", keyable=True, value=1)
+        right_attr = jaw_control.add_attribute("smooth_lips_right", attribute_type="float", keyable=True, value=1)
+        attribute_host.add_proxy(left_attr.name(include_node=False), source_attribute=left_attr)
+        attribute_host.add_proxy(right_attr.name(include_node=False), source_attribute=right_attr)
 
         # -- Now build up the data structure. This determines what is constrained
         # -- to what and with what weights etc. It just means we only have to code
@@ -822,6 +847,9 @@ class HighLevelControlRig:
         addition_nodes = self.initialise_driving_adds(attribute_dictionary)
 
         # -- Outer Lip Pullers
+        attribute_host = mref.get(self.component.input("Attribute Host").get())
+        attribute_host.add_separator_attribute()
+
         for side in ["left", "right"]:
             self.setup_lip_puller(
                 location=side,
@@ -832,6 +860,9 @@ class HighLevelControlRig:
             )
 
         # -- Top and Bottom Central Lips
+        attribute_host = mref.get(self.component.input("Attribute Host").get())
+        attribute_host.add_separator_attribute()
+
         for location in ["upper", "lower"]:
             self.setup_central_lip(
                 section=location,
@@ -841,6 +872,9 @@ class HighLevelControlRig:
             )
 
         # -- Nose
+        attribute_host = mref.get(self.component.input("Attribute Host").get())
+        attribute_host.add_separator_attribute()
+
         self.setup_nose(
             guide=self.component.input("nose_guide").get(),
             parent=self.component.input("Parent").get(),
@@ -849,6 +883,9 @@ class HighLevelControlRig:
 
         # -- Inner & Outer Brows
         for side in ["left", "right"]:
+            attribute_host = mref.get(self.component.input("Attribute Host").get())
+            attribute_host.add_separator_attribute()
+
             self.setup_inner_brow(
                 location=side,
                 guide=self.component.input(f"{side}_brow_inner_guide").get(),
@@ -1006,11 +1043,15 @@ class HighLevelControlRig:
             destination_attribute,
             clamp_min=0,
             clamp_max=1,
+            proxy_prefix="",
     ):
         """
         This will expose the given destination attribute up to the control
         but it will also reverse the value and clamp it.
         """
+        attribute_host = mref.get(self.component.input("Attribute Host").get())
+        if proxy_prefix:
+            proxy_prefix += "_"
         # -- Create the attribute if it does not already exist
         if control.has_attribute(label):
             attribute = control.attr(label)
@@ -1021,6 +1062,7 @@ class HighLevelControlRig:
                 attribute_type="float",
                 keyable=True,
             )
+            attribute_host.add_proxy(proxy_prefix + attribute.name(include_node=False), attribute)
 
         # -- Setup the clamp
         clamp = mref.create("clamp")
@@ -1044,11 +1086,17 @@ class HighLevelControlRig:
             clamp_min=0,
             clamp_max=1,
             do_next=True,
+            proxy_prefix="",
+            do_proxy=True,
     ):
         """
         This will expose the attribute on the control, allowing the animator to drive
         it directly.
         """
+        attribute_host = mref.get(self.component.input("Attribute Host").get())
+        if proxy_prefix:
+            proxy_prefix += "_"
+
         # -- Create the attribute if it does not already exist
         if control.has_attribute(label):
             attribute = control.attr(label)
@@ -1059,6 +1107,7 @@ class HighLevelControlRig:
                 attribute_type="float",
                 keyable=True,
             )
+            attribute_host.add_proxy(proxy_prefix + attribute.name(include_node=False), attribute)
 
         # -- Setup the clamp
         clamp = mref.create("clamp")
@@ -1086,6 +1135,8 @@ class HighLevelControlRig:
             control=control,
             label=f"blink",
             destination_attribute=connection_map[f"{location}_blink"],
+            proxy_prefix=location,
+            do_proxy=False,
         )
 
     def setup_inner_brow(self, location, guide, parent, connection_map):
@@ -1122,12 +1173,14 @@ class HighLevelControlRig:
         self.expose_direct(
             control=control,
             label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_up"]
+            destination_attribute=connection_map[f"{location}_brow_mid_up"],
+            proxy_prefix=location,
         )
         self.expose_reversal_direct(
             control=control,
             label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_down"]
+            destination_attribute=connection_map[f"{location}_brow_mid_down"],
+            proxy_prefix=location,
         )
 
     def setup_nose(self, guide, parent, connection_map):
@@ -1147,12 +1200,12 @@ class HighLevelControlRig:
         self.expose_direct(
             control=control,
             label=f"left_nose_flare",
-            destination_attribute=connection_map[f"left_nose_flare"]
+            destination_attribute=connection_map[f"left_nose_flare"],
         )
         self.expose_direct(
             control=control,
             label=f"right_nose_flare",
-            destination_attribute=connection_map[f"right_nose_flare"]
+            destination_attribute=connection_map[f"right_nose_flare"],
         )
 
     def setup_central_lip(self, section, guide, parent, connection_map):
@@ -1166,6 +1219,7 @@ class HighLevelControlRig:
         :param connection_map: A dictionary of labels where the value is the
             attribute it represents.
         """
+
         # -- Create our control
         control = self.resolve_control(
             description=f"{section}_lip",
@@ -1203,12 +1257,14 @@ class HighLevelControlRig:
             label=f"right_sneer",
             destination_attribute=connection_map[f"right_lip_sneer_{section}"],
             clamp_min=-1,
+            proxy_prefix=section,
         )
         self.expose_direct(
             control=control,
             label=f"left_sneer",
             destination_attribute=connection_map[f"left_lip_sneer_{section}"],
             clamp_min=-1,
+            proxy_prefix=section,
         )
         #
         # # -- Set up the sneering fixer - this resolves the middle of the lips
@@ -1253,6 +1309,7 @@ class HighLevelControlRig:
             clamp_min=-1,
             clamp_max=1,
             do_next=False,
+            proxy_prefix=section,
         )
 
         # -- Ensure the result is always clamped.
@@ -1266,6 +1323,7 @@ class HighLevelControlRig:
         """
         This will create the control for the lip pullers (left and right)
         """
+
         control = self.resolve_control(
             description=f"lip_puller",
             identity_label=f"{location}_lip_corner",
@@ -1337,11 +1395,13 @@ class HighLevelControlRig:
             control=control,
             label="Blow",
             destination_attribute=connection_map[f"{location}_cheek_blow"],
+            proxy_prefix=location,
         )
         self.expose_reversal_direct(
             control=control,
             label="Blow",
             destination_attribute=connection_map[f"{location}_cheek_suck"],
+            proxy_prefix=location,
         )
 
     def setup_outer_brow(self, location, guide, parent, connection_map):
@@ -1369,12 +1429,14 @@ class HighLevelControlRig:
             control=control,
             label="squint_inner",
             destination_attribute=connection_map[f"{location}_squint_inner"],
+            proxy_prefix=location,
         )
 
         self.expose_direct(
             control=control,
             label="squint_outer",
             destination_attribute=connection_map[f"{location}_squint_outer"],
+            proxy_prefix=location,
         )
 
 
@@ -1491,6 +1553,8 @@ class MixerTools:
             aniseed_toolkit.mirror.global_mirror(
                 transforms=[target.name() for target in source_targets],
                 name_replacement=[direction_mapping[0], direction_mapping[1]],
+                behaviour=True,
+                rotate_flip=True,
             )
 
     def set_pose_visibility(self, value):
@@ -1550,9 +1614,6 @@ class MixerTools:
                     try: controller.attr(f"scale{axis}").set(1)
                     except: pass
 
-                if "deformer_upper_lip_inner_left" in target.name():
-                    print(deformer.name())
-            print(matrices)
             for i in range(len(deformers)):
                 for target, matrix in matrices.items():
                     n = mref.create("transform", name="exampl_" + target.name())

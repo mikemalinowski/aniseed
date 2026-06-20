@@ -181,7 +181,7 @@ class LegComponent(aniseed.RigComponent):
         self.ik_bindings: list[str] = []
         self.ik_joints: list[str] = []
         self.nk_joints: list[str] = []
-        self.shape_rotation = [0, 0, 0]
+        self.shape_rotation = [0, 0, 90]
         self.shape_flip = False
 
     def on_enter_stack(self):
@@ -357,7 +357,7 @@ class LegComponent(aniseed.RigComponent):
             description=f"{self.prefix}LegConfig",
             location=self.location,
             parent=self.org,
-            shape="core_lollipop",
+            shape="core_floating_config",
             config=self.config,
             match_to=self.leg_joints[0],
             shape_scale=20.0,
@@ -400,10 +400,10 @@ class LegComponent(aniseed.RigComponent):
             description=f"{self.prefix}Foot",
             location=self.location,
             parent=self.org,
-            shape="core_paddle",
+            shape="core_foot_paddle",
             config=self.config,
             shape_scale=40.0,
-            rotate_shape=[0, 90, 0] if self.shape_flip else [0, -90, 0],
+            # rotate_shape=[0, 90, 0] if self.shape_flip else [0, -90, 0],
             match_to=self.input("Ball Guide").get()
         )
         self.ik_controls.append(self.ik_foot_control.ctl)
@@ -423,11 +423,11 @@ class LegComponent(aniseed.RigComponent):
             description=f"{self.prefix}Heel",
             location=self.location,
             parent=self.ik_pivot_endpoint,
-            shape="core_paddle",
+            shape="core_half_circle",
             config=self.config,
             match_to=self.leg_joints[-1],
             shape_scale=10,
-            rotate_shape=[90, 0, 0],
+            rotate_shape=[0, 90, 0],
         )
         self.ik_controls.append(self.ik_heel_control.ctl)
 
@@ -448,11 +448,11 @@ class LegComponent(aniseed.RigComponent):
             description=f"{self.prefix}Toe",
             location=self.location,
             parent=self.ik_pivot_endpoint,
-            shape="core_paddle",
+            shape="core_half_circle",
             config=self.config,
             match_to=self.leg_joints[-1],
             shape_scale=10,
-            rotate_shape=[180, 0, 0],
+            rotate_shape=[0, 90, 0],
         )
         self.ik_controls.append(self.ik_toe_control.ctl)
 
@@ -477,11 +477,11 @@ class LegComponent(aniseed.RigComponent):
                 description=f"{self.prefix}{self._LABELS[idx]}FK",
                 location=self.location,
                 parent=fk_parent,
-                shape="core_paddle",
+                shape="core_rounded_square",
                 config=self.config,
                 match_to=joint,
                 shape_scale=20.0,
-                rotate_shape=self.shape_rotation,
+                rotate_shape=[0, 0, 90],
             )
             self.fk_controls.append(fk_control.ctl)
             fk_parent = fk_control.ctl
@@ -521,7 +521,6 @@ class LegComponent(aniseed.RigComponent):
                     location=self.location,
                 )
             )
-            print("makde with location : %s " % self.location)
             self.ik_joints.append(joint)
 
         # -- Ensure all the rotation values are on the joint
@@ -695,25 +694,43 @@ class LegComponent(aniseed.RigComponent):
                 force=True,
             )
 
+        # -- Move the config control under the foot nk
+        mref.get(self.config_control.org).set_parent(self.nk_joints[-2])
+        mref.get(self.config_control.org).match_to(self.nk_joints[-2])
+        mref.get(self.config_control.ctl).lock_attributes(["tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz"])
     def create_snap(self):
         """
         Snap is the mechanism for IK/FK snapping
         """
-        group = "IKFK_%s_%s" % (
-            self.prefix + "Leg",
+        ikfk_group = "IKFK_Leg_%s_%s" % (
+            self.prefix,
             self.location,
+        )
+        ikonly_group = "IKOnly_Leg_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+        fkonly_group = "FKOnly_Leg_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+
+        snappy.set_data(
+            data_name="ikfk_attribute",
+            data_value=f"{self.config_control.ctl}.ikfk",
+            group=[ikfk_group, fkonly_group, ikonly_group],
         )
 
         snappy.new(
             node=self.ik_foot_control.ctl,
             target=self.nk_joints[2],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=self.upvector_control.ctl,
             target=self.nk_joints[1],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         for pivot_control in self.pivot_controls:
@@ -722,14 +739,34 @@ class LegComponent(aniseed.RigComponent):
             snappy.new(
                 node=pivot_control,
                 target=None,
-                group=group,
+                group=[ikfk_group, ikonly_group],
             )
+
+        snappy.new(
+            node=self.ik_heel_control.ctl,
+            target=None,
+            group=[ikfk_group, ikonly_group],
+        )
+
+        snappy.add_empty_members(
+            nodes=[
+                self.ik_foot_control.ctl,
+                self.upvector_control.ctl,
+                self.ik_heel_control.ctl,
+                self.ik_toe_control.ctl,
+            ] + self.pivot_controls,
+            group=fkonly_group,
+        )
 
         for idx, fk_control in enumerate(self.fk_controls):
             snappy.new(
                 node=fk_control,
                 target=self.nk_joints[idx],
-                group=group,
+                group=[ikfk_group, fkonly_group],
+            )
+            snappy.add_empty_members(
+                nodes=[fk_control],
+                group=ikonly_group,
             )
 
         for attribute_name in self.guide_tags:
@@ -739,8 +776,9 @@ class LegComponent(aniseed.RigComponent):
                 node=self.ik_foot_control.ctl,
                 attribute_name=attribute_name,
                 attribute_value=0,
-                group=group,
+                group=[ikfk_group, ikonly_group],
             )
+
 
     def create_twists(self):
 

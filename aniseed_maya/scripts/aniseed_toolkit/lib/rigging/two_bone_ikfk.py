@@ -12,6 +12,7 @@ def create_two_bone_ikfk(
         soft_ik=None,
         soft_ik_host=None,
         constrain=True,
+        constrain_endpoint_rotation=True,
     ):
     instance = TwoBoneIKFK(
         parent,
@@ -22,6 +23,7 @@ def create_two_bone_ikfk(
         soft_ik,
         soft_ik_host,
         constrain,
+        constrain_endpoint_rotation,
     )
     instance.create()
     return instance
@@ -38,6 +40,7 @@ class TwoBoneIKFK:
             soft_ik=None,
             soft_ik_host=None,
             constrain=True,
+            constrain_endpoint_rotation=True,
     ):
         # -- Store our input variables
         self.parent = mref.get(parent)
@@ -52,6 +55,7 @@ class TwoBoneIKFK:
             self.end_joint.full_name(),
         )
         self.constrain = constrain
+        self.constrain_endpoint_rotation = constrain_endpoint_rotation
 
         # -- Declare our output variables
         self.org = None
@@ -122,12 +126,13 @@ class TwoBoneIKFK:
         )
 
         # -- Constrain the rotation of the last joint
-        cmds.parentConstraint(
-            self.ik_target.full_name(),
-            self.ik_chain[-1].full_name(),
-            maintainOffset=True,
-            skipTranslate=["x", "y", "z"],
-        )
+        if self.constrain_endpoint_rotation:
+            cmds.parentConstraint(
+                self.ik_target.full_name(),
+                self.ik_chain[-1].full_name(),
+                maintainOffset=True,
+                skipTranslate=["x", "y", "z"],
+            )
 
         if self.apply_soft_ik:
             self.apply_soft_ik_behaviour()

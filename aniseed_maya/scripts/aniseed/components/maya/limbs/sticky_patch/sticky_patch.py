@@ -388,7 +388,6 @@ class AngledStickyPatchComponent(StickyPatchComponent):
         # -- Get the control and follicle
         control = aniseed_toolkit.control.get(self.output("Control").get())
         follicle = self.output("Follicle").get()
-        print("follicle : %s" % follicle)
         follicle_xform = cmds.listRelatives(follicle, parent=True)[0]
         
         # -- Create an aim upvector

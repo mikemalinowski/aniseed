@@ -72,11 +72,25 @@ class TransformMixer(aniseed.RigComponent):
 
         self.option("Node").set(mixer.node.name())
 
+        for constraint_data in self.option("Constraint Mapping").get():
+            deformer_name = constraint_data[0]
+            node_to_drive = mref.get(constraint_data[-1])
+            deformer_node = mixer.get_deformer(deformer_name=deformer_name)
+
+            deformer_node.translate.connect(node_to_drive.translate)
+            deformer_node.rotate.connect(node_to_drive.rotate)
+            deformer_node.scale.connect(node_to_drive.scale)
+
+
+
+
     def add_deformer(self):
+
         mixer = self.mixer()
 
         if not mixer:
             return
+        pre_selection = mref.selected()
 
         deformer_name = qtility.request.text(
             title="Add Deformer",
@@ -86,21 +100,35 @@ class TransformMixer(aniseed.RigComponent):
         if not deformer_name:
             return
 
-        mixer.add_deformer(name=deformer_name)
+        deformer_node = mixer.add_deformer(name=deformer_name)
 
+        constraint_mapping = self.option("Constraint Mapping").get()
+
+        if pre_selection:
+            deformer_node.parent().match_to(pre_selection[0])
+            constraint_mapping.append(
+                [
+                    deformer_node.deformer_name.get(),
+                    pre_selection[0].name(),
+                ],
+            )
+
+        self.option("Constraint Mapping").set(constraint_mapping)
+        mref.select(deformer_node)
     def remove_deformer(self):
         mixer = self.mixer()
 
         if not mixer:
             return
 
+        deformer_names = [
+            deformer.deformer_name.get()
+            for deformer in mixer.deformers()
+        ]
         deformer_name = qtility.request.item(
-            items=[
-                deformer["name"]
-                for deformer in mixer.deformers()
-            ],
+            items=deformer_names,
             editable=False,
-            parent=self,
+            parent=None,
             title="Select Deformer",
             message="Select the deformer to remove",
         )
@@ -204,7 +232,7 @@ class ConstraintMappingWidget(QtWidgets.QWidget):
 
         driving_deformer = qtility.request.item(
             items=[
-                deformer["name"]
+                deformer.deformer_name.get()
                 for deformer in mixer.deformers()
             ],
             editable=False,
@@ -217,28 +245,35 @@ class ConstraintMappingWidget(QtWidgets.QWidget):
             return
 
         existing_labels = [
-            self.list_Widget.item(idx).text()
+            self.list_widget.item(idx).text()
             for idx in range(self.list_widget.count())
         ]
         for node in selection:
             label = f"{driving_deformer}{self.denominator}{node.name()}"
             if label not in existing_labels:
                 self.list_widget.addItem(label)
-
+        self.changed.emit()
     def remove_constraint(self):
         for item in self.list_widget.selectedItems():
-            row = self.list_widget.row(item)
-            self.list_widget.takeAt(row)
-
+            self.list_widget.takeItem(self.list_widget.row(item))
+            # row = self.list_widget.row(item)
+            # self.list_widget.takeAt(row)
+        self.changed.emit()
     def set_value(self, data):
         for pairing in data:
             self.list_widget.addItem(f"{pairing[0]}{self.denominator}{pairing[1]}")
 
     def get_value(self):
-        return [
-            item.text().split(self.denominator)
-            for item in self.list_widget.items()
-        ]
+        results = []
+
+        for i in range(self.list_widget.count()):
+            item = self.list_widget.item(i)
+            results.append(item.text().split(self.denominator))
+        # return [
+        #     item.text().split(self.denominator)
+        #     for item in self.list_widget.items()
+        # ]
+        return results
 
     def update_mixer_data(self, data):
         self.mixer_data = data

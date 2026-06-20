@@ -155,7 +155,7 @@ class ArmComponent(aniseed.RigComponent):
         self.ik_controls: list[str] = []
         self.ik_joints: list[str] = []
         self.nk_joints: list[str] = []
-        self.shape_rotation = [90, 0, 0]
+        self.shape_rotation = [0, 0, 90]
 
     def on_enter_stack(self):
         """
@@ -309,6 +309,11 @@ class ArmComponent(aniseed.RigComponent):
             soft_ik_host=self.ik_hand_control.ctl,
         )
 
+        # -- Move the config control under the end root
+        mref.get(self.config_control.org).set_parent(ikfk_setup.blend_chain[-1])
+        mref.get(self.config_control.org).match_to(ikfk_setup.blend_chain[-1])
+        mref.get(self.config_control.ctl).lock_transform_attributes(hide=True)
+
         # -- Create the guide line
         aniseed_toolkit.guide.link(
             self.upvector_control.ctl,
@@ -392,7 +397,7 @@ class ArmComponent(aniseed.RigComponent):
             description=f"{prefix}Shoulder",
             location=location,
             parent=self.org,
-            shape="core_cube",
+            shape="core_half_circle",
             config=self.config,
             match_to=self.arm_joints[0],
             shape_scale=5.0,
@@ -411,7 +416,7 @@ class ArmComponent(aniseed.RigComponent):
             description=f"{prefix}ArmConfig",
             location=location,
             parent=self.shoulder_control.ctl,
-            shape="core_lollipop",
+            shape="core_floating_config",
             config=self.config,
             match_to=self.arm_joints[0],
             shape_scale=20.0,
@@ -434,7 +439,7 @@ class ArmComponent(aniseed.RigComponent):
             description=f"{self.prefix}UpperArmFK",
             location=self.location,
             parent=self.shoulder_control.ctl,
-            shape="core_paddle",
+            shape="core_rounded_square",
             config=self.config,
             match_to=self.arm_joints[1],
             shape_scale=20.0,
@@ -445,7 +450,7 @@ class ArmComponent(aniseed.RigComponent):
             description=f"{self.prefix}LowerArmFK",
             location=self.location,
             parent=self.fk_upper_control.ctl,
-            shape="core_paddle",
+            shape="core_rounded_square",
             config=self.config,
             match_to=self.arm_joints[2],
             shape_scale=20.0,
@@ -456,7 +461,7 @@ class ArmComponent(aniseed.RigComponent):
             description=f"{self.prefix}HandFK",
             location=self.location,
             parent=self.fk_lower_control.ctl,
-            shape="core_paddle",
+            shape="core_rounded_square",
             config=self.config,
             match_to=self.arm_joints[3],
             shape_scale=20.0,
@@ -519,39 +524,69 @@ class ArmComponent(aniseed.RigComponent):
             )
 
     def _create_snap(self):
-        group = "IKFK_Arm_%s_%s" % (
+        ikfk_group = "IKFK_Arm_%s_%s" % (
             self.prefix,
             self.location,
+        )
+        ikonly_group = "IKOnly_Arm_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+        fkonly_group = "FKOnly_Arm_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+
+        snappy.set_data(
+            data_name="ikfk_attribute",
+            data_value=f"{self.config_control.ctl}.ikfk",
+            group=[ikfk_group, fkonly_group, ikonly_group],
         )
 
         snappy.new(
             node=self.ik_hand_control.ctl,
             target=self.nk_joints[2],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=self.upvector_control.ctl,
             target=self.nk_joints[1],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=self.fk_upper_control.ctl,
             target=self.nk_joints[0],
-            group=group,
+            group=[ikfk_group, fkonly_group],
         )
 
         snappy.new(
             node=self.fk_lower_control.ctl,
             target=self.nk_joints[1],
-            group=group,
+            group=[ikfk_group, fkonly_group],
         )
 
         snappy.new(
             node=self.fk_hand_control.ctl,
             target=self.nk_joints[2],
-            group=group,
+            group=[ikfk_group, fkonly_group],
+        )
+
+        snappy.add_empty_members(
+            nodes=[
+                self.fk_upper_control.ctl,
+                self.fk_lower_control.ctl,
+                self.fk_hand_control.ctl,
+            ],
+            group=ikonly_group,
+        )
+        snappy.add_empty_members(
+            nodes=[
+                self.ik_hand_control.ctl,
+                self.upvector_control.ctl,
+            ],
+            group=fkonly_group,
         )
 
     def _create_twist_setup(self):
@@ -847,4 +882,3 @@ class ArmComponent(aniseed.RigComponent):
         self.ik_controls: list[str] = []
         self.ik_joints: list[str] = []
         self.nk_joints: list[str] = []
-        self.shape_rotation = [90, 0, 0]

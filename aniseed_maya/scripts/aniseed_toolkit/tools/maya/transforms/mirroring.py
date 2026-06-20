@@ -15,6 +15,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
         transforms: list[str] or str = None,
         across: str = "YZ",
         behaviour: bool = True,
+        flip_xy_rotations: bool = False,
         name_replacement: dict = None,
     ):
         """
@@ -38,6 +39,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
             across=across,
             behaviour=behaviour,
             name_replacement=name_replacement,
+            rotate_flip=flip_xy_rotations,
         )
 
 

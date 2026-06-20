@@ -24,6 +24,26 @@ class AnimCurve(mref.Trait):
     def can_bind(cls, pointer) -> bool:
         return isinstance(pointer, om.MObject) and pointer.hasFn(om.MFn.kAnimCurve)
 
+    def scale(self, scale_by: float):
+        anim_curve = self.item.name()
+
+        key_count = cmds.keyframe(anim_curve, query=True, keyframeCount=True)
+
+        for i in range(key_count):
+            value = cmds.keyframe(
+                anim_curve,
+                query=True,
+                index=(i, i),
+                valueChange=True
+            )[0]
+
+            cmds.keyframe(
+                anim_curve,
+                edit=True,
+                index=(i, i),
+                valueChange=value * scale_by
+            )
+
     def to_dictionary(self) -> dict:
         """
         Serialise this anim curve to a dictionary containing the

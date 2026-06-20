@@ -49,6 +49,19 @@ class FkSweep(aniseed.RigComponent):
             group="Visuals",
         )
 
+        self.declare_option(
+            name="Add Offset Control",
+            description=(
+                "If enabled, a second control is created and parented under "
+                "the main control. The offset control becomes the driving "
+                "control for the joint, letting animators add layered offsets "
+                "on top of the main control."
+            ),
+            value=False,
+            group="Behaviour",
+            pre_expose=True,
+        )
+
     def input_widget(self, requirement_name: str):
         if requirement_name == "Hierarchy Root":
             return aniseed.widgets.ObjectSelector(component=self)
@@ -71,6 +84,7 @@ class FkSweep(aniseed.RigComponent):
 
         joints = hierarchy_root.children(recursive=True, node_type="joint")
         joints = sorted(joints, key=lambda x: x.full_name().count("|"))
+        joints.insert(0, hierarchy_root)
 
 
         # -- sort the joints by depth
@@ -101,15 +115,36 @@ class FkSweep(aniseed.RigComponent):
                 shape=self.option("Shape").get(),
                 config=self.config,
             )
+            driver = control.ctl
+
+            if self.option("Add Offset Control").get():
+                attribute = mref.get(control.ctl).add_attribute(
+                    "show_offset",
+                    value=False,
+                    attribute_type="bool",
+                    keyable=False,
+                )
+                attribute.set(channelBox=True)
+
+                driving_control = aniseed_toolkit.control.create(
+                    description=description + "_offset",
+                    location=location,
+                    config=self.config,
+                    shape=self.option("Shape").get(),
+                    parent=control.ctl,
+                    match_to=joint_name,
+                )
+                driver = driving_control.ctl
+
 
             # -- Now constraint the joint to the control
             cmds.parentConstraint(
-                control.ctl,
+                driver,
                 joint.full_name(),
                 maintainOffset=True,
             )
             cmds.scaleConstraint(
-                control.ctl,
+                driver,
                 joint.full_name(),
                 maintainOffset=True,
             )

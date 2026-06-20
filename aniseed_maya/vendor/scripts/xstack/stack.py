@@ -189,12 +189,7 @@ class Stack:
                 component_instance.option(option_name).set(value)
 
             except AttributeError:
-                traceback.print_exc()
-                print(component_instance.options())
-                print(
-                    f"{option_name} does not exist as an "
-                    f"option for {component_type}"
-                )
+                continue
 
         # -- Set any input values we were given
         for input_name, value in (inputs or dict()).items():

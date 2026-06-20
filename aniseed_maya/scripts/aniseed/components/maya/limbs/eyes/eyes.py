@@ -302,8 +302,6 @@ class EyesComponent(aniseed.RigComponent):
             master_aim_control.ctl,
         )
 
-        print(f"made {right_aim_control.org} a child of {master_aim_control.ctl}")
-
         # -- Set all our outputs
         self.output("Left Eye Control").set(lf_eye_component.output("Eye Control").get())
         self.output("Left Aim Control").set(lf_eye_component.output("Aim Control").get())
@@ -790,6 +788,12 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         cmds.parentConstraint(
+            direct_eye_control.ctl,
+            eye_joint,
+            maintainOffset=True,
+        )
+
+        cmds.scaleConstraint(
             direct_eye_control.ctl,
             eye_joint,
             maintainOffset=True,

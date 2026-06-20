@@ -52,6 +52,7 @@ class SplineSpine(aniseed.RigComponent):
         self.declare_option(name="Orient FK Controls To World", value=False, group="Behaviour")
         self.declare_option(name="Lock End Orientations To Controls", value=True, group="Behaviour")
         self.declare_option(name="FK Interaction Mode", value=False, group="Behaviour")
+        self.declare_option(name="Invalidate First Fk Control", value=False, group="Behaviour")
 
         # -- Hidden Option (data storage)
         self.declare_option(name="GuideData", value=None, hidden=True)
@@ -301,7 +302,7 @@ class SplineSpine(aniseed.RigComponent):
             description=f"{descriptive}Master",
             location=location,
             parent=org,
-            shape=self.option("Shape").get(),
+            shape="core_rounded_square",
             shape_scale=control_scale * 1.25,
             config=self.config,
             match_to=spline_setup.out_controls[0].full_name(),
@@ -345,6 +346,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Constrain the joints to the Fk controls. This is because the fk
         # -- setup is designed to follow the ik setup all the time.
+        fk_tweaks = []
         for idx in range(len(fk_controls)):
 
             fk_control = mref.get(fk_controls[idx].ctl)
@@ -356,12 +358,26 @@ class SplineSpine(aniseed.RigComponent):
                     description=f"{descriptive}FkOffset",
                     location=location,
                     parent=fk_control.full_name(),
-                    shape=self.option("Shape").get(),
+                    shape="core_circle",
                     shape_scale=control_scale,
                     config=self.config,
                     match_to=fk_control.full_name(),
                 ).ctl,
             )
+            fk_tweaks.append(fk_tweak)
+
+            if self.option("Invalidate First Fk Control").get() and not idx:
+                fk_control.rename(
+                    self.config.generate_name(
+                        classification="amech",
+                        description=self.config.extract_description(fk_control.name()),
+                        location=self.config.extract_location(fk_control.full_name()),
+                        counter=self.config.extract_counter(fk_control.full_name()),
+                    ),
+                )
+                fk_control.lock_transform_attributes(hide=True)
+                for shape in fk_control.shapes():
+                    mref.delete(shape)
 
             show_offset_attribute = fk_control.add_attribute(
                 "show_offset",
@@ -389,9 +405,10 @@ class SplineSpine(aniseed.RigComponent):
             for nurbs_shape in fk_control.shapes():
                 fk_visibility.connect(f"{nurbs_shape.full_name()}.visibility")
 
-            show_offset_multiplier.outFloat.connect(
-                f"{fk_tweak.full_name()}.visibility",
-            )
+            for nurbs_shape in fk_tweak.shapes():
+                show_offset_multiplier.outFloat.connect(
+                    f"{nurbs_shape.full_name()}.visibility",
+                )
 
         for ik_control in ik_controls:
             ik_control = mref.get(ik_control.ctl)
@@ -404,8 +421,8 @@ class SplineSpine(aniseed.RigComponent):
         self.output("Root Transform").set(spline_setup.out_trace_joints[0].name())
         self.output("Tip Transform").set(spline_setup.out_trace_joints[-1].name())
         self.output("Master Control").set(master_control.ctl)
-        self.output("Fk Root").set(fk_controls[0].ctl)
-        self.output("Fk Tip").set(fk_controls[-1].ctl)
+        self.output("Fk Root").set(fk_tweaks[0].name())
+        self.output("Fk Tip").set(fk_tweaks[-1].name())
 
     def setup_ik_controls(self, master_control, spline_setup, no_transform_node):
         """
@@ -420,14 +437,6 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Define our running parent
         parent = master_control.ctl
-        print("reload test")
-        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
-            "tweaker_visibility",
-            value=False,
-            attribute_type="bool",
-            keyable=False,
-        )
-        tweaker_vis_attribute.set(channelBox=True)
 
         # -- We need to keep track of the ik controls we build
         ik_controls = []
@@ -447,9 +456,6 @@ class SplineSpine(aniseed.RigComponent):
                 orient_to_world=orient_to_world,
                 drive_this=spline_setup.out_controls[idx].full_name(),
             )
-
-            for shape in mref.get(base_control_tweaker.ctl).shapes():
-                tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility")
 
             # -- If we need to orient to world then we do that by adjusting
             # -- the rotation of the control org.
@@ -475,7 +481,7 @@ class SplineSpine(aniseed.RigComponent):
 
         return ik_controls
 
-    def create_fk(self, parent, spline_setup):
+    def create_fk(self, parent, spline_setup, invalidate_first_control=False):
         """
         Creates our FK controllers
         """
@@ -519,7 +525,6 @@ class SplineSpine(aniseed.RigComponent):
             cmds.connectAttr(f"{decompose_node}.outputScale", f"{fk_control.org}.scale")
 
             if self.option("Orient FK Controls To World").get():
-                print("CREATING FK :: ZERO")
                 cmds.xform(
                     fk_control.zero,
                     rotation=(0, 0, 0),
@@ -561,7 +566,7 @@ class SplineSpine(aniseed.RigComponent):
             description=descriptive,
             location=location,
             parent=parent,
-            shape=self.option("Shape").get(),
+            shape="core_pinched_circle",
             shape_scale=shape_scale,
             config=self.config,
             match_to=match_to,
@@ -570,7 +575,7 @@ class SplineSpine(aniseed.RigComponent):
             description=f"{descriptive}Tweak",
             location=location,
             parent=main_control.ctl,
-            shape=self.option("Shape").get(),
+            shape="core_circle",
             shape_scale=shape_scale * 0.75,
             config=self.config,
             match_to=match_to,
@@ -589,6 +594,18 @@ class SplineSpine(aniseed.RigComponent):
             drive_this,
             maintainOffset=True,
         )
+
+        # -- Add the tweak attribute
+        show_tweak = mref.get(main_control.ctl).add_attribute(
+            "show_tweak",
+            attribute_type="bool",
+            keyable=False,
+            value=True,
+        )
+        show_tweak.set(channelBox=True)
+
+        for shape in mref.get(tweak_control.ctl).shapes():
+            show_tweak.connect(shape.visibility, force=True)
 
         # -- As we're made up of a pair of controls, we return
         # -- a list of them both.

@@ -1,4 +1,6 @@
 from maya import cmds
+
+import mref
 import maya.api.OpenMaya as om
 
 from . import decorators
@@ -23,89 +25,176 @@ def new(node, target, group=""):
     :return: Snap node containing the offset
     :rtype: pm.nt.DependNode
     """
-    # -- Create a new snap node
-    snap_node = _create_snap_node()
-
-    # -- Now we can start hooking up the relevant
-    # -- attributes
-    cmds.setAttr(f"{snap_node}.group", group, type="string")
-    cmds.setAttr(f"{snap_node}.snapNode", True)
-
-    # -- Connect the relationship attributes
-    if target:
+    if not isinstance(group, list):
+        group = [group]
+    
+    groups = group
+    snap_nodes = []
+    
+    for group in groups:
+        # -- Create a new snap node
+        snap_node = _create_snap_node()
+    
+        # -- Now we can start hooking up the relevant
+        # -- attributes
+        cmds.setAttr(f"{snap_node}.group", group, type="string")
+        cmds.setAttr(f"{snap_node}.snapNode", True)
+    
+        # -- Connect the relationship attributes
+        if target:
+            cmds.connectAttr(
+                f"{target}.message",
+                f"{snap_node}.snapTarget",
+                force=True,
+            )
+    
         cmds.connectAttr(
-            f"{target}.message",
-            f"{snap_node}.snapTarget",
+            f"{node}.message",
+            f"{snap_node}.snapSource",
             force=True,
         )
-
-    cmds.connectAttr(
-        f"{node}.message",
-        f"{snap_node}.snapSource",
-        force=True,
-    )
-
-    if target:
-        # -- Finally we need to get the relative matrix
-        # -- between the two objects in their current
-        # -- state.
-        node_to_modify_mat4 = om.MMatrix(
-            cmds.xform(
-                node,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
+    
+        if target:
+            # -- Finally we need to get the relative matrix
+            # -- between the two objects in their current
+            # -- state.
+            node_to_modify_mat4 = om.MMatrix(
+                cmds.xform(
+                    node,
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+            )
+    
+            node_of_interest_mat4 = om.MMatrix(
+                cmds.xform(
+                    target,
+                    query=True,
+                    matrix=True,
+                    worldSpace=True,
+                ),
+            )
+    
+            # -- Determine the offset between the two
+            offset_mat4 = node_to_modify_mat4 * node_of_interest_mat4.inverse()
+    
+        else:
+            offset_mat4 = om.MMatrix()
+    
+        # -- Store that matrix into the matrix
+        # -- attribute
+        cmds.setAttr(
+            f"{snap_node}.offsetMatrix",
+            offset_mat4,
+            type="matrix",
         )
+        snap_nodes.append(snap_node)
 
-        node_of_interest_mat4 = om.MMatrix(
-            cmds.xform(
-                target,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
+    return snap_nodes
+
+
+# --------------------------------------------------------------------------------------
+def add_empty_members(nodes, group=""):
+    """
+    Creates a snap mapping from the given node to the target. The current
+    offset between the two are stored during this process, allowing for that
+    offset to be retained when a snap is requested.
+
+    :param node: The node which can be snapped
+    :type node: pm.nt.Transform
+
+    :param target: The node which acts as a snapping target.
+    :type target: pm.nt.Transform
+
+    :param group: An identifier for the snap offset
+    :type group: str
+
+    :return: Snap node containing the offset
+    :rtype: pm.nt.DependNode
+    """
+    snap_nodes = []
+
+    for node in nodes:
+        # -- Create a new snap node
+        snap_node = _create_empty_member_node()
+
+        # -- Now we can start hooking up the relevant
+        # -- attributes
+        cmds.setAttr(f"{snap_node}.group", group, type="string")
+        cmds.setAttr(f"{snap_node}.snapEmptyMemberNode", True)
+
+        cmds.connectAttr(
+            f"{node}.message",
+            f"{snap_node}.snapSource",
+            force=True,
         )
+        snap_nodes.append(snap_node)
 
-        # -- Determine the offset between the two
-        offset_mat4 = node_to_modify_mat4 * node_of_interest_mat4.inverse()
-
-    else:
-        offset_mat4 = om.MMatrix()
-
-    # -- Store that matrix into the matrix
-    # -- attribute
-    cmds.setAttr(
-        f"{snap_node}.offsetMatrix",
-        offset_mat4,
-        type="matrix",
-    )
-
-    return snap_node
+    return snap_nodes
 
 
 def new_forced_attribute(node, attribute_name, attribute_value, group=""):
     """
     This will add an attribute value into the snap group
     """
+    groups = group
+    if not isinstance(group, list):
+        groups = [group]
 
-    # -- Create a new snap node
-    snap_node = _create_snap_node()
+    for group in groups:
+        # -- Create a new snap node
+        snap_node = _create_snap_node()
 
-    cmds.connectAttr(
-        f"{node}.message",
-        f"{snap_node}.snapSource",
-        force=True,
-    )
+        cmds.connectAttr(
+            f"{node}.message",
+            f"{snap_node}.snapSource",
+            force=True,
+        )
 
-    # -- Now we can start hooking up the relevant
-    # -- attributes
-    cmds.setAttr(f"{snap_node}.group", group, type="string")
-    cmds.setAttr(f"{snap_node}.snapNode", True)
+        # -- Now we can start hooking up the relevant
+        # -- attributes
+        cmds.setAttr(f"{snap_node}.group", group, type="string")
+        cmds.setAttr(f"{snap_node}.snapNode", True)
 
-    # -- Check if we're just declaring a snap value
-    cmds.setAttr(f"{snap_node}.attribute_name", attribute_name, type="string")
-    cmds.setAttr(f"{snap_node}.attribute_value", attribute_value)
+        # -- Check if we're just declaring a snap value
+        cmds.setAttr(f"{snap_node}.attribute_name", attribute_name, type="string")
+        cmds.setAttr(f"{snap_node}.attribute_value", attribute_value)
+
+
+def set_data(data_name, data_value, group=""):
+    """
+
+    """
+    groups = group
+    if not isinstance(group, list):
+        groups = [group]
+
+    for group in groups:
+        # -- Create a new snap node
+        data_node = _create_data_node()
+
+        # -- Now we can start hooking up the relevant
+        # -- attributes
+        cmds.setAttr(f"{data_node}.group", group, type="string")
+        cmds.setAttr(f"{data_node}.snapDataNode", True)
+
+        # -- Check if we're just declaring a snap value
+        cmds.setAttr(f"{data_node}.interesting_data_name", data_name, type="string")
+        cmds.setAttr(f"{data_node}.interesting_data_value", str(data_value), type="string")
+
+
+def get_data(group, data_name):
+
+    for snap_data_node in cmds.ls(f"*.snapDataNode", recursive=True, objectsOnly=True):
+        if cmds.getAttr(f"{snap_data_node}.group") != group:
+            continue
+
+        if cmds.objExists(f"{snap_data_node}.interesting_data_name"):
+            if cmds.getAttr(f"{snap_data_node}.interesting_data_name") == data_name:
+                return cmds.getAttr(f"{snap_data_node}.interesting_data_value")
+
+    return None
 
 
 # --------------------------------------------------------------------------------------
@@ -177,7 +266,7 @@ def groups(node=None):
 
 
 # --------------------------------------------------------------------------------------
-def members(group, namespace=None, from_nodes=None):
+def members(group, namespace=None, from_nodes=None, include_empty=False):
     """
     This function allows you to query all the nodes which contain
     relationships with a specified group.
@@ -197,6 +286,9 @@ def members(group, namespace=None, from_nodes=None):
     """
     # -- Get all the snap nodes
     snap_nodes = cmds.ls("*.snapNode", r=True, o=True)
+
+    if include_empty:
+        snap_nodes.extend(cmds.ls("*.snapEmptyMemberNode", r=True, o=True))
 
     # -- Define our output
     matched = list()
@@ -244,6 +336,9 @@ def get_node_to_snap_to(node, group):
     :param group: The group to query for
     :type group: str
     """
+    if not cmds.objExists(f"{node}.snapTarget"):
+        return None
+
     snap_node = get(node=node, group=group)[0]
     target = cmds.ls(cmds.listConnections(f"{snap_node}.snapTarget", source=True))
 
@@ -306,7 +401,7 @@ def get(node, target=None, group=None) -> list[str]:
     possibilities = [
         possibility
         for possibility in possibilities
-        if cmds.objExists(f"{possibility}.snapNode")
+        if cmds.objExists(f"{possibility}.snapNode") or cmds.objExists(f"{possibility}.snapEmptyMemberNode")
     ]
 
     # -- If we"re asked to get by group lets restrict
@@ -385,6 +480,7 @@ def update_offset(node, target):
 # noinspection PyUnresolvedReferences
 @decorators.suspended_viewport
 @decorators.undoable
+@decorators.retained_selection
 def snap(group=None, namespace=None, restrict_to=None, start_time=None, end_time=None, key=True):
     """
     This will match all the members of the snap group.
@@ -411,16 +507,17 @@ def snap(group=None, namespace=None, restrict_to=None, start_time=None, end_time
 
     :return:
     """
+    print("Performing Snap")
     # -- Get a list of all the snap nodes with this group
     snap_nodes = members(group, namespace=namespace, from_nodes=restrict_to)
-
     snap_target_matrices = dict()
 
     for snap_node in snap_nodes:
+        source = get_node_to_snap(snap_node, group=group)
         target = get_node_to_snap_to(snap_node, group)
 
         if target:
-
+            print("Required to snap %s to %s" % (source, target))
             # -- Apply the offset
             target_matrix = om.MMatrix(
                 cmds.xform(
@@ -434,8 +531,11 @@ def snap(group=None, namespace=None, restrict_to=None, start_time=None, end_time
             target_matrix = offset_matrix * target_matrix
             snap_target_matrices[snap_node] = target_matrix
 
-            n = cmds.createNode("transform", name="snap_" + target)
-            cmds.xform(n, matrix=target_matrix)
+            # -- Create the buffer nodes
+            locator = mref.get(cmds.spaceLocator()[0])
+            locator.rename(f"{source}_TO_{target}")
+            locator.set_matrix(target_matrix)
+            snap_target_matrices[snap_node] = locator
 
     # -- Do the attribute settings
     for snap_node in snap_nodes:
@@ -446,29 +546,42 @@ def snap(group=None, namespace=None, restrict_to=None, start_time=None, end_time
 
         node = get_node_to_snap(snap_node, group)
         attribute_value = cmds.getAttr(f"{snap_node}.attribute_value")
-        cmds.setAttr(f"{node}.{attribute_name}", attribute_value)
+        attribute_address = f"{node}.{attribute_name}"
+        print("Setting %s to %s" % (attribute_address, attribute_value))
+        cmds.setAttr(attribute_address, attribute_value)
 
+    constraints = []
+    key_group = []
     for snap_node in snap_nodes:
-
         node = get_node_to_snap(snap_node, group)
 
         if not node:
+            print("no node : %s" % snap_node)
             continue
-
         # -- Match the two objects with the offset matrix
         if snap_node in snap_target_matrices:
-            cmds.xform(
-                node,
-                matrix=snap_target_matrices[snap_node],
-                worldSpace=True,
+            constraints.extend(
+                cmds.parentConstraint(
+                    snap_target_matrices[snap_node].name(),
+                    node,
+                    maintainOffset=False,
+                )
             )
-
         else:
+            print("need to zero: %s" % node)
             _zero_node(node)
+        key_group.append(node)
 
-        # -- Key the match if we need to
-        if key or start_time != end_time:
-            cmds.setKeyframe(node)
+    # -- Key the nodes and delete the constraints
+    cmds.setKeyframe(key_group)
+    cmds.delete(constraints)
+    cmds.delete(
+        [
+            constraint.name()
+            for constraint in snap_target_matrices.values()
+        ]
+    )
+    return
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
@@ -608,6 +721,17 @@ def _create_snap_node():
         at="float",
     )
 
+    cmds.addAttr(
+        snap_node,
+        longName="interesting_data_name",
+        dt="string",
+    )
+    cmds.addAttr(
+        snap_node,
+        longName="interesting_data_value",
+        dt="string",
+    )
+
     # -- Next add the relationship attributes
     cmds.addAttr(
         snap_node,
@@ -626,6 +750,78 @@ def _create_snap_node():
         snap_node,
         longName="offsetMatrix",
         dt="matrix",
+    )
+
+    return snap_node
+
+# --------------------------------------------------------------------------------------
+def _create_data_node():
+    """
+    Snap relationships are stored on network nodes with a very specific
+    attribute setup. This function creates that setup for us.
+
+    :return: pm.nt.Network
+    """
+    snap_node = cmds.createNode("network", name="snap_data_node")
+
+    # -- Add an attribute to ensure we can always identify
+    # -- this node
+    cmds.addAttr(
+        snap_node,
+        longName="snapDataNode",
+        at="bool",
+        dv=True,
+    )
+
+    cmds.addAttr(
+        snap_node,
+        longName="group",
+        dt="string",
+    )
+
+    cmds.addAttr(
+        snap_node,
+        longName="interesting_data_name",
+        dt="string",
+    )
+    cmds.addAttr(
+        snap_node,
+        longName="interesting_data_value",
+        dt="string",
+    )
+
+    return snap_node
+
+
+# --------------------------------------------------------------------------------------
+def _create_empty_member_node():
+    """
+    Snap relationships are stored on network nodes with a very specific
+    attribute setup. This function creates that setup for us.
+
+    :return: pm.nt.Network
+    """
+    snap_node = cmds.createNode("network", name="snap_empty_member_node")
+
+    # -- Add an attribute to ensure we can always identify
+    # -- this node
+    cmds.addAttr(
+        snap_node,
+        longName="snapEmptyMemberNode",
+        at="bool",
+        dv=True,
+    )
+
+    cmds.addAttr(
+        snap_node,
+        longName="group",
+        dt="string",
+    )
+
+    cmds.addAttr(
+        snap_node,
+        longName="snapSource",
+        at="message",
     )
 
     return snap_node

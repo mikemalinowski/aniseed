@@ -3,6 +3,7 @@ import scribble
 import collections
 from maya import cmds
 
+from . import joints
 
 MIRROR_PLANES = {
     "Z": 'XY',
@@ -15,6 +16,7 @@ def global_mirror(
     transforms: list[str] or str = None,
     across: str = "YZ",
     behaviour: bool = True,
+    rotate_flip: bool = False,
     name_replacement: list = None,
 ):
     """
@@ -115,6 +117,18 @@ def global_mirror(
                 worldSpace=True,
                 matrix=stored_matrices[transform]
             )
+
+            if rotate_flip:
+                cmds.select(clear=True)
+                joint = cmds.joint()
+                cmds.xform(joint, matrix=stored_matrices[transform])
+
+                joints.move_rotations_to_orients([joint])
+                cmds.setAttr(f"{joint}.rotateY", 180)
+                cmds.setAttr(f"{joint}.rotateX", 180)
+                joints.move_orients_to_rotation([joint])
+                cmds.xform(target, matrix=cmds.xform(joint, q=True, m=True, ws=True), ws=True)
+                cmds.delete(joint)
 
 def _ask_for_mirror_plane():
 

@@ -1,3 +1,4 @@
+import re
 import uuid
 import json
 import copy
@@ -10,6 +11,37 @@ from .attributes import Option
 from .attributes import Input
 from .attributes import Output
 from .constants import Status
+
+
+# --------------------------------------------------------------------------------------
+def _recursive_replace(value, pattern, replace):
+    """
+    Return a copy of ``value`` with ``pattern`` substituted by ``replace`` in
+    every string found anywhere within it.
+
+    - ``str``  -> the substituted string
+    - ``list`` -> a new list with every element processed recursively
+    - ``dict`` -> a new dict with both keys and values processed recursively
+    - anything else -> returned unchanged
+
+    Nesting is handled to any depth (lists of lists, dicts of lists of dicts,
+    etc.). The input is never mutated; new containers are always built, so a
+    caller can safely compare the result against the original to detect change.
+    """
+    if isinstance(value, str):
+        return pattern.sub(replace, value)
+
+    if isinstance(value, list):
+        return [_recursive_replace(item, pattern, replace) for item in value]
+
+    if isinstance(value, dict):
+        return {
+            _recursive_replace(key, pattern, replace):
+                _recursive_replace(val, pattern, replace)
+            for key, val in value.items()
+        }
+
+    return value
 
 
 # --------------------------------------------------------------------------------------
@@ -39,6 +71,11 @@ class Component:
     # -- icon is in the same folder as your component .py:
     # -- icon = os.path.join(os.path.dirname(__file__), "my_icon_name.png")
     icon = ""
+
+    # -- Any component which is marked as deprecated will still be available
+    # -- from the factory but will typically not be visible in any ui's as
+    # -- a new component which can be added.
+    deprecated = False
 
     # ----------------------------------------------------------------------------------
     # This MUST be re-implemented
@@ -310,6 +347,68 @@ class Component:
         """
         self._label = label
         self.changed.emit()
+
+    # ----------------------------------------------------------------------------------
+    def search_and_replace(self, search: str, replace: str, recursive: bool = False) -> int:
+        """
+        Search and replace across this component's label and all of its string
+        inputs and options.
+
+        ``search`` is treated as a regular expression (via ``re.sub``), so
+        callers can anchor matches, use character classes, capture groups
+        (referenced in ``replace`` as ``\\1`` etc.) and so on.
+
+        This is pure data manipulation with no UI dependency, so it can be
+        driven equally from the tool or from a headless script.
+
+        Args:
+            search: A regular expression pattern to search for. An empty
+                pattern is a no-op.
+            replace: The replacement template substituted for each match.
+                Supports backreferences (e.g. ``\\1``).
+            recursive: If True, the same operation is applied to every
+                descendant component.
+
+        Returns:
+            The number of values (label and/or attributes) that were changed.
+
+        Raises:
+            re.error: If ``search`` is not a valid regular expression.
+        """
+        if not search:
+            return 0
+
+        # -- Compiling each call is cheap: re maintains an internal cache of
+        # -- compiled patterns, so recursion recompiling the same string is a
+        # -- dict lookup, not a re-parse.
+        pattern = re.compile(search)
+
+        changed = 0
+
+        # -- Label
+        label = self.label()
+        new_label = pattern.sub(replace, label)
+        if new_label != label:
+            self.set_label(new_label)
+            changed += 1
+
+        # -- Inputs and options. We read with resolved=False so we act on the
+        # -- literally stored value (e.g. an address string) rather than the
+        # -- value it might point to. Strings are substituted directly; lists
+        # -- and dictionaries are traversed recursively to any depth.
+        for attribute in list(self.inputs()) + list(self.options()):
+            value = attribute.get(resolved=False)
+            new_value = _recursive_replace(value, pattern, replace)
+            if new_value != value:
+                attribute.set(new_value)
+                changed += 1
+
+        # -- Recurse into children if requested
+        if recursive:
+            for child in self.children:
+                changed += child.search_and_replace(search, replace, recursive=True)
+
+        return changed
 
     # ----------------------------------------------------------------------------------
     def suggested_label(self):

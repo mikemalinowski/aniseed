@@ -252,6 +252,16 @@ class Attribute(mref.Trait):
         """
         return self.outputs() + self.inputs()
 
+    def animation(self) -> mref.ReferencedItem|None:
+        """
+        This will return any animation curve node that is DIRECTLY connected to
+        this attribute.
+        """
+        for driving_attribute in self.inputs():
+            if "animCurve" in driving_attribute.node().node_type():
+                return driving_attribute.node()
+        return None
+
     def inputs(self, node_type=None, skip_converters=True) -> list[mref.ReferencedItem]:
         """
         Returns a list of inputs feeding into this attribute.

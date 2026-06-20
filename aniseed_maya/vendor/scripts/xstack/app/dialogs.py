@@ -165,6 +165,9 @@ class AddComponentWidget(QtWidgets.QDialog):
             # -- Request the component
             component = self.stack.component_library.request(component_type)
 
+            if component.deprecated:
+                continue
+
             # -- Add a widget item which also shows the icon
             item = QtWidgets.QListWidgetItem(
                 QtGui.QIcon(

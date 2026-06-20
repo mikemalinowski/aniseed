@@ -327,7 +327,7 @@ class TriLegComponent(aniseed.RigComponent):
 
         # -- Using the data from the ik and fk setups we
         # -- can now construct the blend setup
-        nk_chain = self.create_nk_setup(
+        nk_chain, ikfk_attribute = self.create_nk_setup(
             parent=parent,
             ik_data=ik_data,
             fk_data=fk_data,
@@ -341,6 +341,7 @@ class TriLegComponent(aniseed.RigComponent):
             ik_data["controls"],
             fk_data["controls"],
             nk_chain,
+            ikfk_attribute,
         )
 
     def create_nk_setup(self, parent, ik_data, fk_data):
@@ -439,7 +440,7 @@ class TriLegComponent(aniseed.RigComponent):
         self.output("Blended Foot").set(nk_joints[self.INDEX_FOOT])
         self.output("Blended Toe").set(nk_joints[self.INDEX_TOE])
 
-        return nk_joints
+        return nk_joints, ikfk_attribute
 
     def create_fk_setup(self, parent):
 
@@ -767,7 +768,6 @@ class TriLegComponent(aniseed.RigComponent):
         lock_ankle_rotation_attr.connect(cns.weight_attributes()[0])
 
         m_zero = mref.get(ankle_addition_zero)
-        print(m_zero.translateX.inputs())
         # m_zero.attr("translateX").disconnect()
         cmds.disconnectAttr(f"{m_zero.translateX.inputs()[0].name(include_node=True)}", m_zero.translateX.name(include_node=True))
         cmds.disconnectAttr(f"{m_zero.translateY.inputs()[0].name(include_node=True)}", m_zero.translateY.name(include_node=True))
@@ -855,7 +855,6 @@ class TriLegComponent(aniseed.RigComponent):
 
 
         if self.option("Apply Soft Ik").get():
-            print("applying soft ik")
             root_marker = cmds.createNode(
                 "transform",
                 name=self.config.generate_name(
@@ -922,6 +921,7 @@ class TriLegComponent(aniseed.RigComponent):
         ik_controls.append(foot_control.ctl)
         ik_controls.append(ankle_control.ctl)
         ik_controls.append(toe_control.ctl)
+        ik_controls.append(heel_control.ctl)
         ik_controls.append(full_chain_upv.ctl)
 
         cmds.pointConstraint(
@@ -972,7 +972,6 @@ class TriLegComponent(aniseed.RigComponent):
 
         if abs(post_distance - pre_distance) > 0.1:
             cmds.setAttr(f"{ik_handle}.twist", 180)
-            print("preventing flip")
 
     def create_twists(self, nk_chain, parent):
 
@@ -1226,50 +1225,70 @@ class TriLegComponent(aniseed.RigComponent):
             results.append(self.input(f"{guide_tag} Guide").get())
         return results
 
-    def create_snap(self, ik_controls, fk_controls, nk_joints):
+    def create_snap(self, ik_controls, fk_controls, nk_joints, ikfk_attribute):
         """
         Snap is the mechanism for IK/FK snapping
         """
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
-
-        ik_foot_control = ik_controls[-4]
-        ankle_control = ik_controls[-3]
-        toe_control = ik_controls[-2]
+        ik_foot_control = ik_controls[-5]
+        ankle_control = ik_controls[-4]
+        toe_control = ik_controls[-3]
+        heel_control = ik_controls[-2]
         upvector_control = ik_controls[-1]
         pivot_controls = ik_controls[:-4]
 
         ankle_marker = mref.create("transform", parent=nk_joints[-3], name="ankle_marker")
         ankle_marker.set_matrix(mref.get(ankle_control).get_matrix(space="world"), space="world")
 
-        group = "IKFK_%s_%s" % (
+        ikfk_group = "IKFK_TriLeg_%s_%s" % (
             prefix,
             location,
+        )
+        ikonly_group = "IKOnly_TriLeg_%s_%s" % (
+            prefix,
+            location,
+        )
+        fkonly_group = "FKOnly_TriLeg_%s_%s" % (
+            prefix,
+            location,
+        )
+
+        snappy.set_data(
+            data_name="ikfk_attribute",
+            data_value=ikfk_attribute.name(include_node=True),
+            group=[ikfk_group, fkonly_group, ikonly_group],
         )
 
         snappy.new(
             node=ik_foot_control,
             target=nk_joints[-2],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=upvector_control,
             target=nk_joints[1],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=ankle_control,
             target=ankle_marker.name(), #nk_joints[-3],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=toe_control,
             target=nk_joints[-1],
-            group=group,
+            group=[ikfk_group, ikonly_group],
+        )
+
+        snappy.new(
+            node=heel_control,
+            target=None,
+            group=[ikfk_group, ikonly_group],
         )
 
         for pivot_control in pivot_controls:
@@ -1278,15 +1297,26 @@ class TriLegComponent(aniseed.RigComponent):
             snappy.new(
                 node=pivot_control,
                 target=None,
-                group=group,
+                group=[ikfk_group, ikonly_group],
             )
+        #
+        # snappy.add_empty_members(
+        #     nodes=[
+        #         ik_foot_control,
+        #         upvector_control,
+        #     ] + pivot_controls,
+        #     group=fkonly_group,
+        # )
 
         for idx, fk_control in enumerate(fk_controls):
-            print("FK CONTROL : %s" % fk_control)
             snappy.new(
                 node=fk_control,
                 target=nk_joints[idx],
-                group=group,
+                group=[ikfk_group, fkonly_group],
+            )
+            snappy.add_empty_members(
+                nodes=[fk_control],
+                group=ikonly_group,
             )
 
         for attribute_name in self.guide_tags:
@@ -1296,14 +1326,14 @@ class TriLegComponent(aniseed.RigComponent):
                 node=ik_foot_control,
                 attribute_name=attribute_name,
                 attribute_value=0,
-                group=group,
+                group=[ikfk_group, ikonly_group],
             )
 
         snappy.new_forced_attribute(
             node=ik_foot_control,
             attribute_name="lock_ankle_rotation",
             attribute_value=1,
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         for i in range(3):
@@ -1311,5 +1341,22 @@ class TriLegComponent(aniseed.RigComponent):
                 node=ik_foot_control,
                 attribute_name=f"Joint{i}Addition",
                 attribute_value=0,
-                group=group,
+                group=[ikfk_group, ikonly_group],
             )
+
+        snappy.add_empty_members(
+            nodes=ik_controls,
+            group=ikonly_group,
+        )
+        snappy.add_empty_members(
+            nodes=ik_controls,
+            group=fkonly_group,
+        )
+        snappy.add_empty_members(
+            nodes=fk_controls,
+            group=ikonly_group,
+        )
+        snappy.add_empty_members(
+            nodes=fk_controls,
+            group=fkonly_group,
+        )

@@ -4,35 +4,44 @@ from maya import cmds
 
 
 class ConnectAttr(aniseed.RigComponent):
+    """
+    Connects a single source attribute on one node to a single destination
+    attribute on another node, mirroring Maya's ``connectAttr`` command.
+    """
 
     identifier = "Utility : Connect Attribute"
 
     def __init__(self, *args, **kwargs):
-        super(ConnectAttr, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Source Node",
             value="",
+            description="The node that owns the attribute being connected from.",
         )
 
         self.declare_input(
             name="Source Attribute",
             value="",
+            description="The name of the attribute on the source node to connect from.",
         )
 
         self.declare_input(
             name="Destination Node",
             value="",
+            description="The node that owns the attribute being connected into.",
         )
 
         self.declare_input(
             name="Destination Attribute",
             value="",
+            description="The name of the attribute on the destination node to connect into.",
         )
 
         self.declare_option(
             name="Force",
             value=True,
+            description="If true, an existing connection into the destination attribute is broken before the new one is made.",
         )
 
     def input_widget(self, requirement_name: str):
@@ -40,58 +49,60 @@ class ConnectAttr(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector()
 
     def is_valid(self) -> bool:
-        source_node = self.input_widget("Source Node").get()
-        destination_node = self.input_widget("Destination Node").get()
-
-        if not source_node or not cmds.objExists(source_node):
-            print("Source node is invalid.")
-            return False
-
-        if not destination_node or not cmds.objExists(destination_node):
-            print("Destination node is invalid.")
-            return False
+        return True
 
     def run(self):
+        source_node = mref.get(self.input("Source Node").get())
+        destination_node = mref.get(self.input("Destination Node").get())
+        source_attribute = self.input("Source Attribute").get()
+        destination_attribute = self.input("Destination Attribute").get()
+        force = self.option("Force").get()
 
-        source_node = mref.get(self.option("Source Node").get())
-        destination_node = mref.get(self.option("Destination Node").get())
-
-        source_node.attr(self.input_widget("Source Attribute").get()).connect(
-            destination_node.attr(self.input_widget("Destination Attribute").get()),
-            force=self.option("Force").get(),
+        source_node.attr(source_attribute).connect(
+            destination_node.attr(destination_attribute),
+            force=force,
         )
 
 
 class ConnectManyAttr(aniseed.RigComponent):
+    """
+    Connects a single source attribute on one node to the same named
+    attribute on every node in a list of destination nodes.
+    """
 
     identifier = "Utility : Connect Attribute (Multi)"
 
     def __init__(self, *args, **kwargs):
-        super(ConnectManyAttr, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Source Node",
             value="",
+            description="The node that owns the attribute being connected from.",
         )
 
         self.declare_input(
             name="Source Attribute",
             value="",
+            description="The name of the attribute on the source node to connect from.",
         )
 
         self.declare_input(
             name="Destination Nodes",
             value=[],
+            description="The list of nodes whose Destination Attribute will each be driven by the source.",
         )
 
         self.declare_input(
             name="Destination Attribute",
             value="",
+            description="The attribute name to connect into on every destination node.",
         )
 
         self.declare_option(
             name="Force",
             value=True,
+            description="If true, an existing connection into each destination attribute is broken before the new one is made.",
         )
 
     def input_widget(self, requirement_name: str):
@@ -101,26 +112,18 @@ class ConnectManyAttr(aniseed.RigComponent):
         if requirement_name == "Destination Nodes":
             return aniseed.widgets.ObjectList()
 
-    def is_valid(self) -> bool:
-        source_node = self.input_widget("Source Node").get()
-        destination_nodes = self.input_widget("Destination Nodes").get()
-
-        if not source_node or not cmds.objExists(source_node):
-            print("Source node is invalid.")
-            return False
-
-        for destination_node in destination_nodes:
-            if not destination_node or not cmds.objExists(destination_node):
-                print("Destination node is invalid.")
-                return False
-
     def run(self):
+        source_node = mref.get(self.input("Source Node").get())
+        destination_node_names = self.input("Destination Nodes").get()
+        source_attribute = self.input("Source Attribute").get()
+        destination_attribute = self.input("Destination Attribute").get()
+        force = self.option("Force").get()
 
-        source_node = mref.get(self.option("Source Node").get())
-        destination_nodes = mref.get(self.option("Destination Nodes").get())
+        source_attr = source_node.attr(source_attribute)
 
-        for destination_node in destination_nodes:
-            source_node.attr(self.input("Source Attribute").get()).connect(
-                destination_node.attr(self.input("Destination Attribute").get()),
-                force=self.option("Force").get(),
+        for destination_node_name in destination_node_names:
+            destination_node = mref.get(destination_node_name)
+            source_attr.connect(
+                destination_node.attr(destination_attribute),
+                force=force,
             )

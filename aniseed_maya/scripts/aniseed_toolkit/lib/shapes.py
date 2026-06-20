@@ -38,7 +38,10 @@ def apply_color(node: str = "", r: float = 0, g: float = 0, b: float = 0) -> Non
     elif cmds.nodeType(node) == "nurbsCurve":
         all_shapes.append(node)
 
-    cmds.setAttr(f"{node}.overrideEnabled", True)
+    try:
+        cmds.setAttr(f"{node}.overrideEnabled", True)
+    except: pass
+
     cmds.setAttr(f"{node}.overrideRGBColors", True)
     cmds.setAttr(f"{node}.useOutlinerColor", True)
 
@@ -130,7 +133,6 @@ def rotate(
         for curve in all_curves
         if cmds.nodeType(curve) == "nurbsCurve"
     ]
-
     for curve in all_curves:
         dag = mutils.get_dagpath(curve)
         nurbs_fn = om.MFnNurbsCurve(dag)

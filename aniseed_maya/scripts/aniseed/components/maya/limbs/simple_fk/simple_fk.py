@@ -1,4 +1,5 @@
 import os
+import mref
 import aniseed
 import aniseed_toolkit
 import maya.cmds as mc
@@ -63,6 +64,20 @@ class SimpleFkComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
+        self.declare_option(
+            name="Add Offset Control",
+            description=(
+                "If enabled, a second control is created and parented under "
+                "the main control. The offset control becomes the driving "
+                "control for the joint, letting animators add layered offsets "
+                "on top of the main control."
+            ),
+            value=False,
+            group="Behaviour",
+            pre_expose=True,
+        )
+
+
         self.declare_output("Root Control")
         self.declare_output("Tip Control")
 
@@ -125,13 +140,35 @@ class SimpleFkComponent(aniseed.RigComponent):
             # -- Note that we're accessing the options here too, in order to allow
             # -- the user to tailor the result
             control = aniseed_toolkit.run("Create Control",
-            description=self.option("Label").get(),
+                description=self.option("Label").get(),
                 location=self.option("Location").get(),
                 shape=self.option("Shape").get(),
                 config=self.config,
                 parent=parent,
                 match_to=joint_to_drive,
+                rotate_shape=[0, 0, 90],
             )
+            driver = control.ctl
+
+            if self.option("Add Offset Control").get():
+                attribute = mref.get(control.ctl).add_attribute(
+                    "show_offset",
+                    value=False,
+                    attribute_type="bool",
+                    keyable=False,
+                )
+                attribute.set(channelBox=True)
+
+                driving_control = aniseed_toolkit.control.create(
+                    description=self.option("Label").get() + "_offset",
+                    location=self.option("Location").get(),
+                    config=self.config,
+                    shape="core_cube",
+                    parent=control.ctl,
+                    match_to=joint_to_drive,
+                rotate_shape=[0, 0, 90],
+                )
+                driver = driving_control.ctl
 
             # -- Set our outputs
             if not self.output("Root Control").get():
@@ -143,13 +180,13 @@ class SimpleFkComponent(aniseed.RigComponent):
             # -- a skeleton. Its what-you-see-is-what-you-get. So we're just
             # -- using maya to constrain the joint to the control
             mc.parentConstraint(
-                control.ctl,
+                driver,
                 joint_to_drive,
                 maintainOffset=False,
             )
 
             mc.scaleConstraint(
-                control.ctl,
+                driver,
                 joint_to_drive,
                 maintainOffset=False,
             )

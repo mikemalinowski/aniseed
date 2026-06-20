@@ -3,36 +3,44 @@ import aniseed
 import aniseed_toolkit
 from maya import cmds
 
-from aniseed_toolkit.lib.joints import reverse_chain
-
 
 class BlendedConstraint(aniseed.RigComponent):
+    """
+    Creates a control that blends the rotation of a joint between two
+    target nodes. A "Blend" attribute on the control (0.0 to 1.0) drives
+    a pair of parent constraints between Target A and Target B, while the
+    control itself drives the joint's transform.
+    """
 
     identifier = "Utility : Blend Rotator"
 
     def __init__(self, *args, **kwargs):
-        super(BlendedConstraint, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
             value="",
             validate=True,
             group="Control Rig",
+            description="The node under which the blend control will be parented.",
         )
 
         self.declare_input(
             name="Joint",
             value="",
+            description="The joint that will be driven by the blend control. May be created automatically on stack entry if 'Create Joint' is enabled.",
         )
 
         self.declare_input(
             name="Target A",
             value="",
+            description="The first blend target. When the Blend attribute is 0.0 the joint follows this target.",
         )
 
         self.declare_input(
             name="Target B",
             value="",
+            description="The second blend target. When the Blend attribute is 1.0 the joint follows this target.",
         )
 
         self.declare_option(
@@ -40,6 +48,7 @@ class BlendedConstraint(aniseed.RigComponent):
             value="",
             group="Naming",
             pre_expose=True,
+            description="Descriptive token used when generating names for the control and joint.",
         )
 
         self.declare_option(
@@ -48,6 +57,7 @@ class BlendedConstraint(aniseed.RigComponent):
             group="Naming",
             should_inherit=True,
             pre_expose=True,
+            description="Location token (e.g. lf/md/rt) used when generating names.",
         )
 
         self.declare_option(
@@ -55,9 +65,13 @@ class BlendedConstraint(aniseed.RigComponent):
             value=True,
             group="Creation",
             pre_expose=True,
+            description="If true, a joint is created and bound to the Joint input on stack entry; otherwise an existing joint is expected.",
         )
 
-        self.declare_output("Control")
+        self.declare_output(
+            name="Control",
+            description="The transform of the blend control that was created.",
+        )
 
     def suggested_label(self):
         return self.option("Description").get()
@@ -69,16 +83,18 @@ class BlendedConstraint(aniseed.RigComponent):
         if not self.option("Create Joint").get():
             return
 
+        description = self.option("Description").get()
+        location = self.option("Location").get()
+
         selection = mref.selected()
         parent = selection[0] if selection else None
 
         joint = mref.create("joint", parent=parent)
-        joint.set_parent(parent)
         joint.rename(
             self.config.generate_name(
                 classification=self.config.joint,
-                description=self.option("Description").get(),
-                location=self.option("Location").get(),
+                description=description,
+                location=location,
             ),
         )
         if parent:
@@ -100,11 +116,14 @@ class BlendedConstraint(aniseed.RigComponent):
         joint = self.input("Joint").get()
         target_a = self.input("Target A").get()
         target_b = self.input("Target B").get()
+        parent = self.input("Parent").get()
+        description = self.option("Description").get()
+        location = self.option("Location").get()
 
         rotator_control = aniseed_toolkit.control.create(
-            description=self.option("Description").get(),
-            location=self.option("Location").get(),
-            parent=self.input("Parent").get(),
+            description=description,
+            location=location,
+            parent=parent,
             config=self.config,
             shape="core_cube",
             match_to=joint,
@@ -116,8 +135,6 @@ class BlendedConstraint(aniseed.RigComponent):
             attribute_type="float",
             keyable=True,
         )
-
-        mref.get(rotator_control.off)
 
         cmds.parentConstraint(
             target_a,

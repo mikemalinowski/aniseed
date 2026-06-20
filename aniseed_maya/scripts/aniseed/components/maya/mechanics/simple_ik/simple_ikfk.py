@@ -117,6 +117,20 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             group="Behaviour",
         )
 
+        self.declare_option(
+            name="Make Config Child Of End",
+            description="",
+            value=False,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Constrain End Point Rotation",
+            description="",
+            value=True,
+            group="Behaviour",
+        )
+
         self.declare_output(
             name="Blended Upper",
             description="The upper joint of the IK/FK blend chain (drives the upper skin joint downstream)",
@@ -226,7 +240,20 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             constrain=True,
             soft_ik=self.option("Apply Soft Ik").get(),
             soft_ik_host=self.ik_target_control.ctl,
+            constrain_endpoint_rotation=self.option("Constrain End Point Rotation").get(),
         )
+
+        if self.option("Make Config Child Of End").get():
+            config_org = self.config_control.org
+            cmds.parent(
+                config_org,
+                ikfk_setup.blend_chain[-1].name(),
+            )
+            cmds.xform(
+                config_org,
+                matrix=cmds.xform(ikfk_setup.blend_chain[-1].name(), query=True, matrix=True, worldSpace=True),
+                worldSpace=True,
+            )
 
         # -- Create the guide line
         aniseed_toolkit.guide.link(
@@ -404,39 +431,69 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             )
 
     def _create_snap(self):
-        group = "IKFK_Limb_%s_%s" % (
+        ikfk_group = "IKFK_Limb_%s_%s" % (
             self.prefix,
             self.location,
+        )
+        ikonly_group = "IKOnly_Limb_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+        fkonly_group = "FKOnly_Limb_%s_%s" % (
+            self.prefix,
+            self.location,
+        )
+
+        snappy.set_data(
+            data_name="ikfk_attribute",
+            data_value=f"{self.config_control.ctl}.ikfk",
+            group=[ikfk_group, fkonly_group, ikonly_group],
         )
 
         snappy.new(
             node=self.ik_target_control.ctl,
             target=self.nk_joints[2],
-            group=group,
+            group=[ikfk_group, ikonly_group],
         )
 
         snappy.new(
             node=self.upvector_control.ctl,
             target=self.nk_joints[1],
-            group=group,
+            group=[ikfk_group, ikonly_group],
+        )
+
+        snappy.add_empty_members(
+            nodes=[
+                self.fk_upper_control.ctl,
+                self.fk_lower_control.ctl,
+                self.fk_end_control.ctl,
+            ],
+            group=ikonly_group,
         )
 
         snappy.new(
             node=self.fk_upper_control.ctl,
             target=self.nk_joints[0],
-            group=group,
+            group=[ikfk_group, fkonly_group],
         )
 
         snappy.new(
             node=self.fk_lower_control.ctl,
             target=self.nk_joints[1],
-            group=group,
+            group=[ikfk_group, fkonly_group],
         )
 
         snappy.new(
             node=self.fk_end_control.ctl,
             target=self.nk_joints[2],
-            group=group,
+            group=[ikfk_group, fkonly_group],
+        )
+        snappy.add_empty_members(
+            nodes=[
+                self.ik_target_control.ctl,
+                self.upvector_control.ctl,
+            ],
+            group=fkonly_group,
         )
 
     def _set_outputs(self):

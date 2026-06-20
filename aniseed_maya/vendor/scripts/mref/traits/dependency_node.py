@@ -126,6 +126,34 @@ class DependencyNode(mref.Trait):
 
         return attribute
 
+    def add_proxy(self, name, source_attribute, keyable=True, **kwargs):
+        """
+        Adds a proxy attribute to this node
+        """
+        cmds.addAttr(
+            self.item.full_name(),
+            shortName=name,
+            proxy=mref.get(source_attribute).name(include_node=True),
+            keyable=keyable,
+            **kwargs
+        )
+        return mref.get(f"{self.item.full_name()}.{name}")
+
+    def add_separator_attribute(self):
+
+        character = "_"
+        name_to_use = character * 4
+
+        while cmds.objExists(f"{self.item.full_name()}.{name_to_use}"):
+            name_to_use += character
+
+        cmds.addAttr(
+            self.item.full_name(),
+            shortName=name_to_use,
+            keyable=True,
+        )
+        cmds.setAttr(f"{self.item.full_name()}.{name_to_use}", lock=True)
+
     def has_attribute(self, attribute_name: str) -> bool:
         """
         Returns True if this node has an attribute with the given name,
@@ -231,7 +259,7 @@ class DependencyNode(mref.Trait):
                 )
             attr.set(lock=state)
 
-    def lock_transform_attributes(self) -> None:
+    def lock_transform_attributes(self, hide=False) -> None:
         """
         Locks the nine scalar transform channels on this node — translateX/Y/Z,
         rotateX/Y/Z, scaleX/Y/Z. Does not lock visibility, nor the parent
@@ -241,4 +269,5 @@ class DependencyNode(mref.Trait):
         """
         for type_ in ["t", "r", "s"]:
             for axis in ["x", "y", "z"]:
-                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=True)
+                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=True, channelBox=not hide)
+
