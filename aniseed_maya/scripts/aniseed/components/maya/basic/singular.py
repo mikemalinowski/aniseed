@@ -5,7 +5,7 @@ import aniseed_toolkit
 from maya import cmds
 
 
-class Singular(aniseed.RigComponent):
+class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     A basic component which creates a single joint and a single control
     """
@@ -91,16 +91,6 @@ class Singular(aniseed.RigComponent):
             group="Behaviour",
         )
 
-        self.declare_option(
-            name="Has Initialised",
-            description=(
-                "Internal flag: True once the component's first-add "
-                "joint-creation has run. Should not be edited by hand."
-            ),
-            value=False,
-            hidden=True,
-        )
-
         self.declare_output(
             name="Control",
             description="The main control created by this component",
@@ -157,12 +147,7 @@ class Singular(aniseed.RigComponent):
     def on_enter_stack(self):
         super().on_enter_stack()
 
-        initialised_option = self.option("Has Initialised")
         joint_option = self.option("Create Joint")
-        if initialised_option.get():
-            return
-
-        initialised_option.set(True)
         joint_option.set_hidden(True)
 
         if not joint_option.get():
@@ -260,3 +245,20 @@ class Singular(aniseed.RigComponent):
         )
 
         self.output("Control").set(control.ctl)
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Return the list of scene-node names representing this component's
+        bones. These transforms will be reflected across the mirror plane
+        onto the twin side using ``aniseed_toolkit.mirror.global_mirror``.
+
+        Default: empty list (no scene-side mirroring).
+        """
+        return [
+            self.input("Joint").get()
+        ]
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        """
+        return mref.get(self.input("Joint").get()).parent().name()

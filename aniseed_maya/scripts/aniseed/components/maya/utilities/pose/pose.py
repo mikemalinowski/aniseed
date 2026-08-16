@@ -2,10 +2,15 @@ import os
 import typing
 import aniseed
 
-import maya.cmds as mc
+from maya import cmds
 
 
 class PosingComponent(aniseed.RigComponent):
+    """
+    Stores a snapshot of world-space transforms for a set of nodes and
+    re-applies them on rebuild. Used to pin a rig back to a captured pose
+    after rebuilding from guides.
+    """
 
     identifier = "Utility : Apply Pose"
     icon = os.path.join(
@@ -14,31 +19,35 @@ class PosingComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
-        super(PosingComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Nodes",
-            value="",
+            value=[],
             validate=True,
             group="Objects",
+            description="The nodes to capture and re-apply transforms for. When Apply To Children is enabled, transform descendants of these nodes are also captured.",
         )
 
         self.declare_option(
             name="Apply To Children",
             value=True,
             group="Behaviour",
+            description="If true, all transform descendants of each input node are also captured and re-applied (skipping any node with 'constraint' in its name).",
         )
 
         self.declare_option(
             name="_StorePose",
             value=True,
-            group="Functionality"
+            group="Functionality",
+            description="Press to capture the current world-space transforms of the input nodes (and their children when enabled) into the component.",
         )
 
         self.declare_option(
             "_PoseData",
             value=None,
             hidden=True,
+            description="Internal storage for the captured node-to-matrix dictionary.",
         )
 
     def option_widget(self, option_name: str):
@@ -75,26 +84,24 @@ class PosingComponent(aniseed.RigComponent):
             return True
 
         for node, matrix in data.items():
-            if not mc.objExists(node):
+            if not cmds.objExists(node):
                 print(f"Could not apply Pose to {node} as it does not exist. Skipping.")
                 continue
 
-            mc.xform(
+            cmds.xform(
                     node,
                     matrix=matrix,
                 )
 
-        mc.refresh()
         return True
 
     def _store(self):
-        # label = "PoseStore" + self.input('Label').get()
 
         data = dict()
 
         for node in self._get_nodes():
 
-            data[node] = mc.xform(
+            data[node] = cmds.xform(
                 node,
                 query=True,
                 matrix=True,
@@ -103,31 +110,32 @@ class PosingComponent(aniseed.RigComponent):
         self.option("_PoseData").set(data)
 
     def _get_nodes(self):
-        return self.input("Nodes").get()
-        nodes = [self.input("Node").get()]
+        nodes = list(self.input("Nodes").get() or [])
 
-        if self.option("Apply To Children").get():
+        if not self.option("Apply To Children").get():
+            return nodes
 
-            all_children = mc.listRelatives(
-                nodes[0],
+        all_children = []
+        for node in nodes:
+            descendants = cmds.listRelatives(
+                node,
                 children=True,
                 allDescendents=True,
-                type="transform"
-            ) or list()
+                type="transform",
+            ) or []
+            all_children.extend(descendants)
 
-            nodes.extend(
-                [
-                    node
-                    for node in all_children
-                    if "constraint" not in node.lower()
-                ]
-            )
+        nodes.extend(
+            child
+            for child in all_children
+            if "constraint" not in child.lower()
+        )
 
         return nodes
 
     def apply_to_selected(self):
 
-        selected = mc.ls(sl=True) or list()
+        selected = cmds.ls(selection=True) or list()
 
         if not selected:
             return
@@ -135,27 +143,27 @@ class PosingComponent(aniseed.RigComponent):
         data = self.option("_PoseData").get()
 
         if not data:
-            return True
+            return
 
         for node, matrix in data.items():
-            if not node in selected:
+            if node not in selected:
                 continue
 
-            if not mc.objExists(node):
+            if not cmds.objExists(node):
                 print(f"Could not apply Pose to {node} as it does not exist. Skipping.")
                 continue
 
-            mc.xform(
+            cmds.xform(
                 node,
                 matrix=matrix,
             )
 
     def store_selected(self):
 
-        data = self.option("_PoseData").get()
+        data = self.option("_PoseData").get() or {}
 
-        for node in mc.ls(sl=True):
-            data[node] = mc.xform(
+        for node in cmds.ls(selection=True):
+            data[node] = cmds.xform(
                 node,
                 query=True,
                 matrix=True,

@@ -13,6 +13,13 @@ IMPORTANT NOTE: When implementing application specific components you DO NOT nee
 to use crosswalk at all. It is only used at the framwork level because the amount
 of interaction is minimal.
 """
+"""
+TODO:
+    * Remove Invalid Components
+    * Save/load should have a mechanism to build meshes/surfaces (patches)... or should the components have an exposed function for this?
+    * Search/Replace on components (again...)
+    * Mirror?
+"""
 from .rig import Rig
 from .rig import get_rig
 from .host import EmbeddedHost
@@ -27,5 +34,6 @@ from . import widgets
 from . import constants
 from . import resources
 from . import environment
+from . import mixins
 
-__version__ = "3.0.1"
+__version__ = "3.0.2"

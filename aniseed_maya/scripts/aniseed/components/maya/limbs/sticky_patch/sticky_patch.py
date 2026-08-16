@@ -156,6 +156,12 @@ class StickyPatchComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
+        cmds.scaleConstraint(
+            control.ctl,
+            self.input("Joint To Drive").get(),
+            maintainOffset=True,
+        )
+
         self.output("Control").set(control.ctl)
         self.output("Follicle").set(follicle)
 

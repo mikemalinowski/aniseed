@@ -1,3 +1,5 @@
+from PySide6 import QtWidgets
+
 import mref
 import aniseed
 import functools
@@ -798,7 +800,25 @@ class TransformMixer:
         self.get_deformer.cache_clear()
 
     def remove_pose(self, pose_name):
-        self.get_target(pose_name=pose_name).delete()
+        for deformer in self.deformers():
+            deformer_name = deformer.attr("deformer_name").get()
+            target = self.get_target(
+                pose_name=pose_name,
+                deformer_name=deformer_name,
+            )
+            if target:
+                target.delete()
+
+        self.get_pose(pose_name).delete()
+
+        # -- Remove the pose-weight float and the visibility toggle from
+        # -- the mixer node so they aren't left as orphans on self.node
+        # -- after the pose has gone. Mirrors the attributes added by
+        # -- add_pose.
+        mixer_node_name = self.node.full_name()
+        for attribute_name in (pose_name, f"show_{pose_name}_targets"):
+            if self.node.has_attribute(attribute_name):
+                cmds.deleteAttr(f"{mixer_node_name}.{attribute_name}")
 
         # -- Drop every cache entry for this pose.
         if self._target_mapping_cache is not None:
@@ -996,3 +1016,40 @@ def aim_at(node, target, aim_axis, up_axis, up_target=None):
 
 
     cmds.delete(temp_constraint)
+
+
+class TransformMixerUi(QtWidgets.QWidget):
+
+    def __init__(self, mixer, parent=None):
+        super().__init__(parent=parent)
+
+        # -- Store a reference to the mixer class
+        self.mixer = mixer
+
+
+def scale_translation(node, scale_by=1.0):
+    """
+    Scales the translation values of the given node
+    Args:
+        node: Node to scale the translation values of
+        scale_by: Amount to scale by
+
+    Returns:
+
+    """
+    node = mref.get(node)
+    for axis in ["X", "Y", "Z"]:
+        attr = node.attr(f"translate{axis}")
+
+        if attr:
+            attr.set(attr.get() * scale_by)
+
+
+def scale_translation_of_hierarchy(root_node, scale_by=1.0):
+    root_node = mref.get(root_node)
+    all_nodes = [root_node]
+    all_nodes.extend(root_node.children(recursive=True))
+
+    for node in all_nodes:
+        if node.node_type() in ["transform", "joint"]:
+            scale_translation(node, scale_by)

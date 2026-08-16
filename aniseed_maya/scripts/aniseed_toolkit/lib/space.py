@@ -50,6 +50,51 @@ def setup_fk_worldspace_switches(nodes, rig):
         parent = node
 
 
+def setup_fk_transform_worldspace_switches(nodes, rig, default_space="Parent"):
+
+    # -- get the world control
+    pass
+
+    nodes = [mref.get(node) for node in nodes]
+    # -- Parent
+    parent = mref.get(control.get(nodes[0].name()).org).parent()
+    world = get_root_control()
+
+    for node in nodes:
+
+        data = {
+            "default_space": default_space,
+            "spaces": [
+                {
+                    "target": parent.name(),
+                    "position_only": False,
+                    "orientation_only": False,
+                    "target_transform": "",
+                    "label": "Parent",
+                    "include_scale": False,
+                },
+                {
+                    "target": world,
+                    "position_only": False,
+                    "orientation_only": False,
+                    "target_transform": "",
+                    "label": "World",
+                    "include_scale": False,
+                }
+            ]
+        }
+        print(data)
+        # -- Add a space switch on this node with the default being the parent
+        # -- and the alternate being the world.
+        space_switch_component = rig.component_library.request("Augment : Space Switch")(label="", stack=rig)
+
+        space_switch_component.input("To Be Driven").set(node.name())
+        space_switch_component.input("Attribute Host").set(node.name())
+
+        space_switch_component.option("_Data").set(data)
+        space_switch_component.run()
+
+        parent = node
 def get_root_control():
     """
     Returns the controller transform with the smallest hierarchy depth.

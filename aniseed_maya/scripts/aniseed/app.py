@@ -234,13 +234,13 @@ class AppWidget(xstack.app.AppWidget):
                 self._host = ""
                 return
 
-            # -- Compare by name string. self._host stores the name of the
-            # -- previous rig host; comparing names avoids touching any
-            # -- stale MObject from a now-closed scene, which is undefined
-            # -- behaviour in the Maya API and crashes after a few scene
-            # -- changes.
-            if self._host == crosswalk.items.get_name(rig_host):
-                return
+            # # -- Compare by name string. self._host stores the name of the
+            # # -- previous rig host; comparing names avoids touching any
+            # # -- stale MObject from a now-closed scene, which is undefined
+            # # -- behaviour in the Maya API and crashes after a few scene
+            # # -- changes.
+            # if self._host == crosswalk.items.get_name(rig_host):
+            #     return
 
         # -- Drop signal connections + host reference on the previous
         # -- stack before we replace it.

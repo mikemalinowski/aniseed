@@ -202,6 +202,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                     try:
                         cmds.connectAttr(driving_attribute, destination_attribute)
                     except RuntimeError:
+                        print(f"could not reconnect {driving_attribute} to {destination_attribute}")
                         pass
 
 

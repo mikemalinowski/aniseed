@@ -1,3 +1,4 @@
+import qtility
 import aniseed_toolkit
 from maya import cmds
 
@@ -17,6 +18,11 @@ class SnapshotCopyDestination(aniseed_toolkit.Tool):
     def run(self):
         aniseed_toolkit.skin.LocalisedSkinCopy.snapshot_vertices()
 
+        qtility.request.message(
+            title="Scale Translation Snapshot",
+            message="Scale Translation Snapshot Stored!",
+        )
+
 
 class CopyLocalised(aniseed_toolkit.Tool):
     """
@@ -34,3 +40,8 @@ class CopyLocalised(aniseed_toolkit.Tool):
 
     def run(self):
         aniseed_toolkit.skin.LocalisedSkinCopy.copy_skinweights()
+
+        qtility.request.message(
+            title = "Scale Translation Snapshot",
+            message = "Scale Translation Snapshot Stored!",
+        )

@@ -355,7 +355,7 @@ class TriLegComponent(aniseed.RigComponent):
             description=f"{prefix}Config",
             location=location,
             parent=parent,
-            shape="core_lollipop",
+            shape="core_floating_config",
             config=self.config,
             match_to=leg_root,
             shape_scale=20.0,
@@ -430,6 +430,11 @@ class TriLegComponent(aniseed.RigComponent):
                 force=True,
             )
 
+        # -- Move the config control under the foot nk
+        mref.get(config_control.org).set_parent(nk_joints[-2])
+        mref.get(config_control.org).match_to(nk_joints[-2])
+        mref.get(config_control.ctl).lock_attributes(["tx", "ty", "tz", "rx", "ry", "rz", "sx", "sy", "sz"])
+
         # -- Set up the space switches on teh fk controls
         if self.option("Apply World Fk Switches").get():
             aniseed_toolkit.space.setup_fk_worldspace_switches(fk_data["controls"], rig=self.rig)
@@ -469,7 +474,7 @@ class TriLegComponent(aniseed.RigComponent):
                 description=f"{prefix}{self.LABELS[idx]}FK",
                 location=location,
                 parent=fk_parent,
-                shape="core_paddle",
+                shape="core_rounded_square",
                 config=self.config,
                 match_to=joint,
                 shape_scale=reference_scale / 3.0,
@@ -600,7 +605,7 @@ class TriLegComponent(aniseed.RigComponent):
             description=prefix + "IKFoot",
             location=location,
             parent=parent,
-            shape="core_paddle",
+            shape="core_foot_paddle",
             shape_scale=reference_scale,
             rotate_shape=[0, 90, 180],
             config=self.config,
@@ -653,7 +658,7 @@ class TriLegComponent(aniseed.RigComponent):
             description=f"{prefix}Heel",
             location=location,
             parent=foot_pivot_tip,
-            shape="core_paddle",
+            shape="core_half_circle",
             config=self.config,
             match_to=joint_chain[self.INDEX_TOE],
             shape_scale=reference_scale / 3.0,
@@ -676,7 +681,7 @@ class TriLegComponent(aniseed.RigComponent):
             description=f"{prefix}Toe",
             location=location,
             parent=foot_pivot_tip,
-            shape="core_paddle",
+            shape="core_half_circle",
             config=self.config,
             match_to=joint_chain[self.INDEX_TOE],
             shape_scale=reference_scale / 3.0,
@@ -699,7 +704,7 @@ class TriLegComponent(aniseed.RigComponent):
             description=prefix + "Ankle",
             location=location,
             parent=heel_control.ctl, # upper_to_foot_chain[self.INDEX_LOWER_LEG],  # heel_control.ctl,
-            shape="core_paddle",
+            shape="core_circle",
             shape_scale=reference_scale,
             match_to=upper_to_foot_chain[self.INDEX_LOWER_LEG],
             config=self.config,
@@ -714,18 +719,6 @@ class TriLegComponent(aniseed.RigComponent):
                 worldSpace=True,
             ),
         )
-        # cns = mref.get(
-        #         cmds.parentConstraint(
-        #         foot_control.ctl,
-        #         ankle_control.ctl,
-        #         skipRotate=["x", "y", "z"],
-        #         maintainOffset=True,
-        #     )[0]
-        # )
-        # cns.attr("interpType").set(0)
-        # controller = mref.get(ankle_control.ctl)
-        # for axis in ["X", "Y", "Z"]:
-        #     controller.attr(f"translate{axis}").set(lock=True, keyable=False, channelBox=False)
 
         # -- Now we have our controls we can start to parent the IK
         # -- accordingly.
@@ -768,14 +761,9 @@ class TriLegComponent(aniseed.RigComponent):
         lock_ankle_rotation_attr.connect(cns.weight_attributes()[0])
 
         m_zero = mref.get(ankle_addition_zero)
-        # m_zero.attr("translateX").disconnect()
         cmds.disconnectAttr(f"{m_zero.translateX.inputs()[0].name(include_node=True)}", m_zero.translateX.name(include_node=True))
         cmds.disconnectAttr(f"{m_zero.translateY.inputs()[0].name(include_node=True)}", m_zero.translateY.name(include_node=True))
         cmds.disconnectAttr(f"{m_zero.translateZ.inputs()[0].name(include_node=True)}", m_zero.translateZ.name(include_node=True))
-        #
-        # mref.get(ankle_addition_zero).translateX.disconnect()
-        # mref.get(ankle_addition_zero).translateY.disconnect()
-        # mref.get(ankle_addition_zero).translateZ.disconnect()
 
         ankle_addition = self._apply_mechanism_name(
             nodes=[cmds.createNode("transform")],

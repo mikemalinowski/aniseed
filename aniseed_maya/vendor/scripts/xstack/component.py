@@ -14,37 +14,6 @@ from .constants import Status
 
 
 # --------------------------------------------------------------------------------------
-def _recursive_replace(value, pattern, replace):
-    """
-    Return a copy of ``value`` with ``pattern`` substituted by ``replace`` in
-    every string found anywhere within it.
-
-    - ``str``  -> the substituted string
-    - ``list`` -> a new list with every element processed recursively
-    - ``dict`` -> a new dict with both keys and values processed recursively
-    - anything else -> returned unchanged
-
-    Nesting is handled to any depth (lists of lists, dicts of lists of dicts,
-    etc.). The input is never mutated; new containers are always built, so a
-    caller can safely compare the result against the original to detect change.
-    """
-    if isinstance(value, str):
-        return pattern.sub(replace, value)
-
-    if isinstance(value, list):
-        return [_recursive_replace(item, pattern, replace) for item in value]
-
-    if isinstance(value, dict):
-        return {
-            _recursive_replace(key, pattern, replace):
-                _recursive_replace(val, pattern, replace)
-            for key, val in value.items()
-        }
-
-    return value
-
-
-# --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,PyMethodMayBeStatic
 class Component:
     """
@@ -199,9 +168,56 @@ class Component:
     def user_functions(self) -> typing.Dict[str, callable]:
         return dict()
 
+    # ----------------------------------------------------------------------------------
+    def mixin_functions(self) -> typing.Dict[str, callable]:
+        """
+        Mixins implement this to contribute user facing actions to the component.
+
+        Do not call this to gather a component's actions - use
+        collated_mixin_functions, which combines the contributions of every
+        mixin in the hierarchy rather than just the first one the method
+        resolution order happens to find.
+
+        :return: Mapping of menu label to callable
+        :rtype: dict(str, callable)
+        """
+        return dict()
+
     # ---------------------------------------------------------------------------------#
     #                DO NOT RE-IMPLEMENT ANY FUNCTIONS BELOW THIS LINE                 #
     # ---------------------------------------------------------------------------------#
+
+    # ----------------------------------------------------------------------------------
+    def collated_mixin_functions(self) -> typing.Dict[str, callable]:
+        """
+        Returns the combined mixin_functions of every class in this component's
+        hierarchy.
+
+        Each class is asked for its own contribution rather than letting the
+        method resolution order pick a single winner, so a component can compose
+        any number of mixins, in any base order, without the mixins having to
+        know about one another.
+
+        :return: Mapping of menu label to callable
+        :rtype: dict(str, callable)
+        """
+        collated = dict()
+
+        # -- Walk from the most base class forwards so that more derived
+        # -- contributions take precedence if two mixins offer the same label
+        for class_ in reversed(type(self).__mro__):
+
+            # -- Read straight off the class rather than using getattr, as that
+            # -- would find inherited implementations and call the same one once
+            # -- per subclass
+            function = class_.__dict__.get("mixin_functions")
+
+            if not function:
+                continue
+
+            collated.update(function(self))
+
+        return collated
 
     # ----------------------------------------------------------------------------------
     def __init__(self, label: str, stack: "stack.Stack", uuid_: str or None = None):
@@ -347,68 +363,6 @@ class Component:
         """
         self._label = label
         self.changed.emit()
-
-    # ----------------------------------------------------------------------------------
-    def search_and_replace(self, search: str, replace: str, recursive: bool = False) -> int:
-        """
-        Search and replace across this component's label and all of its string
-        inputs and options.
-
-        ``search`` is treated as a regular expression (via ``re.sub``), so
-        callers can anchor matches, use character classes, capture groups
-        (referenced in ``replace`` as ``\\1`` etc.) and so on.
-
-        This is pure data manipulation with no UI dependency, so it can be
-        driven equally from the tool or from a headless script.
-
-        Args:
-            search: A regular expression pattern to search for. An empty
-                pattern is a no-op.
-            replace: The replacement template substituted for each match.
-                Supports backreferences (e.g. ``\\1``).
-            recursive: If True, the same operation is applied to every
-                descendant component.
-
-        Returns:
-            The number of values (label and/or attributes) that were changed.
-
-        Raises:
-            re.error: If ``search`` is not a valid regular expression.
-        """
-        if not search:
-            return 0
-
-        # -- Compiling each call is cheap: re maintains an internal cache of
-        # -- compiled patterns, so recursion recompiling the same string is a
-        # -- dict lookup, not a re-parse.
-        pattern = re.compile(search)
-
-        changed = 0
-
-        # -- Label
-        label = self.label()
-        new_label = pattern.sub(replace, label)
-        if new_label != label:
-            self.set_label(new_label)
-            changed += 1
-
-        # -- Inputs and options. We read with resolved=False so we act on the
-        # -- literally stored value (e.g. an address string) rather than the
-        # -- value it might point to. Strings are substituted directly; lists
-        # -- and dictionaries are traversed recursively to any depth.
-        for attribute in list(self.inputs()) + list(self.options()):
-            value = attribute.get(resolved=False)
-            new_value = _recursive_replace(value, pattern, replace)
-            if new_value != value:
-                attribute.set(new_value)
-                changed += 1
-
-        # -- Recurse into children if requested
-        if recursive:
-            for child in self.children:
-                changed += child.search_and_replace(search, replace, recursive=True)
-
-        return changed
 
     # ----------------------------------------------------------------------------------
     def suggested_label(self):
@@ -763,7 +717,98 @@ class Component:
         self.stack.import_subtree_under(parent=self, filepath=filepath)
 
     # ----------------------------------------------------------------------------------
-    def duplicate(self, input_overrides=None, option_overrides=None, include_children=True):
+    @classmethod
+    def _substituted_value(
+        cls,
+        expression: "re.Pattern",
+        replace_with: str,
+        value: typing.Any,
+    ) -> typing.Any:
+        """
+        Returns the given value with the expression substituted throughout,
+        recursing into lists, tuples and dictionaries. Dictionary keys are
+        substituted as well as their values, as names are just as likely to be
+        held as keys. Anything which is not a string or a container is returned
+        untouched.
+
+        :param expression: The compiled pattern to search for
+        :type expression: re.Pattern
+
+        :param replace_with: String to substitute each match with
+        :type replace_with: str
+
+        :param value: The value to perform the substitution within
+        :type value: any
+
+        :return: The value with all substitutions applied
+        :rtype: any
+        """
+        if isinstance(value, str):
+            return expression.sub(replace_with, value)
+
+        if isinstance(value, dict):
+            return {
+                cls._substituted_value(expression, replace_with, key):
+                    cls._substituted_value(expression, replace_with, item)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, (list, tuple)):
+            substituted = [
+                cls._substituted_value(expression, replace_with, item)
+                for item in value
+            ]
+
+            # -- Preserve whether we were given a mutable sequence or not
+            return tuple(substituted) if isinstance(value, tuple) else substituted
+
+        return value
+
+    # ----------------------------------------------------------------------------------
+    def search_and_replace(self, search_for: str, replace_with: str) -> None:
+        """
+        Applies a regex search and replace across the values of every input and
+        option on this component.
+
+        Values are traversed recursively, so strings nested within lists, tuples
+        and dictionaries are substituted too, including dictionary keys. Values
+        which are not strings are left as they are.
+
+        :param search_for: The pattern to search for. This is treated as a
+            regular expression.
+        :type search_for: str
+
+        :param replace_with: The string to substitute each match with
+        :type replace_with: str
+
+        :return: None
+        """
+        expression = re.compile(search_for)
+        self.set_label(self._substituted_value(expression, replace_with, self.label()))
+
+        for attribute in self.inputs() + self.options():
+
+            # -- Read the unresolved value, otherwise an attribute pointing at
+            # -- another component would have that component's value baked in
+            # -- as a literal rather than keeping its address
+            value = attribute.get(resolved=False)
+
+            substituted = self._substituted_value(expression, replace_with, value)
+
+            # -- Only write back where something actually changed, so we do not
+            # -- emit change events for untouched attributes
+            if substituted != value:
+                attribute.set(substituted)
+
+    # ----------------------------------------------------------------------------------
+    def duplicate(
+        self,
+        input_overrides=None,
+        option_overrides=None,
+        include_children=True,
+        search_for=None,
+        replace_with=None,
+    ):
         """
         Create a duplicate of this component in the stack.
 
@@ -774,6 +819,10 @@ class Component:
 
         ``input_overrides`` and ``option_overrides`` apply only to the
         top-level duplicate; descendants keep their original values.
+
+        ``search_for`` and ``replace_with`` apply a regex search and replace
+        across the duplicate's input and option values once the copy and any
+        overrides are in place. This also only affects the top-level duplicate.
         """
         # -- Instance the new component
         new_component = self.stack.add_component(
@@ -791,10 +840,23 @@ class Component:
         for name, value in (option_overrides or dict()).items():
             new_component.option(name).set(value)
 
+        # -- Re-name any data carried over from the source, now that the copy
+        # -- and any overrides are in place
+        if search_for is not None and replace_with is not None:
+            new_component.search_and_replace(
+                search_for=search_for,
+                replace_with=replace_with,
+            )
+
         # -- Set the parenting of the component (sibling of the original)
         new_component.set_parent(
             parent=self.parent,
         )
+
+        # -- Trigger its events
+        new_component.on_enter_stack()
+
+        self.stack.component_added.emit(new_component)
 
         # -- Recursively duplicate children under the new component. Snapshot
         # -- self.children first because child.duplicate() temporarily inserts
@@ -802,13 +864,13 @@ class Component:
         # -- it under new_component below.
         if include_children:
             for child in list(self.children):
-                child_duplicate = child.duplicate(include_children=True)
+                child_duplicate = child.duplicate(
+                    include_children=True,
+                    search_for=search_for,
+                    replace_with=replace_with,
+                )
                 child_duplicate.set_parent(parent=new_component)
 
-        # -- Trigger its events
-        new_component.on_enter_stack()
-
-        self.stack.component_added.emit(new_component)
 
         return new_component
 

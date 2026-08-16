@@ -132,7 +132,7 @@ class SimpleFkComponent(aniseed.RigComponent):
         parent = self.input("Parent").get()
         joints_to_drive = self.input("Joints To Drive").get()
 
-        for joint_to_drive in joints_to_drive:
+        for idx, joint_to_drive in enumerate(joints_to_drive):
 
             # -- Aniseed gives us a function to create a control but it does not
             # -- force you to use it. Aniseed does not expect a formal control
@@ -193,5 +193,9 @@ class SimpleFkComponent(aniseed.RigComponent):
 
             if not self.option("Flat Hierarchy").get():
                 parent = control.ctl
+
+            # -- Declare the output
+            output_plug = self.declare_output(f"Fk Control {idx}")
+            self.output(f"Fk Control {idx}").set(control.ctl)
 
         return True

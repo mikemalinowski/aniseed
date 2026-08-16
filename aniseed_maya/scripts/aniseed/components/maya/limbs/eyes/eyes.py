@@ -94,6 +94,13 @@ class EyesComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Align Master Control To World",
+            value=True,
+            group="Behaviour",
+        )
+
+
+        self.declare_option(
             name="Aim Distance",
             value=aniseed_toolkit.units.to_cm(30),
             group="Behaviour",
@@ -158,6 +165,12 @@ class EyesComponent(aniseed.RigComponent):
         self.declare_option(
             name="Default Horizontal Follow",
             value=0.2,
+            group="Defaults",
+        )
+
+        self.declare_option(
+            name="Max Blink Rotation",
+            value=65,
             group="Defaults",
         )
 
@@ -267,6 +280,15 @@ class EyesComponent(aniseed.RigComponent):
             parent=self.input("Parent").get(),
             match_to=lf_eye_component.output("Aim Control").get(),
         )
+
+        # -- Align the controls if we need to
+        align_mater_to_world = self.option("Align Master Control To World").get()
+        if align_mater_to_world:
+                cmds.xform(
+                    master_aim_control.org,
+                    rotation=(0, 0, 0),
+                    worldSpace=True,
+                )
 
         ws_left = cmds.xform(
             left_aim_control.ctl,
@@ -578,6 +600,13 @@ class EyeComponent(aniseed.RigComponent):
             group="Defaults",
         )
 
+
+        self.declare_option(
+            name="Max Blink Rotation",
+            value=65,
+            group="Defaults",
+        )
+
         self.declare_output(
             name="Eye Control",
         )
@@ -836,7 +865,7 @@ class EyeComponent(aniseed.RigComponent):
 
         blink_attribute.connect(blink_reverse.attr("floatA"))
 
-        max_rotation = 65
+        max_rotation = self.option("Max Blink Rotation").get()
         upper_rotation_multiplier = max_rotation * self.option("Auto Blink Upper Multiplier").get()
         lower_rotation_multiplier = max_rotation * self.option("Auto Blink Lower Multiplier").get()
 

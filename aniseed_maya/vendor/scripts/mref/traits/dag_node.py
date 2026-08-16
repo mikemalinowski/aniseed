@@ -218,3 +218,16 @@ class DagNode(mref.Trait):
                 results.append(child)
 
         return results
+
+    def has_zeroed_pivots(self, tolerance=1e-6):
+        """Return True if the transform has reset/frozen pivots.
+
+        Checks that rotatePivot, scalePivot, rotatePivotTranslate and
+        scalePivotTranslate are all at the origin. Accepts either a transform
+        or a shape name.
+        """
+        for attr in ("rotatePivot", "scalePivot", "rotatePivotTranslate", "scalePivotTranslate"):
+            x, y, z = cmds.getAttr("{}.{}".format(self.item.full_name(), attr))[0]
+            if abs(x) > tolerance or abs(y) > tolerance or abs(z) > tolerance:
+                return False
+        return True

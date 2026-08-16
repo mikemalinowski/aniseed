@@ -190,12 +190,15 @@ class Attribute(mref.Trait):
         drive the value of the other attribute.
         """
         attribute = mref.get(attribute)
-        cmds.connectAttr(
-            self.path(),
-            attribute.path(),
-            force=force,
-            **kwargs
-        )
+        try:
+            cmds.connectAttr(
+                self.path(),
+                attribute.path(),
+                force=force,
+                **kwargs
+            )
+        except:
+            print(f"Could not connect {self} to {attribute}")
 
     def connect_next(
         self,

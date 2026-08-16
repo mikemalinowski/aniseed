@@ -104,11 +104,16 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             "Add Separator Attribute",
             host,
         )
-
-        node_to_drive = aniseed_toolkit.run(
-            "Get Control",
-            node_to_drive,
-        )
+        
+        try:
+            node_to_drive = aniseed_toolkit.run(
+                "Get Control",
+                node_to_drive,
+            )
+            node_to_drive = node_to_drive.org
+        except:
+            pass
+            
 
         labels = [
             space["label"]
@@ -171,7 +176,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                 )
 
                 matrix_to_restore = cmds.xform(
-                    node_to_drive.org,
+                    node_to_drive,
                     query=True,
                     matrix=True,
                     worldSpace=True,
@@ -195,7 +200,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             constraints.append(
                 cmds.parentConstraint(
                     target,
-                    node_to_drive.org,
+                    node_to_drive,
                     maintainOffset=maintain_offset,
                 )[0]
             )
@@ -204,7 +209,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                 constraints.append(
                     cmds.scaleConstraint(
                         target,
-                        node_to_drive.org,
+                        node_to_drive,
                         maintainOffset=maintain_offset,
                     )[0]
                 )
@@ -249,7 +254,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
             if matrix_to_restore:
                 cmds.xform(
-                    node_to_drive.org,
+                    node_to_drive,
                     matrix=matrix_to_restore,
                     worldSpace=True,
                 )
@@ -262,7 +267,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                     try:
                         cmds.disconnectAttr(
                             f"{constraint}.constraintRotate.constraintRotate{axis}",
-                            f"{node_to_drive.org}.rotate.rotate{axis}",
+                            f"{node_to_drive}.rotate.rotate{axis}",
                         )
 
                     except RuntimeError:
@@ -276,7 +281,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                     try:
                         cmds.disconnectAttr(
                             f"{constraint}.constraintTranslate.constraintTranslate{axis}",
-                            f"{node_to_drive.org}.translate.translate{axis}",
+                            f"{node_to_drive}.translate.translate{axis}",
                         )
 
                     except RuntimeError:

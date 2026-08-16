@@ -1,4 +1,3 @@
-import re
 import traceback
 import qtility
 from Qt import QtWidgets, QtCore, QtGui
@@ -306,6 +305,38 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         item.component.duplicate()
 
     # ----------------------------------------------------------------------------------
+    def search_and_replace_component(self, item):
+        print("search and replace for %s" % item.component)
+
+        search_for = qtility.request.text(
+            title="Search For",
+            message=(
+                "Give the text you want to search for. Note that this will be converted "
+                "to a regular expression."
+            ),
+            text="",
+        )
+
+        if not search_for:
+            return None
+
+        replace_with = qtility.request.text(
+            title="Replace With",
+            message=(
+                "Give the text you want to replace with."
+            ),
+            text="",
+        )
+
+        if not replace_with:
+            return None
+
+        item.component.search_and_replace(
+            search_for=search_for,
+            replace_with=replace_with,
+        )
+
+    # ----------------------------------------------------------------------------------
     def help_for_component(self, item):
         item.component.help()
 
@@ -379,50 +410,6 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             return
 
         component.set_label(label)
-
-        self.populate()
-
-    def search_and_replace(self, item: QtWidgets.QListWidgetItem):
-        """
-        Collect search/replace input from the user, delegate the operation to
-        the component, then refresh the tree. All logic lives on the
-        component; this method is purely UI.
-        """
-        component = item.component
-
-        search = qtility.request.text(
-            title="Search And Replace",
-            message="Regular expression to search for:",
-            parent=self,
-        )
-        if not search:
-            return
-
-        # -- text() returns None on cancel, "" on a confirmed-empty entry, so
-        # -- we only abort on None. This keeps "replace with nothing" valid.
-        replace = qtility.request.text(
-            title="Search And Replace",
-            message=f"Replace matches of '{search}' with:",
-            parent=self,
-        )
-        if replace is None:
-            return
-
-        recursive = qtility.request.confirmation(
-            title="Search And Replace",
-            message="Apply recursively to all child components?",
-            parent=self,
-        )
-
-        try:
-            component.search_and_replace(search, replace, recursive=recursive)
-        except re.error as error:
-            qtility.request.message(
-                title="Search And Replace",
-                message=f"Invalid search expression:\n{error}",
-                parent=self,
-            )
-            return
 
         self.populate()
 

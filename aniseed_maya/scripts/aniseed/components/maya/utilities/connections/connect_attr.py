@@ -44,6 +44,13 @@ class ConnectAttr(aniseed.RigComponent):
             description="If true, an existing connection into the destination attribute is broken before the new one is made.",
         )
 
+
+        self.declare_option(
+            name="Reverse",
+            value=False,
+            description="If true, an existing connection into the destination attribute is broken before the new one is made.",
+        )
+
     def input_widget(self, requirement_name: str):
         if requirement_name in ["Source Node", "Destination Node"]:
             return aniseed.widgets.ObjectSelector()
@@ -58,10 +65,18 @@ class ConnectAttr(aniseed.RigComponent):
         destination_attribute = self.input("Destination Attribute").get()
         force = self.option("Force").get()
 
-        source_node.attr(source_attribute).connect(
-            destination_node.attr(destination_attribute),
-            force=force,
-        )
+        if self.option("Reverse").get():
+            reverse_node = mref.create("reverse")
+            source_node.attr(source_attribute).connect(reverse_node.attr("inputX"))
+            reverse_node.outputX.connect(
+                destination_node.attr(destination_attribute),
+                force=force,
+            )
+        else:
+            source_node.attr(source_attribute).connect(
+                destination_node.attr(destination_attribute),
+                force=force,
+            )
 
 
 class ConnectManyAttr(aniseed.RigComponent):

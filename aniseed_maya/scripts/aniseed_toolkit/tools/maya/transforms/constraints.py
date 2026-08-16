@@ -5,6 +5,7 @@ import maya.cmds as mc
 class ClearConstraintsTool(aniseed_toolkit.Tool):
 
     identifier = "Clear Constraints"
+    classification = "Rigging"
     categories = [
         "Transforms",
     ]

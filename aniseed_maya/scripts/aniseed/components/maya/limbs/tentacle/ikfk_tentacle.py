@@ -1,4 +1,5 @@
 # NOT PRODUCTION READY!
+import mref
 import aniseed
 import qtility
 import aniseed_toolkit
@@ -14,6 +15,7 @@ from Qt import QtWidgets
 optional_rig_component = object
 try:
     import twistSplineBuilder
+
     optional_rig_component = aniseed.RigComponent
 except ImportError:
     pass
@@ -21,8 +23,7 @@ except ImportError:
 
 # ------------------------------------------------------------------------------
 class TentacleComponent(aniseed.RigComponent):
-
-    identifier = 'Limb : Tentacle'
+    identifier = 'Limb : IKFK Tentacle'
     version = 1
 
     def __init__(self, *args, **kwargs):
@@ -67,6 +68,21 @@ class TentacleComponent(aniseed.RigComponent):
             value=4,
             group="Behaviour",
             pre_expose=True,
+        )
+
+        self.declare_option(
+            name="Add Space Switches",
+            value=True,
+        )
+
+        self.declare_option(
+            name="Default Twist",
+            value=1,
+        )
+
+        self.declare_option(
+            name="Create FK",
+            value=1,
         )
 
         self.declare_option(
@@ -131,24 +147,6 @@ class TentacleComponent(aniseed.RigComponent):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
-    def is_valid(self) -> bool:
-        """
-        We only consider this to be valid if we have guide data and there is
-        not a live guide currently attached.
-        """
-        guide_data = self.option("GuideData").get()
-
-        if not guide_data:
-            return False
-
-        guide_org = guide_data.get("LinkedGuide")
-
-        if guide_org and mc.objExists(guide_org):
-            print("You must remove the guide before building")
-            return False
-
-        return True
-
     def user_functions(self) -> dict:
         """
         We expose functionality for creating joints as well as building and
@@ -158,28 +156,13 @@ class TentacleComponent(aniseed.RigComponent):
         menu = super(TentacleComponent, self).user_functions()
 
         # -- Only show the skeleton creation tools if we dont have a skeleton
-        leg_joint = self.input("Start Joint").get()
+        joint = self.input("Start Joint").get()
 
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
-        if not leg_joint or not mc.objExists(leg_joint):
+        if not joint or not mc.objExists(joint):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
             return menu
-
-        guide_data = self.option("GuideData").get()
-        linked_guide = guide_data.get("LinkedGuide")
-
-        # -- Depending on whether we have a guide or not, change what we show
-        # -- in the actions menu
-        if linked_guide and mc.objExists(linked_guide):
-            menu["Remove Guide"] = functools.partial(self.user_func_remove_guide)
-        else:
-            menu["Create Guide"] = functools.partial(self.user_func_build_guide)
-
-        # -- Add in the function which allows us to change
-        # -- the joint count
-        menu["Change Joint Count"] = functools.partial(self.user_func_change_joint_count)
-        return menu
 
     def user_func_create_skeleton(self, joint_count: int = None, parent: str = None) -> list:
         """
@@ -242,170 +225,35 @@ class TentacleComponent(aniseed.RigComponent):
         self.input("Start Joint").set(joints[0])
         self.input("End Joint").set(joints[-1])
 
-        # -- We always want the user to interact with this component through
-        # -- the guide, so ensure we build the guide as soon as the joints are
-        # -- created.
-        self.user_func_build_guide()
-
         return joints
 
-    def user_func_build_guide(self):
-        """
-        This function will construct a guide rig around the joints
-        """
-        # -- Get the list of joints between the start and end joint (inclusive)
-        joints = aniseed_toolkit.run(
-            "Get Joints Between",
-            self.input("Start Joint").get(),
-            self.input("End Joint").get(),
-        )
-
-        print("")
-        # -- Use the builder class to construct the rig. Note that our guide is
-        # -- actually the same as the main control rig.
-        builder = TentacleBuilder(
-            cv_count=self.option("Control Count").get(),
-            joint_count=len(joints),
-            config=self.config,
-            location=self.option("Location").get(),
-            spread=self.spread(joints),
-            description=self.option("Descriptive Prefix").get(),
-        )
-
-        # -- Constrain the deformation joints to the mechanical joints
-        # -- in the guide rig. Note that we explicity disable the constraints
-        # -- rest position property, as we do not want the joints to "ping"
-        # -- back when the guide is removed.
-        for idx, mech_joint in enumerate(builder.joint_names()):
-            cns = mc.parentConstraint(
-                mech_joint,
-                joints[idx],
-                maintainOffset=False,
-            )[0]
-            mc.setAttr(f"{cns}.enableRestPosition", 0)
-            cns = mc.scaleConstraint(
-                mech_joint,
-                joints[idx],
-                maintainOffset=False,
-            )[0]
-            mc.setAttr(f"{cns}.enableRestPosition", 0)
-
-        # -- Get the guide data, and fill in the linked guide to point
-        # -- to our guide node
-        guide_data = self.option("GuideData").get()
-        guide_xform_data = guide_data.get("AttributeData", dict())
-        guide_data["LinkedGuide"] = builder.org
-
-        # -- If there was any previously stored guide data then we read it
-        # -- and apply the attribute data
-        counter = 1
-        for tag, attribute_data in guide_xform_data.items():
-            node = aniseed_toolkit.run(
-                "Find First Child With Tag",
-                builder.org,
-                tag,
-            )
-            if not node:
-                break
-
-            guide_xform_data[tag] = dict()
-            for attr, value in attribute_data.items():
-                try:
-                    mc.setAttr(f"{node}.{attr}", value)
-                except: pass
-            counter += 1
-
-        # -- Finally serialise the guide data now that we have modified it
-        self.option("GuideData").set(guide_data)
-
     def spread(self, joints):
-        number_of_joints = len(joints)
         chain_length = aniseed_toolkit.joints.chain_length(joints[0], joints[-1])
+        control_count = self.option("Control Count").get()
 
-        chain_length /= float(number_of_joints)
-        chain_length /= 3.0
+        x = chain_length / (control_count - 1)
+        y = x / 3.0
+        return y
 
-        return chain_length
+        _spread = (control_count - 1) / chain_length
+        #_spread = _spread / 3.0
+        return _spread
 
-    def user_func_change_joint_count(self, joint_count: int = None) -> None:
-        """
-        This function will rebuild the joint structure to a given joint
-        count, managing any child joints that need reparenting as part
-        of the process.
-        """
-        # -- Validate that we're being asked to create a valid
-        # -- number of joints
-        if not joint_count:
-            joint_count = joint_count or int(
-                qtility.request.text(
-                    title="Joint Count",
-                    message="How many joints do you want?"
-                ),
-            )
-        if not joint_count or joint_count < 2:
-            return
-
-        # -- Get the current joints
-        joints = aniseed_toolkit.run(
-            "Get Joints Between",
-            self.input("Start Joint").get(),
-            self.input("End Joint").get(),
-        )
-
-        # -- Determine the main parent - this is the parent of the top
-        # -- level joint
-        main_parent = mc.listRelatives(joints[0], parent=True)[0]
-
-        # -- Declare a variable where we will store any joints we need to
-        # -- reparent. We store the name of the joint as well as the current
-        # -- parent name.
-        joints_to_reparent = dict()
-        # -- Un parent any children, storing the parent name
-        for joint in joints:
-            for child in mc.listRelatives(joint, children=True, type="joint") or []:
-                if child not in joints:
-                    joints_to_reparent[child] = joint
-                    mc.parent(child, world=True)
-
-        # -- Remove the guide
-        self.user_func_remove_guide()
-
-        # -- Now we can delete the existing joints and build the new joints
-        mc.delete(joints)
-        new_joints = self.user_func_create_skeleton(
-            joint_count=joint_count,
-            parent=main_parent,
-        )
-
-        # -- Now that we have a set of new joints made, we attempt to reparent
-        # -- any joints
-        for child, parent in joints_to_reparent.items():
-            if not parent or not mc.objExists(parent):
-                parent = main_parent
-            mc.parent(child, parent)
+        _spread = (control_count - 1)
+        _spread /= 3.0
+        return _spread
 
     def run(self) -> bool:
         """
         This function is called when the rig is being built
         """
+        location = self.option("Location").get()
         # -- Get the list of joints that make up the tentacle chain
         joints = aniseed_toolkit.run(
             "Get Joints Between",
             self.input("Start Joint").get(),
             self.input("End Joint").get(),
         )
-
-        # -- Access the guide data
-        guide_data = self.option("GuideData").get()
-        guide_xform_data = guide_data.get("AttributeData", dict())
-
-        # -- Access any bone data
-        bone_matrices = guide_data.get("BoneMatrices", dict())
-
-        # -- Transform our bones to their expected positions
-        for bone_name, matrix in bone_matrices.items():
-            if mc.objExists(bone_name):
-                mc.xform(bone_name, matrix=matrix)
 
         # -- Use the tentacle builder to construct the rig
         builder = TentacleBuilder(
@@ -416,64 +264,75 @@ class TentacleComponent(aniseed.RigComponent):
             spread=self.spread(joints),
             description=self.option("Descriptive Prefix").get(),
         )
+        # - Match the control org to the joint
 
-        # -- We now need to set various attributes on the rig to match the guide
-        counter = 1
-        for tag, attribute_data in guide_xform_data.items():
-            node = aniseed_toolkit.run(
-                "Find First Child With Tag",
-                builder.org,
-                tag,
-            )
-            if not node:
-                break
-
-            for attr, value in attribute_data.items():
-                try:
-                    mc.setAttr(f"{node}.{attr}", value)
-                except: pass
-            counter += 1
+        master_control = mref.get(builder.get_master_control())
+        master_control.add_attribute(
+            "show_fk",
+            value=False,
+            attribute_type="bool",
+            keyable=True,
+        )
+        master_control.show_fk.set(channelBox=True)
+        mref.get(builder.org).match_to(joints[0])
 
         # -- TODO: We should zero the controls at this stage!
         pass
 
-        # # -- Now we need to make the controls location be the zero point.
-        # # -- We do this by taking the control and getting the mech parent
-        # # -- and matching the transform of hte mech parent to the control
-        # # -- then zero the control
-        # for control in builder.controls():
-        #
-        #     if "Twist" in control:
-        #         continue
-        #
-        #     control = aniseed_toolkit.run("Get Control", control)
-        #     mech_parent = mc.listRelatives(control.org, p=True)[0]
-        #
-        #     mc.xform(
-        #         mech_parent,
-        #         matrix=mc.xform(
-        #             control.ctl,
-        #             query=True,
-        #             matrix=True,
-        #             worldSpace=True,
-        #         ),
-        #         worldSpace=True,
-        #     )
-        #     aniseed_toolkit.run("Zero Control", control.ctl)
-
         # -- We now constrain our deformation joints to the control rig
-        for idx, mech_joint in enumerate(builder.joint_names()):
-            cns = mc.parentConstraint(
-                mech_joint,
-                joints[idx],
-                maintainOffset=True,
-            )[0]
-            cns = mc.scaleConstraint(
-                mech_joint,
-                joints[idx],
-                maintainOffset=True,
-            )[0]
+        last_fk_control = builder.org
+        last_linear_rider = builder.org
+        fk_controls = []
 
+        for idx, rider in enumerate(builder.riders()):
+
+            linear_rider = mref.create(
+                "transform",
+                name=self.config.generate_name(
+                    classification="mech",
+                    description="linear_rider",
+                    location=location,
+                ),
+                parent=last_linear_rider,
+            )
+            last_linear_rider = linear_rider
+            mc.parentConstraint(rider, linear_rider.name())
+
+            fk_control = aniseed_toolkit.control.create(
+                description="FK" + self.option("Descriptive Prefix").get(),
+                config=self.config,
+                location=self.option("Location").get(),
+                parent=last_fk_control,
+                shape="core_rounded_square",
+                rotate_shape=[0, 0, 90],
+                match_to=rider,
+            )
+
+            for shape in mref.get(fk_control.ctl).shapes():
+                master_control.show_fk.connect(shape.visibility)
+            fk_controls.append(fk_control.ctl)
+
+            decompose_node = mc.createNode("decomposeMatrix")
+            mc.connectAttr(f"{linear_rider.name()}.matrix", f"{decompose_node}.inputMatrix")
+            mc.connectAttr(f"{decompose_node}.outputTranslate", f"{fk_control.org}.translate")
+            mc.connectAttr(f"{decompose_node}.outputRotate", f"{fk_control.org}.rotate")
+            mc.connectAttr(f"{decompose_node}.outputScale", f"{fk_control.org}.scale")
+
+            last_fk_control = fk_control.ctl
+
+        for idx, fk_control in enumerate(fk_controls):
+            mc.parentConstraint(
+                fk_control,
+                joints[idx],
+                maintainOffset=True,
+            )
+            mc.scaleConstraint(
+                fk_control,
+                joints[idx],
+                maintainOffset=True,
+            )
+
+        for idx, mech_joint in enumerate(builder.joint_names()):
             # -- Set the corresponding output plug
             tag = "Out Joint %s" % idx
             self.output(tag).set(mech_joint)
@@ -486,77 +345,42 @@ class TentacleComponent(aniseed.RigComponent):
                 builder.org,
                 parent,
             )
+
+        spline_controls = [
+            control
+            for control in builder.controls()
+            if "TentacleSpline" in control
+        ]
+        twist_controls = [
+            control
+            for control in builder.controls()
+            if "TentacleTwist" in control
+        ]
+
+        for twist_control in twist_controls:
+
+            mref.get(twist_control).attr("UseTwist").set(self.option("Default Twist").get())
+        #
+        # if self.option("Add Space Switches").get():
+        #     aniseed_toolkit.space.setup_fk_transform_worldspace_switches(
+        #         nodes=spline_controls,
+        #         rig=self.rig,
+        #         default_space="World"
+        #     )
+        #
+        # if self.option("Add Space Switches").get():
+        #     nodes = [
+        #         f"MECH_TentacleSpline_0{n+1}_LF"
+        #         for n in range(8)
+        #     ]
+        #     print(nodes)
+        #     aniseed_toolkit.space.setup_fk_transform_worldspace_switches(
+        #         nodes=nodes,
+        #         rig=self.rig,
+        #         default_space="World"
+        #     )
+
         return True
-
-    def user_func_remove_guide(self) -> None:
-        """
-        This function removes the guide setup - storing all its data
-        before doing so.
-        """
-        # -- Access our guide data. If we cannot get any then we have nothing
-        # -- to remove
-        guide_data = self.option("GuideData").get()
-        if not guide_data:
-            return
-
-        # -- Get the linked guide. Again, if there is not a linked guide
-        # -- then there is nothing we can do.
-        guide_org = guide_data.get("LinkedGuide")
-        if not guide_org or not mc.objExists(guide_org):
-            return
-
-        # -- Declare the dictionary where we store all the guide data
-        guide_xform_data = dict()
-
-        # -- Cycle each control and apply its attribute data
-        counter = 1
-        while True:
-            tag = "Tentacle Control %s" % counter
-            node = aniseed_toolkit.run(
-                "Find First Child With Tag",
-                guide_org,
-                tag,
-            )
-            if not node:
-                break
-
-            guide_xform_data[tag] = dict()
-            for attr in mc.listAttr(node, k=True):
-                guide_xform_data[tag][attr] = mc.getAttr(f"{node}.{attr}")
-
-            # -- Increment the counter so we can find the next control
-            counter += 1
-
-        # -- Store all the joint transforms
-        joint_transforms = dict()
-        start_joint = self.input("Start Joint").get()
-        end_joint = self.input("End Joint").get()
-        for joint in aniseed_toolkit.run("Get Joints Between", start_joint, end_joint):
-            joint_transforms[joint] = mc.xform(
-                joint,
-                matrix=True,
-                query=True,
-            )
-
-        # -- Now that we have read all the guide information we can
-        # -- delete the guide itself.
-        mc.delete(guide_org)
-
-        # -- Finally we store all this data back into the guide data option.
-        guide_data["LinkedGuide"] = None
-        guide_data["AttributeData"] = guide_xform_data
-        guide_data["BoneMatrices"] = joint_transforms
-        self.option("GuideData").set(guide_data)
-
-        # -- Finally we restore the joint transforms. This is because when we
-        # -- delete the control rig the joints ping back to their pre-constrained
-        # -- locations.
-        for joint, matrix in joint_transforms.items():
-            mc.xform(
-                joint,
-                m=matrix,
-            )
-
 
 
 class TentacleBuilder:
@@ -568,15 +392,15 @@ class TentacleBuilder:
     TAG = "Default"
 
     def __init__(
-        self,
-        cv_count: int,
-        joint_count: int,
-        description: str,
-        location: str,
-        spread: float,
-        config: "aniseed.RigConfiguration"
+            self,
+            cv_count: int,
+            joint_count: int,
+            description: str,
+            location: str,
+            spread: float,
+            config: "aniseed.RigConfiguration"
     ):
-        
+
         # -- Store our incoming variables
         self.config = config
         self.cv_count = cv_count
@@ -584,11 +408,11 @@ class TentacleBuilder:
         self.description = description
         self.location = location
         self.spread = spread
-        
-        # -- The look up is a variable where we store the nodes 
+
+        # -- The look up is a variable where we store the nodes
         # -- "given" name by the blur code, and maps to an mobject
         self.lookup = dict()
-        
+
         # -- This node stores a mapping of only the controls, where the key
         # -- is the blur name and the value is an mobject reference
         self._blur_controls = dict()
@@ -605,39 +429,54 @@ class TentacleBuilder:
             closed=False,
             singleTangentNode=True,
         )
-        
+
         # -- Start first by populating the lookup - this is important because
-        # -- we will internally reference things by the blur name. 
+        # -- we will internally reference things by the blur name.
         self._populate_lookup()
-        
+
         # -- Now that we have built the blur rig we need to place various
         # -- nodes under a structure which makes more sense for our style
         # -- of rigging.
         self._construct_wrapping_hierarchy()
-        
+
         # -- We now need to rename all created nodes to align with the naming
         # -- convention of the RigConfiguration requested by the user
         self.resolve_names()
-        
+
         # -- Finally we now need to construct actual aniseed controls to represent
         # -- all the blur controls.
         self.build_controls()
 
     def _construct_wrapping_hierarchy(self):
         """
-        In this function we create a high level organisational node which 
+        In this function we create a high level organisational node which
         everything will sit under. We also create a node which will not inherit
-        transforms. 
+        transforms.
         """
         # -- Create the top level org
-        self.org = mc.createNode("transform")
+        self.org = mc.createNode(
+            "transform",
+
+            name=self.config.generate_name(
+                classification="org",
+                description="tentacle_setup",
+                location=self.location,
+            ),
+        )
 
         # -- Create the no transform child
-        self.no_transform = mc.createNode("transform")
+        self.no_transform = mc.createNode(
+            "transform",
+            name=self.config.generate_name(
+                classification="org",
+                description="tentacle_no_transform",
+                location=self.location,
+            ),
+        )
         mc.setAttr(f"{self.no_transform}.inheritsTransform", False)
         mc.parent(self.no_transform, self.org)
-        
-        # -- For all the artefacts which are a child of the scene root, we 
+
+        # -- For all the artefacts which are a child of the scene root, we
         # -- place them under our org or no transform group.
         for node in self._root_artefacts():
             parent = self.org
@@ -648,8 +487,8 @@ class TentacleBuilder:
     def _populate_lookup(self):
         """
         This will cycle over all the created nodes and add an mobject
-        reference to them. This is important because we dont want to be 
-        constantly managing name changes. 
+        reference to them. This is important because we dont want to be
+        constantly managing name changes.
         """
         nodes = self._root_artefacts()
 
@@ -663,7 +502,7 @@ class TentacleBuilder:
         """
         This gives us a hard coded list of all teh objects the blur
         code generates at the scene level. This never changes and will
-        always be renamed before the next one is created.  
+        always be renamed before the next one is created.
         """
         return [
             f"Ctrl_X_{self.TAG}SplineGlobal_Part",
@@ -739,6 +578,16 @@ class TentacleBuilder:
         """
         return self.lookup["Rig_X_DefaultSpline_Drv"]
 
+    def riders(self):
+        results = []
+
+        for k in self.lookup.keys():
+            node_name = aniseed_toolkit.run("MObject Name", self.lookup[k])
+
+            if "rider" in node_name.lower() and "mech_" in node_name.lower():
+                results.append(node_name)
+        return results
+
     def get_descriptive(self, node: str):
         """
         This will extract the descriptive element of a blur named object
@@ -757,6 +606,11 @@ class TentacleBuilder:
             for control_target in self._blur_controls.values()
         ]
 
+    def get_master_control(self):
+        for control in self.controls():
+            if "Global" in control:
+                return control
+
     def resolve_names(self):
         """
         This function will cycle through the blur rig and rename each node
@@ -766,6 +620,7 @@ class TentacleBuilder:
             "Org_": "org",
             "Rig_": "org",
             "Hbfr_": "mech",
+            "Dfm_": "mecht",
             "Ctrl_": "mechc",
         }
 
@@ -828,6 +683,28 @@ class TentacleBuilder:
                 shape="core_sphere",
                 match_to=object_name,
             )
+
+            proxy_driver = mref.create(
+                "transform",
+
+                name=self.config.generate_name(
+                    classification="mechanical",
+                    description=f"{self.description}{label}_proxy",
+                    location=self.location,
+                ),
+                parent=parent)
+            proxy_driver_b = mref.create(
+                "transform",
+                name=self.config.generate_name(
+                    classification="mechanical",
+                    description=f"{self.description}{label}_proxy_b",
+                    location=self.location,
+                ),
+                parent=proxy_driver,
+            )
+            proxy_driver.match_to(new_control.ctl)
+
+            mc.parentConstraint(new_control.ctl, proxy_driver_b.name())
 
             counter += 1
             aniseed_toolkit.run(
@@ -896,6 +773,15 @@ class TentacleBuilder:
                         f"{new_control.ctl}.{attr}",
                         f"{object_name}.{attr}",
                     )
+
+            for attr in mc.listAttr(proxy_driver_b.name(), k=True)[:]:
+                try:
+                    mc.connectAttr(
+                        f"{proxy_driver_b.name()}.{attr}",
+                        f"{object_name}.{attr}",
+                        force=True,
+                    )
+                except: pass
 
             # -- Finally we need to move the shape nodes over to the new node
             for shape in mc.listRelatives(new_control.ctl, shapes=True):

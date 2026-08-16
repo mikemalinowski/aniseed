@@ -5,6 +5,8 @@ useful rigging tools and features.
 from .core import Tool
 from .core import ToolBox
 from .core import run
+from .core import register
+from .resources import register_resource_path
 from .lib import *
 from .lib import rigging
 

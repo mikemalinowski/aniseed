@@ -81,6 +81,7 @@ class ToolBox(factories.Factory):
                     "tools",
                 ),
             ],
+            envvar="ANISEED_TOOLKIT_PATHS",
         )
 
     def run(self, tool_name, *args, **kwargs):
@@ -143,3 +144,14 @@ class ToolBox(factories.Factory):
 
 def run(tool_name, *args, **kwargs):
     return ToolBox.singleton().run(tool_name, *args, **kwargs)
+
+
+def register(tool):
+    """
+    This allows for a python module to register a tool without it being on the search
+    path.
+    """
+    factory = ToolBox.singleton()
+    result = factory.register(tool)
+    print("registered %s" % tool)
+    print("result : %s" % result)

@@ -51,6 +51,12 @@ class SetAttributeMany(aniseed.RigComponent):
             description="The value to apply, given as a string. It is coerced into the attribute's Python type before being set.",
         )
 
+        self.declare_option(
+            name="Ignore Errors",
+            value=False,
+            description="",
+        )
+
     def input_widget(self, requirement_name: str):
         if requirement_name == "Nodes":
             return aniseed.widgets.ObjectList()
@@ -62,7 +68,17 @@ class SetAttributeMany(aniseed.RigComponent):
 
         for node_name in node_names:
             node = mref.get(node_name)
-            attribute = node.attr(attribute_name)
+
+            try:
+                attribute = node.attr(attribute_name)
+
+            except AttributeError:
+                print(f"Could not set attribute on {node_name}")
+                if not self.option("Ignore Errors").get():
+                   raise Exception(f"Could not set attribute on {node_name}")
+                else:
+                    continue
+                    
             python_type = attribute.python_type()
 
             if python_type is None:

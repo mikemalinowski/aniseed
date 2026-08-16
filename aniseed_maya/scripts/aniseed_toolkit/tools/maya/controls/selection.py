@@ -19,7 +19,8 @@ class SelectControls(aniseed_toolkit.Tool):
         """
         namespace = ""
         if mc.ls(selection=True):
-            namespace = mc.ls(selection=True)[0].split(":")[0]
+            if ":" in namespace:
+                namespace = mc.ls(selection=True)[0].split(":")[0]
 
         mc.select(
             aniseed_toolkit.run(

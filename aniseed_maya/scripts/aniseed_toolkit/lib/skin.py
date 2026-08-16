@@ -137,6 +137,115 @@ class LocalisedSkinCopy(object):
         cmds.delete(new_mesh)
 
 
+_WEIGHT_VALUE_COPY_DESTINATION = None
+
+
+def declare_weight_value_copy_destination() -> None:
+    """
+    Stores the currently selected mesh as the destination for a subsequent
+    call to :func:`copy_weight_values_to_destination`.
+
+    Returns:
+        None
+    """
+    global _WEIGHT_VALUE_COPY_DESTINATION
+
+    selection = cmds.ls(selection=True, o=True)
+
+    if not selection:
+        print("No mesh selected to declare as destination")
+        return
+
+    _WEIGHT_VALUE_COPY_DESTINATION = selection[0]
+
+
+def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
+    """
+    Reads the skin weights of the given (or selected) vertices and copies
+    them onto the vertices of the destination mesh at matching vertex
+    indices. Any influences present on the source that are missing on the
+    destination skin cluster will be added.
+
+    The destination mesh must be declared first via
+    :func:`declare_weight_value_copy_destination`.
+
+    Args:
+        vertices: The source vertices to copy weights from. If not given
+            the current selection is used.
+
+    Returns:
+        None
+    """
+    if not _WEIGHT_VALUE_COPY_DESTINATION:
+        print(
+            "No destination mesh declared. "
+            "Call declare_weight_value_copy_destination first."
+        )
+        return
+
+    if not vertices:
+        vertices = cmds.ls(selection=True, flatten=True) or []
+
+    if not vertices:
+        print("No source vertices given or selected")
+        return
+
+    source_mesh = vertices[0].split(".")[0]
+    source_skin = mel.eval(f'findRelatedSkinCluster "{source_mesh}";')
+
+    if not source_skin:
+        print(f"Source mesh {source_mesh} has no skin cluster")
+        return
+
+    destination_mesh = _WEIGHT_VALUE_COPY_DESTINATION
+    destination_skin = mel.eval(f'findRelatedSkinCluster "{destination_mesh}";')
+
+    if not destination_skin:
+        print(f"Destination mesh {destination_mesh} has no skin cluster")
+        return
+
+    source_influences = cmds.skinCluster(
+        source_skin,
+        query=True,
+        influence=True,
+    ) or []
+
+    destination_influences = set(
+        cmds.skinCluster(destination_skin, query=True, influence=True) or []
+    )
+
+    for vertex in vertices:
+        vertex_index = vertex.split("[")[-1].split("]")[0]
+
+        source_values = cmds.skinPercent(
+            source_skin,
+            vertex,
+            query=True,
+            value=True,
+        ) or []
+
+        # -- Add any influences the destination skin is missing
+        for influence in source_influences:
+            if influence in destination_influences:
+                continue
+            cmds.skinCluster(
+                destination_skin,
+                edit=True,
+                addInfluence=influence,
+                weight=0.0,
+            )
+            destination_influences.add(influence)
+
+        paired_data = list(zip(source_influences, source_values))
+        destination_vertex = f"{destination_mesh}.vtx[{vertex_index}]"
+
+        cmds.skinPercent(
+            destination_skin,
+            destination_vertex,
+            transformValue=paired_data,
+        )
+
+
 class SkinLerper:
 
     target_a_weights = []

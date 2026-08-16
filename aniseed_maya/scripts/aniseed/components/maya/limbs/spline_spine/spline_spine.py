@@ -53,6 +53,8 @@ class SplineSpine(aniseed.RigComponent):
         self.declare_option(name="Lock End Orientations To Controls", value=True, group="Behaviour")
         self.declare_option(name="FK Interaction Mode", value=False, group="Behaviour")
         self.declare_option(name="Invalidate First Fk Control", value=False, group="Behaviour")
+        self.declare_option(name="Default Ik Tweak Visibility", value=True, group="Behaviour")
+        self.declare_option(name="Show First Fk Offset Control", value=True, group="Behaviour")
 
         # -- Hidden Option (data storage)
         self.declare_option(name="GuideData", value=None, hidden=True)
@@ -379,11 +381,12 @@ class SplineSpine(aniseed.RigComponent):
                 for shape in fk_control.shapes():
                     mref.delete(shape)
 
+            user_pref_setting = self.option("Show First Fk Offset Control").get()
             show_offset_attribute = fk_control.add_attribute(
                 "show_offset",
                 attribute_type="bool",
                 keyable=True,
-                value=False if idx else True,
+                value=False if idx else user_pref_setting,
             )
             show_offset_multiplier = mref.create("floatMath")
             show_offset_multiplier.operation.set(2)  # -- Mutliply
@@ -438,6 +441,14 @@ class SplineSpine(aniseed.RigComponent):
         # -- Define our running parent
         parent = master_control.ctl
 
+        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
+            "tweaker_visibility",
+            value=False,
+            attribute_type="bool",
+            keyable=False,
+        )
+        tweaker_vis_attribute.set(channelBox=True)
+
         # -- We need to keep track of the ik controls we build
         ik_controls = []
 
@@ -456,6 +467,9 @@ class SplineSpine(aniseed.RigComponent):
                 orient_to_world=orient_to_world,
                 drive_this=spline_setup.out_controls[idx].full_name(),
             )
+
+            for shape in mref.get(base_control_tweaker.ctl).shapes():
+                tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility")
 
             # -- If we need to orient to world then we do that by adjusting
             # -- the rotation of the control org.
@@ -600,7 +614,7 @@ class SplineSpine(aniseed.RigComponent):
             "show_tweak",
             attribute_type="bool",
             keyable=False,
-            value=True,
+            value=self.option("Default Ik Tweak Visibility").get(),
         )
         show_tweak.set(channelBox=True)
 
@@ -1240,6 +1254,12 @@ class TriSplineSpine(SplineSpine):
         
         Width is measured across each transform's local X axis.
         """
+        name = self.config.generate_name(
+            classification=self.config.mechanical,
+            description=name,
+            location=self.option("Location").get(),
+        )
+
         # -- Read our option data
         cross_vector = self.option("Ribbon Cross Vector").get()
 
@@ -1312,8 +1332,8 @@ class TriSplineSpine(SplineSpine):
         # -- Set up the geometry contraint
         u_value = self.get_surface_u_from_vertex(f"{mesh}.vtx[5]")
         constraint = cmds.pointOnPolyConstraint(mesh, buffer.full_name(), maintainOffset=False)[0]
-        cmds.setAttr(f"{constraint}.mesh_stripU0", 1)
-        cmds.setAttr(f"{constraint}.mesh_stripV0", 0.5)
+        cmds.setAttr(f"{constraint}.{mesh}U0", 1)
+        cmds.setAttr(f"{constraint}.{mesh}V0", 0.5)
 
         # -- Finally we need the transform node to now be a child
         # -- of our created buffer.

@@ -47,7 +47,7 @@ class TreeMenu(QtWidgets.QMenu):
         self.add_component_interaction_items()
 
         # -- Add any actions the component provides
-        self.add_component_user_actions()
+        self.add_component_component_actions()
 
         # -- Add the menu which exposes the lesser used
         # -- items
@@ -81,6 +81,17 @@ class TreeMenu(QtWidgets.QMenu):
         )
         actions_menu.addAction(enable_disable_action)
 
+        # -- Action to enable/disable a component
+        search_and_replace_action = QtWidgets.QAction(f"Search And Replace", self._parent)
+        search_and_replace_action.triggered.connect(
+            functools.partial(
+                self.app.tree_widget.search_and_replace_component,
+                item=self.item,
+            ),
+        )
+        actions_menu.addAction(search_and_replace_action)
+
+
         # -- Action to export the component (and its subtree) to a JSON file
         export_action = QtWidgets.QAction(f"Export to File", self._parent)
         export_action.triggered.connect(
@@ -112,32 +123,31 @@ class TreeMenu(QtWidgets.QMenu):
         )
         actions_menu.addAction(import_subtree_action)
 
-        # -- Action to search/replace a string across this component's
-        # -- label, string inputs and string options (optionally recursive)
-        search_replace_action = QtWidgets.QAction(f"Search And Replace", self._parent)
-        search_replace_action.triggered.connect(
-            functools.partial(
-                self.app.tree_widget.search_and_replace,
-                item=self.item,
-            ),
-        )
-        actions_menu.addAction(search_replace_action)
-
         # -- Finally we add the menu
         self.addMenu(actions_menu)
 
-    def add_component_user_actions(self):
+    def add_component_component_actions(self):
 
         # -- If we have no user facing actions we can skip this
         user_functions = self.component.user_functions()
-        if not user_functions:
+        mixin_functions = self.component.collated_mixin_functions()
+
+        # -- If we have no functions from either then we return
+        if not user_functions and not mixin_functions:
             return
+
+        # -- We collate the two dictionaries into one, and we always allow
+        # -- the user functions to override the mixin functions
+        collated_functions = dict()
+
+        collated_functions.update(mixin_functions)
+        collated_functions.update(user_functions)
 
         # -- Start with a separator
         self.addSeparator()
 
         # -- Cycle the user functions, adding each one
-        for label, func_ in user_functions.items():
+        for label, func_ in collated_functions.items():
             action = QtWidgets.QAction(label, self)
             action.triggered.connect(func_)
             self.addAction(action)

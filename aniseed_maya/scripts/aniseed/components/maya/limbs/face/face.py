@@ -1,6 +1,7 @@
 import os
 import json
 import mref
+import copy
 import qtility
 import functools
 import aniseed
@@ -21,8 +22,12 @@ class FaceComponent(aniseed.RigComponent):
 
     # -- When adding the face we construct a skeleton. All the data relating to
     # -- the skeleton and the hierarchy are stored in this json file.
-    with open(os.path.join(os.path.dirname(__file__), "face_data.json"), "r") as f:
+    with open(os.path.join(os.path.dirname(__file__), "skeleton.json"), "r") as f:
         face_bones = json.load(f)
+
+    # -- This is the pose data we will use by default if none are specified
+    with open(os.path.join(os.path.dirname(__file__), "default_pose_data.json"), "r") as f:
+        default_pose_data = json.load(f)
 
     # -- This is the equivalent of blendshapes. These are all the "facial shapes" we will
     # -- blend in or expose
@@ -484,6 +489,9 @@ class FaceComponent(aniseed.RigComponent):
         # -- start by getting the stored transformation shape data
         mixer_data = self.option("Mixer Data").get()
 
+        if not mixer_data:
+            mixer_data = copy.deepcopy(self.default_pose_data)
+
         # -- Instance the mixer, but store a reference to the mixer in the component. This
         # -- allows any tools to inspect the component and know which mixer to interact
         # -- with.
@@ -558,7 +566,7 @@ class FaceComponent(aniseed.RigComponent):
         for control in direct_controls.keys():
             if "teeth" in control or "tongue" in control:
                 for shape in mref.get(direct_controls[control]).shapes():
-                    attribute.connect(shape.visibility)
+                    attribute.connect(shape.visibility, force=True)
 
         # -- Push mouth and eye keyables into the attribute host
         attribute_host = mref.get(self.input("Attribute Host").get())
@@ -783,7 +791,12 @@ class FaceComponent(aniseed.RigComponent):
 
             # -- Finally we drive the weight of that constraint based on the
             # -- attributes we expose to the user.
+
+
             attr = jaw_control.attr(f"smooth_lips_{constraint_data['location']}")
+            reverse = mref.create("reverse")
+            attr.connect(reverse.inputX)
+            reverse.outputX.connect(cns.weight_attributes()[0])
             attr.connect(cns.weight_attributes()[-1])
 
     def get_data_by_label(self, label: str):
@@ -1614,6 +1627,9 @@ class MixerTools:
                     try: controller.attr(f"scale{axis}").set(1)
                     except: pass
 
+                if "deformer_upper_lip_inner_left" in target.name():
+                    print(deformer.name())
+            print(matrices)
             for i in range(len(deformers)):
                 for target, matrix in matrices.items():
                     n = mref.create("transform", name="exampl_" + target.name())
