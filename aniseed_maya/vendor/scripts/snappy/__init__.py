@@ -87,6 +87,7 @@ from .core import new_forced_attribute
 from .core import add_empty_members
 from .core import get
 from .core import snap
+from .core import snap_over_time
 from .core import snappable
 from .core import groups
 from .core import groups_in_namespace

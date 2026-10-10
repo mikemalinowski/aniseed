@@ -1,4 +1,6 @@
 
+from . import items
+
 
 def select(item: object or str):
     """
@@ -17,4 +19,9 @@ def selected() -> list[object]:
     Returns:
         A list of items which are currently selected
     """
-    return list()
+    ghost = items.HierarchicalObject()
+    ghost.name = "placeholder"
+
+    return [
+        ghost,
+    ]

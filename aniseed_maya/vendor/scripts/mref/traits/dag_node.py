@@ -231,3 +231,27 @@ class DagNode(mref.Trait):
             if abs(x) > tolerance or abs(y) > tolerance or abs(z) > tolerance:
                 return False
         return True
+
+    def lock_transform_attributes(self, hide=False) -> None:
+        """
+        Locks the nine scalar transform channels on this node — translateX/Y/Z,
+        rotateX/Y/Z, scaleX/Y/Z. Does not lock visibility, nor the parent
+        compound translate/rotate/scale attributes themselves. Has no unlock
+        counterpart; call ``unlock_attributes`` with explicit channel names
+        to reverse.
+        """
+        for type_ in ["t", "r", "s"]:
+            for axis in ["x", "y", "z"]:
+                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=True, channelBox=not hide)
+
+    def unlock_transform_attributes(self, hide=False) -> None:
+        """
+        Locks the nine scalar transform channels on this node — translateX/Y/Z,
+        rotateX/Y/Z, scaleX/Y/Z. Does not lock visibility, nor the parent
+        compound translate/rotate/scale attributes themselves. Has no unlock
+        counterpart; call ``unlock_attributes`` with explicit channel names
+        to reverse.
+        """
+        for type_ in ["t", "r", "s"]:
+            for axis in ["x", "y", "z"]:
+                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=False, channelBox=not hide)

@@ -70,9 +70,9 @@ def selected_frame_range() -> list[int]:
 
     return [
         int(time_range[0]),
-        int(time_range[1]),
+        int(time_range[1] - 1),
     ]
 
 def selected_number_of_frames():
     frame_range = selected_frame_range()
-    return (frame_range[1] - frame_range[0])
+    return (frame_range[1] - frame_range[0]) + 1
