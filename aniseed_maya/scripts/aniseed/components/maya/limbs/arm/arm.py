@@ -594,6 +594,19 @@ class ArmComponent(aniseed.RigComponent):
         upper_twist_joints = self.input("Upper Twist Joints").get()
         lower_twist_joints = self.input("Lower Twist Joints").get()
 
+        # -- To prevent flips as the elbow bends a lot, we blend the tip half way between the
+        # -- two arm bones
+        rotator = aniseed_toolkit.rigging.create_rotator(
+            target_a=self.nk_joints[0],
+            target_b=self.nk_joints[1],
+            match_to=self.nk_joints[1],
+            parent=self.nk_joints[1],
+            description="foo",
+            location=self.location,
+            config=self.config,
+        )
+
+
         if upper_twist_joints:
             twist_component = self.rig.component_library.request("Augment : Twister")(
                 "",
@@ -603,7 +616,7 @@ class ArmComponent(aniseed.RigComponent):
             twist_component.input("Joints").set(upper_twist_joints)
             twist_component.input("Parent").set(self.shoulder_control.ctl)
             twist_component.input("Root").set(self.nk_joints[0])
-            twist_component.input("Tip").set(self.nk_joints[1])
+            twist_component.input("Tip").set(rotator)
 
             twist_component.option("Constrain Root").set(False)
             twist_component.option("Constrain Tip").set(True)

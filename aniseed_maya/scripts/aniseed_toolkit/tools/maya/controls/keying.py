@@ -136,34 +136,34 @@ class SnapIKFKBasedOnSlider(aniseed_toolkit.Tool):
             cmds.setAttr(f"{namespace}{ikfk_attribute}", 1.0)
 
 
-# class SnapIKFKInRig(aniseed_toolkit.Tool):
-#     identifier = "Snap IKFK (All In Rig)"
-#     classification = "Animation"
-#     categories = [
-#         "Keys",
-#         "Controls",
-#     ]
-#
-#     def run(self, namespace=None):
-#
-#         if not namespace and cmds.ls(selection=True):
-#             namespace = cmds.ls(selection=True)[0].split(":")[0]
-#
-#         if not namespace:
-#             return
-#
-#         start_time = None
-#         end_time = None
-#         if mref.time.selected_number_of_frames() > 1:
-#             start_time = mref.time.selected_start_frame()
-#             end_time = mref.time.selected_end_frame()
-#
-#         # -- Get the groups for all the nodes
-#         for group in snappy.groups_in_namespace(namespace):
-#             if "IKFK" in group:
-#                 snappy.snap(
-#                     group=group,
-#                     start_time=start_time,
-#                     end_time=end_time,
-#                 )
-#
+class SnapIKFKOverTimeBasedOnSlider(aniseed_toolkit.Tool):
+    identifier = "Match IKFK Over Time (Selected Limb)"
+    classification = "Animation"
+    categories = [
+        "Keys",
+        "Controls",
+    ]
+
+    def run(self, nodes=None):
+
+        # -- Get the groups for all the nodes
+        groups = []
+        nodes = nodes or cmds.ls(selection=True)
+        for node in nodes:
+            groups.extend(snappy.groups(node))
+        groups = list(set(groups))
+
+        # -- Extract the ikfk group
+        ikfk_group = None
+        for group in groups:
+            if "IKFK" in group:
+                ikfk_group = group
+
+        start_time = mref.time.selected_start_frame()
+        end_time = mref.time.selected_end_frame()
+
+        snappy.snap_over_time(
+            group=ikfk_group,
+            start_time=start_time,
+            end_time=end_time,
+        )

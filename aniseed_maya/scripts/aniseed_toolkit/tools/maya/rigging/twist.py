@@ -220,8 +220,10 @@ class TwistSetup:
                 shape_scale=4,
                 config=self._config,
             )
+            connection_point = twist.zero
 
             blend_matrix = mc.createNode("blendMatrix")
+            final_rotation_blender = mc.createNode("blendColors")
 
             mc.connectAttr(
                 f"{self._root}.matrix",
@@ -259,13 +261,31 @@ class TwistSetup:
 
             mc.connectAttr(
                 f"{decompose_matrix}.outputTranslate",
-                f"{twist.org}.translate",
+                f"{connection_point}.translate",
             )
+
+
+
+
+
 
             mc.connectAttr(
                 f"{decompose_matrix}.outputRotate",
-                f"{twist.org}.rotate",
+                f"{connection_point}.rotate",
             )
+
+
+
+
+
+
+
+            #
+            #
+            # mc.connectAttr(
+            #     f"{final_rotation_blender}.output",
+            #     f"{connection_point}.rotate",
+            # )
 
             mc.setAttr(
                 f"{blend_matrix}.target[1].weight",

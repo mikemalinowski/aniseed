@@ -44,6 +44,11 @@ class FkSweep(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Ignore Regex",
+            value="",
+        )
+
+        self.declare_option(
             name="Shape",
             value="core_cube",
             group="Visuals",
@@ -92,6 +97,13 @@ class FkSweep(aniseed.RigComponent):
 
             is_driven = joint.constraints()
             if is_driven:
+                continue
+
+            ignore_regex = None
+            if self.option("Ignore Regex").get():
+                ignore_regex = re.compile(self.option("Ignore Regex").get())
+
+            if ignore_regex and ignore_regex.search(joint.name()):
                 continue
 
             # -- To reach here we have a joint which is not driven, so lets

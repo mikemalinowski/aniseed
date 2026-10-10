@@ -13,6 +13,7 @@ def create_two_bone_ikfk(
         soft_ik_host=None,
         constrain=True,
         constrain_endpoint_rotation=True,
+        ik_target_transform_override=None,
     ):
     instance = TwoBoneIKFK(
         parent,
@@ -24,6 +25,7 @@ def create_two_bone_ikfk(
         soft_ik_host,
         constrain,
         constrain_endpoint_rotation,
+        ik_target_transform_override,
     )
     instance.create()
     return instance
@@ -41,6 +43,7 @@ class TwoBoneIKFK:
             soft_ik_host=None,
             constrain=True,
             constrain_endpoint_rotation=True,
+            ik_target_transform_override=None,
     ):
         # -- Store our input variables
         self.parent = mref.get(parent)
@@ -56,6 +59,7 @@ class TwoBoneIKFK:
         )
         self.constrain = constrain
         self.constrain_endpoint_rotation = constrain_endpoint_rotation
+        self.ik_target_transform_override = ik_target_transform_override
 
         # -- Declare our output variables
         self.org = None
@@ -100,9 +104,11 @@ class TwoBoneIKFK:
         self.ik_target = mref.create("transform", name=self.unique_name("ik_target"), parent=self.org)
         self.ik_upvector = mref.create("transform", name=self.unique_name("ik_upvector"), parent=self.org)
 
-        self.ik_target.match_to(self.ik_chain[-1])
+        match_target = self.ik_target_transform_override or self.ik_chain[-1]
+        print(f"match target : {match_target}")
+        self.ik_target.match_to(match_target)
         self.ik_upvector.match_to(self.ik_chain[1])
-
+        print(self.ik_target.get_matrix(space="world"))
         for joint in self.ik_chain:
             joint.rename(self.unique_name("ik"))
 
@@ -137,6 +143,7 @@ class TwoBoneIKFK:
         if self.apply_soft_ik:
             self.apply_soft_ik_behaviour()
 
+        print(self.ik_target.get_matrix(space="world"))
     def create_fk(self):
 
         self.fk_chain = mref.get(
@@ -184,7 +191,7 @@ class TwoBoneIKFK:
             name=self.unique_name("soft_ik_target"),
             parent=self.ik_target.full_name(),
         )
-        self.soft_ik_target.match_to(self.ik_target)
+        self.soft_ik_target.match_to(self.ik_chain[-1].full_name())
 
         # -- Now create the actual soft ik setup
         aniseed_toolkit.rigging.create_two_bone_soft_ik(

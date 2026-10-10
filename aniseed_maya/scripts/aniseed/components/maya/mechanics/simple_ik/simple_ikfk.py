@@ -71,6 +71,14 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="IK Control Transform",
+            description=(
+                "An optional transform to override the transform of the ik control"
+            ),
+            value="",
+            group="Behaviour",
+        )
+        self.declare_option(
             name="Align IK To World",
             description=(
                 "If enabled, the IK target control's org is rotated to "
@@ -177,6 +185,9 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config, self.option(option_name).get())
 
+        if option_name == "IK Control Transform":
+            return aniseed.widgets.ObjectSelector()
+
     def input_widget(self, requirement_name):
         """
         This allows us to provide dedicate widgets for specific inputs
@@ -241,8 +252,10 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             soft_ik=self.option("Apply Soft Ik").get(),
             soft_ik_host=self.ik_target_control.ctl,
             constrain_endpoint_rotation=self.option("Constrain End Point Rotation").get(),
+            ik_target_transform_override=self.option("IK Control Transform").get(),
         )
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         if self.option("Make Config Child Of End").get():
             config_org = self.config_control.org
             cmds.parent(
@@ -255,12 +268,14 @@ class SimpleIKFKComponent(aniseed.RigComponent):
                 worldSpace=True,
             )
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         # -- Create the guide line
         aniseed_toolkit.guide.link(
             self.upvector_control.ctl,
             ikfk_setup.ik_chain[1].name(),
         )
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         for node in ikfk_setup.all_nodes():
             node.rename(
                 self.config.generate_name(
@@ -270,6 +285,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
                 ),
             )
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         cmds.parentConstraint(
             self.ik_target_control.ctl,
             ikfk_setup.ik_target.name(),
@@ -302,6 +318,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         ik_visibility_attribute = ik_condition.output.full_name()
         fk_visibility_attribute = fk_condition.output.full_name()
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         for ik_control in self.ik_controls:
             ik_control = aniseed_toolkit.control.get(ik_control)
             cmds.connectAttr(
@@ -322,10 +339,13 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         if self.option("Apply World Fk Switches").get():
             aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
         self._set_outputs()
 
+        print(ikfk_setup.ik_target.get_matrix(space="world"))
+        print(ikfk_setup.ik_target.name())
     def _create_controls(self):
         """
         Here we create all the controls for the arm
@@ -335,7 +355,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             description=f"{self.prefix}Config",
             location=self.location,
             parent=self.org,
-            shape="core_lollipop",
+            shape="core_floating_config",
             config=self.config,
             match_to=self.joints[0],
             shape_scale=20.0,
@@ -389,7 +409,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             parent=self.org,
             shape="core_stumpy_cross",
             config=self.config,
-            match_to=self.joints[-1],
+            match_to=self.option("IK Control Transform").get() or self.joints[-1],
             shape_scale=20.0,
             rotate_shape=[-90, 0, 0],
         )

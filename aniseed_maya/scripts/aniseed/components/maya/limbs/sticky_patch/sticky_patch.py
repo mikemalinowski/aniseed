@@ -1,4 +1,5 @@
 import os
+import re
 import mref
 import typing
 import aniseed
@@ -263,6 +264,15 @@ class StickyPatchComponent(aniseed.RigComponent):
             constructionHistory=True,
         )
 
+        xform = cmds.rename(
+            xform,
+            self.config.generate_name(
+                classification="mesh",
+                description=self.option("Descriptive Prefix").get(),
+                location=self.option("Location").get(),
+            )
+        )
+
         # -- Clear all history
         cmds.delete(xform, constructionHistory=True)
 
@@ -281,11 +291,35 @@ class StickyPatchComponent(aniseed.RigComponent):
             )
         
             # -- Rename the mesh
-            xform = cmds.rename(xform, f"MESH_{xform}")
+            # xform = cmds.rename(xform, f"MESH_{xform}")
 
         self.input("Geometry Patch").set(
             xform,
         )
+
+    def suggested_label(self):
+        description = self.option("Descriptive Prefix").get() + " Patch"
+        description = re.sub(
+            r"(?<!^)(?=[A-Z])",
+            " ",
+            description.replace("_", " "),
+        ).title()
+
+        # -- Now add the location
+        location = self.option("Location").get()
+        label = f"{description} {location}"
+
+        # -- Finally, we want to check if there are already components in the rig
+        # -- with this label and form an identifier
+        existing_labels = {
+            component.label()
+            for component in self.rig.components(of_type=self.identifier)
+        }
+        counter = 1
+        while f"{label}{counter:02d}" in existing_labels:
+            counter += 1
+        return f"{label} {counter:02d}"
+
 
     def user_func_match_patch_surface_to_joint(self):
 

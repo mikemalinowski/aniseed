@@ -38,6 +38,7 @@ class TransformMixer(aniseed.RigComponent):
         self.declare_option(name="Add Pose", value=None)
         self.declare_option(name="Remove Pose", value=None)
         self.declare_option(name="Add Deformer", value=None)
+        self.declare_option(name="Add Deformers", value=None)
         self.declare_option(name="Remove Deformer", value=None)
         self.declare_option(name="Store Data", value=None)
 
@@ -57,6 +58,9 @@ class TransformMixer(aniseed.RigComponent):
 
         if requirement_name == "Add Deformer":
             return aniseed.widgets.ButtonWidget(button_name="Add Deformer", func=self.add_deformer)
+
+        if requirement_name == "Add Deformers":
+            return aniseed.widgets.ButtonWidget(button_name="Add Deformers", func=self.add_deformers)
 
         if requirement_name == "Remove Deformer":
             return aniseed.widgets.ButtonWidget(button_name="Remove Deformer", func=self.remove_deformer)
@@ -83,6 +87,31 @@ class TransformMixer(aniseed.RigComponent):
 
 
 
+
+    def add_deformers(self):
+
+        mixer = self.mixer()
+
+        if not mixer:
+            return
+        pre_selection = mref.selected()
+
+        for selected in mref.selected()[:]:
+            deformer_node = mixer.add_deformer(name="DEF_" + selected.name())
+
+            constraint_mapping = self.option("Constraint Mapping").get()
+
+            deformer_node.parent().match_to(selected)
+            constraint_mapping.append(
+                [
+                    deformer_node.deformer_name.get(),
+                    selected.name(),
+                ],
+            )
+
+            self.option("Constraint Mapping").set(constraint_mapping)
+
+        mref.select(pre_selection)
 
     def add_deformer(self):
 
@@ -168,7 +197,7 @@ class TransformMixer(aniseed.RigComponent):
                 for pose in mixer.poses()
             ],
             editable=False,
-            parent=self,
+            parent=None,
             title="Select Pose",
             message="Select the pose to remove",
         )
@@ -195,7 +224,7 @@ class TransformMixer(aniseed.RigComponent):
             qtility.request.message(
                 title="Error",
                 message="You must build the rig before interacting with the mixer",
-                parent=self,
+                parent=None,
             )
             return None
         return aniseed_toolkit.transformation.TransformMixer(mixer_node)
@@ -236,7 +265,7 @@ class ConstraintMappingWidget(QtWidgets.QWidget):
                 for deformer in mixer.deformers()
             ],
             editable=False,
-            parent=self,
+            parent=None,
             title="Select Deformer",
             message="Select the driving deformer",
         )

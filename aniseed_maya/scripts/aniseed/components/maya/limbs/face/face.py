@@ -196,6 +196,11 @@ class FaceComponent(aniseed.RigComponent):
             value=30.0,
         )
 
+        self.declare_option(
+            name="Max Blink Rotation",
+            value=65,
+        )
+
         # -- Now we declare our outputs
         self.declare_output("FaceRig")
 
@@ -331,6 +336,7 @@ class FaceComponent(aniseed.RigComponent):
         eyes_component.input("Right Lower Eye Lid Joint").set(self.input("eye_lower_lid_right").get())
         eyes_component.input("Right Pupil Joint").set(self.input("eye_pupil_right").get())
         eyes_component.option("Aim Distance").set(self.option("Eye Target Distance").get())
+        eyes_component.option("Max Blink Rotation").set(self.option("Max Blink Rotation").get())
         eyes_component.option("Add Blink").set(False)
         eyes_component.option("Add Pupil").set(True)
         eyes_component.run()

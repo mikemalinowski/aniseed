@@ -793,8 +793,14 @@ class Component:
             # -- as a literal rather than keeping its address
             value = attribute.get(resolved=False)
 
-            substituted = self._substituted_value(expression, replace_with, value)
+            if type(value) != str:
+                continue
 
+            print("Got Value : %s" % value)
+            print("    Is %s in %s?" % (search_for, value))
+            # substituted = self._substituted_value(expression, replace_with, value)
+            substituted = value.replace(search_for, replace_with)
+            print("    Result : %s" % substituted)
             # -- Only write back where something actually changed, so we do not
             # -- emit change events for untouched attributes
             if substituted != value:
@@ -870,7 +876,7 @@ class Component:
                     replace_with=replace_with,
                 )
                 child_duplicate.set_parent(parent=new_component)
-
+                self.stack.hierarchy_changed.emit()
 
         return new_component
 

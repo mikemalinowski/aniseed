@@ -36,12 +36,14 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Object Inputs
         self.declare_input(name="Parent", value="", group="Control Rig")
+        self.declare_input(name="Spine Master Transform", value="", group="Control Rig", validate=False)
+
         self.declare_input(name="Root Joint", value="", group="Joint Requirements")
         self.declare_input(name="Tip Joint", value="", group="Joint Requirements")
 
         # -- Naming Options
         self.declare_option(name="Descriptive Prefix", value="Spine", group="Naming", pre_expose=True)
-        self.declare_option(name="Location", value="md", group="Naming", pre_expose=True)
+        self.declare_option(name="Location", value=self.config.middle, group="Naming", pre_expose=True)
 
         # -- Visual Options
         self.declare_option(name="Shape", value="core_circle", group="Visuals")
@@ -55,6 +57,7 @@ class SplineSpine(aniseed.RigComponent):
         self.declare_option(name="Invalidate First Fk Control", value=False, group="Behaviour")
         self.declare_option(name="Default Ik Tweak Visibility", value=True, group="Behaviour")
         self.declare_option(name="Show First Fk Offset Control", value=True, group="Behaviour")
+        self.declare_option(name="Align Offsets To Bone", value=False, group="Behaviour")
 
         # -- Hidden Option (data storage)
         self.declare_option(name="GuideData", value=None, hidden=True)
@@ -295,11 +298,12 @@ class SplineSpine(aniseed.RigComponent):
             match_to=self.input("Parent").get(),
         )
 
-        # -- Construct the spline setup. This returns a special spline
+        # -- Construct the spline setup. This returns a special splin       e
         # -- class we can use to get access to all the different objects.
         spline_setup = self._create_spline_setup(joints, parent=org, constrain=False)
 
         # -- Build the main master control
+        spine_master_transform = self.input("Spine Master Transform").get()
         master_control = aniseed_toolkit.control.create(
             description=f"{descriptive}Master",
             location=location,
@@ -307,7 +311,7 @@ class SplineSpine(aniseed.RigComponent):
             shape="core_rounded_square",
             shape_scale=control_scale * 1.25,
             config=self.config,
-            match_to=spline_setup.out_controls[0].full_name(),
+            match_to=spine_master_transform or spline_setup.out_controls[0].full_name(),
         )
 
         # -- If we need to orient it to the world then we do so by
@@ -354,18 +358,17 @@ class SplineSpine(aniseed.RigComponent):
             fk_control = mref.get(fk_controls[idx].ctl)
             joint = mref.get(joints[idx])
 
-            # -- Create the tweaker
-            fk_tweak = mref.get(
-                aniseed_toolkit.control.create(
-                    description=f"{descriptive}FkOffset",
-                    location=location,
-                    parent=fk_control.full_name(),
-                    shape="core_circle",
-                    shape_scale=control_scale,
-                    config=self.config,
-                    match_to=fk_control.full_name(),
-                ).ctl,
+            offset_control = aniseed_toolkit.control.create(
+                description=f"{descriptive}FkOffset",
+                location=location,
+                parent=fk_control.full_name(),
+                shape="core_circle",
+                shape_scale=control_scale,
+                config=self.config,
+                match_to=fk_control.full_name(),
             )
+            # -- Create the tweaker
+            fk_tweak = mref.get(offset_control.ctl)
             fk_tweaks.append(fk_tweak)
 
             if self.option("Invalidate First Fk Control").get() and not idx:
@@ -392,6 +395,9 @@ class SplineSpine(aniseed.RigComponent):
             show_offset_multiplier.operation.set(2)  # -- Mutliply
             fk_visibility.connect(show_offset_multiplier.floatA)
             show_offset_attribute.connect(show_offset_multiplier.floatB)
+
+            if self.option("Align Offsets To Bone").get():
+                mref.get(offset_control.org).match_to(joint)
 
             cmds.parentConstraint(
                 fk_tweak.full_name(),

@@ -48,6 +48,13 @@ class MouthComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Naming Prefix",
+            value="",
+            group="Naming",
+            pre_expose=True,
+        )
+
+        self.declare_option(
             name="Use Aim Control",
             value=True,
             group="Behaviour",
@@ -114,6 +121,10 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Get our options
         location = self.option("Location").get()
+        prefix = self.option("Naming Prefix").get()
+
+        if prefix:
+            prefix += "_"
 
         jaw_length = aniseed_toolkit.run(
             "Distance Between",
@@ -125,7 +136,7 @@ class MouthComponent(aniseed.RigComponent):
         component_org = aniseed_toolkit.run(
             "Create Basic Transform",
             classification=self.config.organisational,
-            description="Mouth",
+            description=prefix+"Mouth",
             location=location,
             config=self.config,
             parent=parent,
@@ -134,7 +145,7 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Start by creating our jaw control
         jaw_control = aniseed_toolkit.control.create(
-            description="Jaw",
+            description=prefix+"Jaw",
             location=location,
             parent=component_org,
             shape="core_cube",
@@ -189,7 +200,7 @@ class MouthComponent(aniseed.RigComponent):
         half_jaw = aniseed_toolkit.run(
             "Create Basic Transform",
             classification="rot",
-            description="HalfJaw",
+            description=prefix+"HalfJaw",
             location=location,
             config=self.config,
             parent=component_org,
@@ -200,7 +211,7 @@ class MouthComponent(aniseed.RigComponent):
         upper_lip_sticky = aniseed_toolkit.run(
             "Create Basic Transform",
             classification="rot",
-            description="UpperLipSticky",
+            description=prefix+"UpperLipSticky",
             location=location,
             config=self.config,
             parent=component_org,
@@ -210,7 +221,7 @@ class MouthComponent(aniseed.RigComponent):
         lower_lip_sticky = aniseed_toolkit.run(
             "Create Basic Transform",
             classification="rot",
-            description="LowerLipSticky",
+            description=prefix+"LowerLipSticky",
             location=location,
             config=self.config,
             parent=component_org,
@@ -334,7 +345,7 @@ class MouthComponent(aniseed.RigComponent):
         )
 
         upper_lip_control = aniseed_toolkit.control.create(
-            description="UpperLip",
+            description=prefix+"UpperLip",
             location=location,
             parent=upper_lip_sticky,
             shape="core_cube",
@@ -354,7 +365,7 @@ class MouthComponent(aniseed.RigComponent):
         )
 
         lower_lip_control = aniseed_toolkit.control.create(
-            description="LowerLip",
+            description=prefix+"LowerLip",
             location=location,
             parent=lower_lip_sticky,
             shape="core_cube",
@@ -388,7 +399,7 @@ class MouthComponent(aniseed.RigComponent):
             )
 
             aim_control = aniseed_toolkit.control.create(
-                description="JawAim",
+                description=prefix+"JawAim",
                 location=location,
                 parent=component_org,
                 shape="core_sphere",
@@ -419,7 +430,7 @@ class MouthComponent(aniseed.RigComponent):
             aim_node = aniseed_toolkit.run(
                 "Create Basic Transform",
                 classification="aim",
-                description="JawAimSolver",
+                description=prefix+"JawAimSolver",
                 location=location,
                 config=self.config,
                 parent=component_org,
@@ -429,7 +440,7 @@ class MouthComponent(aniseed.RigComponent):
             aim_upvector = aniseed_toolkit.run(
                 "Create Basic Transform",
                 classification="aim",
-                description="JawAimUpvector",
+                description=prefix+"JawAimUpvector",
                 location=location,
                 config=self.config,
                 parent=component_org,
@@ -504,16 +515,21 @@ class MouthComponent(aniseed.RigComponent):
 
         parent = aniseed_toolkit.mutils.first_selected()
 
+        prefix = self.option("Naming Prefix").get()
+
+        if prefix:
+            prefix += "_"
+
         # -- Create the jaw and the lower lip
         jaw_joint = aniseed_toolkit.joints.create(
-            description="Jaw",
+            description=prefix+"Jaw",
             location=self.option("Location").get(),
             parent=parent,
             config=self.config,
         )
 
         lower_lip_joint = aniseed_toolkit.joints.create(
-            description="LowerLip",
+            description=prefix+"LowerLip",
             location=self.option("Location").get(),
             parent=jaw_joint,
             match_to=jaw_joint,
@@ -527,7 +543,7 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Now we create the upper lip
         upper_lip_joint = aniseed_toolkit.joints.create(
-            description="UpperLip",
+            description=prefix+"UpperLip",
             location=self.option("Location").get(),
             match_to=lower_lip_joint,
             parent=parent,

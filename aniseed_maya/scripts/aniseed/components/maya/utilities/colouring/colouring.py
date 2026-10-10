@@ -40,7 +40,15 @@ class ColorControls(aniseed.RigComponent):
                 name=color_label,
                 value=spec["default"],
                 description=spec["description"],
+                group="Colors",
             )
+
+        self.declare_option(
+            name="Nodes To Skip",
+            value=[],
+            description="List of objects to skip when applying colours",
+            group="Object Filtering"
+        )
 
     def option_widget(self, option_name):
         if option_name in self._colour_options:
@@ -48,6 +56,8 @@ class ColorControls(aniseed.RigComponent):
                 default_colour=self.option(option_name).get(),
             )
 
+        if option_name == "Nodes To Skip":
+            return aniseed.widgets.ObjectList()
         return None
 
     def run(self) -> bool:
@@ -57,11 +67,14 @@ class ColorControls(aniseed.RigComponent):
             self.config.right:  self.option("Right Color").get(),
         }
         fallback = colours_by_location[self.config.middle]
-
         nodes = cmds.controller(allControllers=True, query=True)
+        controls_to_skip = self.option("Nodes To Skip").get()
 
         for node in nodes:
             if not cmds.listRelatives(node, type="nurbsCurve"):
+                continue
+
+            if node in controls_to_skip:
                 continue
 
             location = self.config.extract_location(node)

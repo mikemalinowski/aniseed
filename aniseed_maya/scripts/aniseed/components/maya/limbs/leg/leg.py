@@ -44,6 +44,20 @@ class LegComponent(aniseed.RigComponent):
         "Outer": {"tx": 2, "rx": -90, "rz": 90},
     }
 
+    # -- The axis choices for the foot roll options, mapped to the rotate
+    # -- attribute and direction they represent
+    _ROLL_AXES = {
+        "Positive X": ("rotateX", 1),
+        "Negative X": ("rotateX", -1),
+        "Positive Y": ("rotateY", 1),
+        "Negative Y": ("rotateY", -1),
+        "Positive Z": ("rotateZ", 1),
+        "Negative Z": ("rotateZ", -1),
+    }
+
+    # -- The largest roll (in degrees) the foot roll network will pass through
+    _MAX_ROLL = 360.0
+
     def __init__(self, *args, **kwargs):
         super(LegComponent, self).__init__(*args, **kwargs)
 
@@ -145,6 +159,48 @@ class LegComponent(aniseed.RigComponent):
             pre_expose=True,
         )
 
+        self.declare_option(
+            name="Roll Heel Angle",
+            value=30.0,
+            group="Foot Roll",
+            description=(
+                "Degrees of positive roll applied to the heel control before "
+                "the toe pivot starts to rotate. This is the starting value of "
+                "the roll_heel_angle attribute on the foot control, which the "
+                "animator can adjust"
+            ),
+        )
+
+        self.declare_option(
+            name="Roll Heel Control Axis",
+            value="Positive X",
+            group="Foot Roll",
+            description=(
+                "The axis (and direction) of the heel control which positive "
+                "roll rotates first, lifting the heel"
+            ),
+        )
+
+        self.declare_option(
+            name="Roll Toe Pivot Axis",
+            value="Positive Y",
+            group="Foot Roll",
+            description=(
+                "The axis (and direction) of the toe pivot which positive roll "
+                "rotates once the heel angle has been reached"
+            ),
+        )
+
+        self.declare_option(
+            name="Roll Heel Pivot Axis",
+            value="Positive Y",
+            group="Foot Roll",
+            description=(
+                "The axis (and direction) of the heel pivot which negative roll "
+                "rotates, rocking the foot back onto the heel"
+            ),
+        )
+
         # -- These options are hidden and for intialisation only
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Lower Twist Count", value=2, pre_expose=True)
@@ -174,6 +230,7 @@ class LegComponent(aniseed.RigComponent):
         self.ik_toe_control = None
         self.ik_pivot_endpoint = ""
         self.pivot_controls = []
+        self.pivot_parameters: dict[str, str] = {}
 
         self.controls: list[str] = []
         self.fk_controls: list = []
@@ -275,6 +332,12 @@ class LegComponent(aniseed.RigComponent):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
+        if option_name in ["Roll Heel Control Axis", "Roll Toe Pivot Axis", "Roll Heel Pivot Axis"]:
+            return aniseed.widgets.ItemSelector(
+                list(self._ROLL_AXES),
+                self.option(option_name).get(),
+            )
+
     # noinspection DuplicatedCode
     def run(self):
 
@@ -299,6 +362,7 @@ class LegComponent(aniseed.RigComponent):
         )
 
         self.create_controls()
+        self.create_foot_roll()
         self.create_ik()
         self.create_nk()
         self.create_snap()
@@ -345,6 +409,11 @@ class LegComponent(aniseed.RigComponent):
         if facing_dir != facing_dir.NegativeX and facing_dir != facing_dir.PositiveX:
             print("The leg must be aligned to the X axis")
             return False
+
+        for option_name in ["Roll Heel Control Axis", "Roll Toe Pivot Axis", "Roll Heel Pivot Axis"]:
+            if self.option(option_name).get() not in self._ROLL_AXES:
+                print(f"{option_name} must be one of: {', '.join(self._ROLL_AXES)}")
+                return False
 
         return True
 
@@ -779,6 +848,12 @@ class LegComponent(aniseed.RigComponent):
                 group=[ikfk_group, ikonly_group],
             )
 
+        snappy.new_forced_attribute(
+            node=self.ik_foot_control.ctl,
+            attribute_name="roll",
+            attribute_value=0,
+            group=[ikfk_group, ikonly_group],
+        )
 
     def create_twists(self):
 
@@ -893,9 +968,113 @@ class LegComponent(aniseed.RigComponent):
             )
 
             controls.append(pivot_control.ctl)
+            self.pivot_parameters[pivot_tag] = parameter_pivot
             last_parent = parameter_pivot
 
         return last_parent, controls
+
+    def create_foot_roll(self):
+        """
+        Adds a "roll" attribute to the ik foot control. Positive roll first
+        rotates the heel control (lifting the heel) up to the Roll Heel Angle,
+        after which the remaining roll rotates the toe pivot. Negative roll
+        rocks the foot back on the heel pivot.
+        """
+        heel_angle = self.option("Roll Heel Angle").get()
+        heel_control_attribute, heel_control_sign = self._ROLL_AXES[self.option("Roll Heel Control Axis").get()]
+        toe_pivot_attribute, toe_pivot_sign = self._ROLL_AXES[self.option("Roll Toe Pivot Axis").get()]
+        heel_pivot_attribute, heel_pivot_sign = self._ROLL_AXES[self.option("Roll Heel Pivot Axis").get()]
+
+        cmds.addAttr(
+            self.ik_foot_control.ctl,
+            shortName="roll",
+            attributeType="float",
+            defaultValue=0,
+            keyable=True,
+        )
+        roll = mref.get(f"{self.ik_foot_control.ctl}.roll")
+
+        # -- The heel angle is exposed so the animator can adjust it, with
+        # -- the option giving its value at build time
+        cmds.addAttr(
+            self.ik_foot_control.ctl,
+            shortName="roll_heel_angle",
+            attributeType="float",
+            defaultValue=heel_angle,
+            minValue=0,
+            keyable=True,
+        )
+        heel_angle_attribute = mref.get(f"{self.ik_foot_control.ctl}.roll_heel_angle")
+
+        # -- The roll beyond the heel angle is what drives the toe
+        roll_past_heel = mref.create("floatMath")
+        roll_past_heel.operation.set(1)  # -- Subtract
+        roll.connect(roll_past_heel.floatA)
+        heel_angle_attribute.connect(roll_past_heel.floatB)
+
+        # -- Split the roll into its three stages:
+        # -- R : 0 to the heel angle, for the heel control
+        # -- G : anything beyond the heel angle, for the toe pivot
+        # -- B : anything below zero, for the heel pivot
+        stages = mref.create("clamp")
+
+        roll.connect(stages.inputR)
+        stages.minR.set(0)
+        heel_angle_attribute.connect(stages.maxR)
+
+        roll_past_heel.outFloat.connect(stages.inputG)
+        stages.minG.set(0)
+        stages.maxG.set(self._MAX_ROLL)
+
+        roll.connect(stages.inputB)
+        stages.minB.set(-self._MAX_ROLL)
+        stages.maxB.set(0)
+
+        # -- The negative stage is already negative, so its sign is flipped
+        # -- to make "Positive" mean the direction negative roll rocks towards
+        self._add_rotation_driver(
+            f"{self.ik_heel_control.off}.{heel_control_attribute}",
+            self._signed(stages.outputR, heel_control_sign),
+        )
+        self._add_rotation_driver(
+            f"{self.pivot_parameters['Toe']}.{toe_pivot_attribute}",
+            self._signed(stages.outputG, toe_pivot_sign),
+        )
+        self._add_rotation_driver(
+            f"{self.pivot_parameters['Heel']}.{heel_pivot_attribute}",
+            self._signed(stages.outputB, -heel_pivot_sign),
+        )
+
+    @staticmethod
+    def _signed(attribute, sign: int):
+        """
+        Returns an attribute carrying the given attribute's value multiplied
+        by the sign.
+        """
+        result = mref.create("floatMath")
+        result.operation.set(2)  # -- Multiply
+        attribute.connect(result.floatA)
+        result.floatB.set(sign)
+        return result.outFloat
+
+    @staticmethod
+    def _add_rotation_driver(target: str, source) -> None:
+        """
+        Connects the source into the target attribute. If the target is
+        already driven, the existing driver and the source are summed.
+        """
+        target = mref.get(target)
+        existing = target.inputs()
+
+        if not existing:
+            source.connect(target)
+            return
+
+        total = mref.create("floatMath")
+        total.operation.set(0)  # -- Add
+        existing[0].connect(total.floatA)
+        source.connect(total.floatB)
+        total.outFloat.connect(target, force=True)
 
     def user_func_create_mirror(self):
         aniseed_toolkit.component.mirror(
@@ -1111,6 +1290,7 @@ class LegComponent(aniseed.RigComponent):
         self.ik_toe_control = None
         self.ik_pivot_endpoint = ""
         self.pivot_controls = []
+        self.pivot_parameters: dict[str, str] = {}
 
         self.controls: list[str] = []
         self.fk_controls: list = []
