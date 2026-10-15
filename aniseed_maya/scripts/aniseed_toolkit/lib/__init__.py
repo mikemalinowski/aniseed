@@ -1,31 +1,15 @@
-from . import control
-from . import guide
-from . import joints
-from . import transforms
-from . import attributes
-from . import visibility
-from . import tagging
-from . import transformation
-from . import io
-from . import mirror
-from . import pinning
-from . import mutils
-from . import surfaces
-from . import shapes
-from . import rig
-from . import skin
-from . import containts
-from . import constraints
-from . import direction
-from . import sets
-from . import component
-from . import space
-from . import units
-from . import facial_controls
-from . import offset_controls
-from . import stack_joints
-from . import control_mixins
-from . import component_outputs
-from . import matrix_drive
-from . import control_queries
-from . import option_files
+"""
+Deprecated package, kept for compatibility until aniseed_toolkit 4.0.
+
+The modules which used to live here have moved into the core, scene, rig
+and rigging packages (and the aniseed component support into aniseed).
+Each old module is still importable from here and re-exports its old names.
+"""
+import importlib
+
+
+def __getattr__(name):
+    try:
+        return importlib.import_module(f"{__name__}.{name}")
+    except ModuleNotFoundError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

@@ -8,8 +8,8 @@ aniseed_toolkit.guide as before - a DeprecationWarning is logged.
 import mref
 from maya import cmds
 
-from ..lib import joints
-from ..lib.guide import create
+from ..scene import joints
+from ..rig.guide import create
 
 
 def create_ik_guide(start, end, parent=None, constrain_end_orientation=False, link_to=None):

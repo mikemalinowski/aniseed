@@ -13,3 +13,6 @@ mixin's contributions before RigComponent's):
         ...
 """
 from .mirroring import MirrorMixin
+from .joint_chain import JointChainMixin
+from .controls import InsertControlMixin
+from .controls import SingularControlMixin

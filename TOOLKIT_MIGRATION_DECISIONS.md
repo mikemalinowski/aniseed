@@ -128,3 +128,83 @@ on its own.
   - Give @tool a `ui_elements` hook and an `adapter` signature, then convert the
     remaining 23 as well.
   - Keep all 64 wrapper classes.
+
+## D8. aniseed_toolkit.rig.get keeps a deferred aniseed import (phase 3)
+
+- **Chosen:**
+  - `rig.controls.get` (old `aniseed_toolkit.rig.get`) imports aniseed inside the
+    function.
+  - The toolkit can be imported and used without aniseed. Only `get`,
+    `opposing_controls` and `controls_by_location` need aniseed when called.
+- **Why:**
+  - Those functions need the rig's configuration to work out sides and names,
+    and they are themselves tools ("Get Opposites", "Get By Location").
+  - Moving them into aniseed would move tools out of the toolkit.
+- **Alternatives:**
+  - Move all three into aniseed and register the tools from there.
+  - Pass the config in explicitly (a signature change).
+
+
+## D9. "Use the selection when no argument is given" (phase 3)
+
+- **Chosen:**
+  - Library functions keep their existing behaviour of falling back to the
+    selection when an argument is omitted, e.g. `visibility.hide()` or
+    `distance_between()`.
+  - The rule that is enforced is that there is no hidden selection dependency:
+    when arguments are given, the result never depends on the selection. The
+    lib-to-tool calls and the selection-only shape tools that broke this are
+    gone.
+- **Why:** removing the fallbacks would change the behaviour of dozens of public
+  functions and of the tool forms built from them.
+- **Alternatives:** remove every fallback from the library and do the selection
+  resolution only in the tools layer. This is cleaner, but it breaks scripts
+  that call these functions without arguments.
+
+
+## D10. Wrapper tools that transformed their arguments (phase 2 fix, found in phase 3)
+
+- **What happened:**
+  - Nine of the converted wrappers did more than forward their arguments.
+  - Eight substituted the selection for an empty argument: Create Pins,
+    Remove Pins, Pin Hierarchy, Get Joint From Pin, Get Pin From Node,
+    Get By Location, Invert Translation and Serialise Nodes To Dict.
+  - Direction Between forced print_result=True.
+- **How it was found:** the phase 2 conversion compared signatures only. The
+  toolkit behaviour harness caught the change.
+- **Chosen:** those nine are @tool functions in their tools modules, recreated
+  from the original run() bodies. The library functions are no longer
+  decorated.
+- **Alternatives:** keep them as Tool classes.
+
+
+## D11. Version and history (phase 3)
+
+- **Chosen:**
+  - The package version is now 3.1.0 (new layout plus deprecations, still
+    backwards compatible).
+  - Code was moved by a script (scratch tooling, not committed), so the moved
+    code is byte for byte the original apart from rewritten references.
+  - The old lib modules are replaced by shims in the same commit. That keeps
+    every commit runnable, at the cost of git not recording the moves as
+    renames; `git blame -C -C` / `git log --follow` still trace the code.
+- **Alternatives:**
+  - Split the move into a non-runnable "pure move" commit followed by a shim
+    commit, for cleaner rename detection.
+  - Bump to 4.0.0.
+
+
+## D12. Where the moved component support lives (phase 3/5, open decision 2)
+
+- **Chosen:**
+  - aniseed.builders: add_space_switch, setup_fk_*_switches, mirror_component,
+    add_twister, create_joint_from_selection.
+  - aniseed.dialogs: request_count and the option file dialogs.
+  - aniseed.component_outputs.
+  - aniseed.mixins: JointChainMixin, InsertControlMixin and
+    SingularControlMixin, alongside MirrorMixin.
+  - The FacialControlRig stayed in the toolkit (rigging.facial) because it has no
+    aniseed dependency.
+- **Alternatives:**
+  - Different module names (e.g. aniseed.component_helpers).
+  - Make component_outputs methods on RigComponent.

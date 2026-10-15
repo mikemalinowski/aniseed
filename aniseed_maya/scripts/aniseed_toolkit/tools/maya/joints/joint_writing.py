@@ -51,3 +51,24 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             invert=invert,
             worldspace_root=worldspace_root,
         )
+
+
+@aniseed_toolkit.tool(
+    "Serialise Nodes To Dict",
+    classification="Rigging",
+    categories=["Joints"],
+    user_facing=False,
+)
+def serialise_nodes_to_dict(nodes: list[str]) -> dict:
+    """
+    This will store the given nodes and their attributes to a dictionary
+    
+    Args: 
+         nodes: List of nodes to serialise
+    
+    Returns:
+        dict of the dataset in the format supported by the joint writing tools
+    """
+    return aniseed_toolkit.scene.hierarchy_io.hierarchy_to_dict(
+        nodes=nodes or mc.ls(selection=True),
+    )

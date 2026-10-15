@@ -1,29 +1,14 @@
 """
-Helpers for driving transforms directly from matrices.
+Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
+
+Everything here now lives in: aniseed_toolkit.scene.transforms
 """
-import mref
+import warnings
 
+from ..scene.transforms import drive_from_local_matrix
 
-def drive_from_local_matrix(driver, driven) -> mref.ReferencedItem:
-    """
-    Drives the translate, rotate and scale of the driven transform from
-    the local matrix of the driver (via a decomposeMatrix node). This makes
-    the driven node mimic the local transform of the driver.
-
-    Args:
-        driver: The transform whose local matrix should be read
-        driven: The transform to drive
-
-    Returns:
-        The decomposeMatrix node
-    """
-    driver = mref.get(driver)
-    driven = mref.get(driven)
-
-    decompose_node = mref.create("decomposeMatrix")
-    driver.attr("matrix").connect(decompose_node.inputMatrix)
-    decompose_node.outputTranslate.connect(driven.attr("translate"))
-    decompose_node.outputRotate.connect(driven.attr("rotate"))
-    decompose_node.outputScale.connect(driven.attr("scale"))
-
-    return decompose_node
+warnings.warn(
+    f"{__name__} is deprecated, use aniseed_toolkit.scene.transforms",
+    DeprecationWarning,
+    stacklevel=2,
+)

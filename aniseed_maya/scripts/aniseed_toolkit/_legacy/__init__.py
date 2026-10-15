@@ -14,8 +14,8 @@ _REDIRECTS = {
     ("aniseed_toolkit.lib.guide", "create_ik_guide"): ("guide", "create_ik_guide"),
     ("aniseed_toolkit.lib.guide", "create_multi"): ("guide", "create_multi"),
     ("aniseed_toolkit.lib.transformation", "TransformMixerUi"): ("transform_mixer_ui", "TransformMixerUi"),
-    ("aniseed_toolkit.lib.rigging", "TransformMixer"): ("rigging_transform_mixer", "TransformMixer"),
-    ("aniseed_toolkit.lib.rigging", "transform_mixer"): ("rigging_transform_mixer", None),
+    ("aniseed_toolkit.rigging", "TransformMixer"): ("rigging_transform_mixer", "TransformMixer"),
+    ("aniseed_toolkit.rigging", "transform_mixer"): ("rigging_transform_mixer", None),
 }
 
 _WARNED = set()

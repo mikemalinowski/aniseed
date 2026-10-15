@@ -1,30 +1,28 @@
 """
-Helpers for components which create their own joint when they are first
-added to the stack.
+Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
+
+Everything here now lives in: aniseed.builders
 """
-import mref
+import warnings
 
 
-def create_from_selection(name: str, match_to_parent: bool = False) -> mref.ReferencedItem:
-    """
-    Creates a joint as a child of the first selected node, or at the world
-    if nothing is selected.
+warnings.warn(
+    f"{__name__} is deprecated, use aniseed.builders",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-    Args:
-        name: The name to give the joint
-        match_to_parent: If True, the joint is matched to the world
-            transform of its parent
+_LAZY = {
+    'create_from_selection': ('aniseed.builders', 'create_joint_from_selection'),
+}
 
-    Returns:
-        The created joint
-    """
-    selection = mref.selected()
-    parent = selection[0] if selection else None
 
-    joint = mref.create("joint", parent=parent)
-    joint.rename(name)
-
-    if parent and match_to_parent:
-        joint.match_to(parent)
-
-    return joint
+def __getattr__(name):
+    # -- Names which moved into aniseed are resolved on first use so
+    # -- that the toolkit never imports aniseed when it is loaded
+    if name in _LAZY:
+        import importlib
+        module, attribute = _LAZY[name]
+        return getattr(importlib.import_module(module), attribute)
+    from .._legacy import resolve
+    return resolve(__name__, name)
