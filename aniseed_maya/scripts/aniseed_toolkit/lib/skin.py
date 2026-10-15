@@ -473,7 +473,7 @@ def load(mesh="", filepath="") -> str:
     with open(filepath, "r") as f:
         weight_data = json.load(f)
 
-    dict_to_skin(mesh, weight_data)
+    return dict_to_skin(mesh, weight_data)
 
 
 def _get_mesh_components(mesh):
