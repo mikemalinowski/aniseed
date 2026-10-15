@@ -70,6 +70,11 @@ on its own.
 - **Alternatives:** skip the matching entirely when match_to is None. This is
   cleaner, but could introduce floating point noise in the local transform values
   compared to existing rigs.
+- **Note (phase 6):** in practice the control is left at the world origin, not at
+  its parent. The nodes are created at the origin and parented absolutely
+  (`set_parent`), so they keep that world transform. The control.create
+  docstring now says this. The plan's earlier wording ("leave at the parent") was
+  inaccurate.
 
 ## D4. Fixing the broken library functions (phase 1, open decision 1)
 
@@ -305,3 +310,73 @@ on its own.
     was edited in 4b anyway.
 - **Alternative:** switch every component to the direct library calls for clarity.
   The output would be identical apart from undo chunking.
+
+
+## D20. Where maya.cmds stays in the library (phase 6)
+
+- **Chosen:**
+  - **Use mref** for:
+    - nodes a function creates and owns (temporary nodes, new rig nodes);
+    - attribute, constraint and matrix work where the result is provably
+      identical.
+  - **Keep cmds** where the function returns or reuses names exactly as Maya
+    reports them:
+    - `cmds.rename` and `cmds.listConnections` can return partial paths such as
+      `|foo`, which mref's `name()` does not reproduce;
+    - `controller`, `ls(long=True)`, `selection.first_selected` and
+      `currentUnit`;
+    - component strings such as `curve.cv[*]` and vertex lists, which mref does
+      not wrap.
+  - **Keep OpenMaya** for:
+    - `core.api`, whose whole purpose is MObject/MDagPath;
+    - per-CV maths in `scene.shapes` and `scene.surfaces`;
+    - the skin weight api in `scene.skin`.
+  - Every module says why in a comment or module docstring.
+- **Precision rule found:** replacing a flag-less `cmds.xform(query/matrix)` with
+  mref `get_matrix`/`get_position`/`set_matrix` adds `objectSpace=True`. That is not
+  bit-identical, and changed `aimMatrix` values in the last digit. Use
+  `node.xform(...)` with the original flags instead.
+- **Evaluation rule found:** `Attribute.set` queries the attribute type first,
+  which evaluates the attribute. In `rig.guide` this changed later tween blend
+  defaults (0.37 became 0.27), so that loop uses the `mref.setAttr` passthrough.
+- **Alternatives:**
+  - Convert the name-returning calls too and accept full or short names
+    differing from today. That is a return value change, deferred to 4.0 at the
+    earliest.
+  - Extend mref with component support and a "name as Maya reports it" accessor.
+
+
+## D21. Errors for bad node names (phase 6)
+
+- **Chosen:** wherever a caller-supplied name is now resolved through mref,
+  `aniseed_toolkit.core._nodes.resolve(node, error=ValueError)` raises the error
+  Maya used to raise:
+  - "No object matches name: x" when nothing matches;
+  - "More than one object matches name: x" when several nodes match.
+  - mref.get on its own would return the string (giving a later AttributeError)
+    or silently pick the first match.
+- **Details:**
+  - The error type follows the cmds command that used to fail first: RuntimeError
+    where that was `nodeType` (visibility, sets, and shapes.apply_color, rotate,
+    scale and shape_to_dict).
+  - `scene.shapes` has its own `_get_node` with the same rule.
+  - `attributes.lock_and_hide` does not resolve at all. cmds.setAttr on an
+    ambiguous name edits every match, and that behaviour is kept.
+  - Messages are cmds' wording, not always its exact text (nodeType's message
+    differs).
+- **Alternatives:**
+  - Let mref's own errors through (simpler, but a behaviour change).
+  - Make mref.get itself strict.
+
+
+## D22. Shims stay until 4.0 (phase 7 not done)
+
+- **Chosen:** phase 7 (removing the old module paths) is deliberately not done.
+  - The plan keeps the shims for at least one minor release.
+  - All code in this repo now uses the new paths. A strict build that turns the
+    shims' DeprecationWarnings into errors passes for every test scene.
+- **How to do it later:**
+  - delete `aniseed_toolkit/lib/*` shims, `_legacy`, and the top-level
+    `__getattr__` map;
+  - bump to 4.0.
+- **Alternative:** remove them now if no external scripts use the old paths.

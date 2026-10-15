@@ -1,28 +1,35 @@
 """
 Object set helpers.
 """
-from maya import cmds
+import mref
+
+from ..core import _nodes
 
 
 def add_to(nodes: str or list[str], set_name: str) -> None:
     """
-    This will add the given object or objects to the set with the given
-    name. Note, this will create the set if one does not exist.
+    Adds the given node or nodes to the set with the given name. The set
+    is created (empty, at the scene level) if it does not exist.
 
     Args:
-        nodes: A node or list of nodes to add to the set with the given
-            name.
-
+        nodes: A node or list of nodes to add to the set
         set_name: The name of the set to add the nodes to
+
+    Raises:
+        Exception: If a node with the given set name exists but is not an
+            objectSet
     """
     # -- Check we have a set
-    if cmds.objExists(set_name):
-        if not cmds.nodeType(set_name) == 'objectSet':
+    if mref.objExists(set_name):
+        # -- RuntimeError for an ambiguous name, as cmds.nodeType raised
+        if not _nodes.resolve(set_name, error=RuntimeError).node_type() == "objectSet":
             raise Exception(f"{set_name} is not a set!")
     else:
-        cmds.sets(name=set_name, empty=True)
+        mref.sets(name=set_name, empty=True)
 
-    cmds.sets(
+    # -- sets(add=) rather than the ObjectSet trait's add_members, which
+    # -- uses forceElement
+    mref.sets(
         nodes,
         add=set_name,
     )

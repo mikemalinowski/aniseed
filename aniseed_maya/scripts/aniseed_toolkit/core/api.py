@@ -2,9 +2,12 @@
 OpenMaya helpers for getting MObjects, MDagPaths and names. These are used by
 the modules which work through the OpenMaya api (such as shapes and skin);
 most code should prefer mref.
+
+This module is OpenMaya based by design: its purpose is to hand out api
+objects, which mref does not expose in these forms.
 """
-from maya import cmds
 import maya.api.OpenMaya as om
+import mref
 
 from ..registry import tool
 
@@ -17,16 +20,19 @@ from ..registry import tool
 )
 def get_name(mobject: om.MObject = None):
     """
-    This will return the name of the MObject pointer
+    Returns the name of the node the given MObject points to. If a string
+    is given it is returned unchanged.
 
     Args:
-        mobject: MObject pointer
+        mobject: The MObject to get the name of (or a node name)
 
     Returns:
-        Name of the node
+        The name of the node
+
+    Raises:
+        ValueError: If the MObject is not a dependency node (for instance a
+            null MObject)
     """
-
-
     if isinstance(mobject, str):
         return mobject
 
@@ -44,16 +50,19 @@ def get_name(mobject: om.MObject = None):
 )
 def get_mobject(name: str = "") -> om.MFnDependencyNode:
     """
-    Given the name of a node, this will return the MObject representation. This means
-    we can track the node easily without having to worry about name changes.
+    Returns the MObject for the node with the given name. An MObject keeps
+    pointing at the node even if it is renamed. If an MObject is given it is
+    returned unchanged.
 
     Args:
-        name: Name of the node to get a pointer to
+        name: Name of the node to get the MObject for
 
     Returns:
-        MObject reference
-    """
+        The MObject of the node
 
+    Raises:
+        RuntimeError: If no node with the given name exists
+    """
     if isinstance(name, om.MObject):
         return name
 
@@ -73,15 +82,15 @@ def get_mobject(name: str = "") -> om.MFnDependencyNode:
 )
 def get_dagpath(name: str = "") -> om.MDagPath or None:
     """
-    This will return the name of the MObject pointer
+    Returns the MDagPath for the node with the given name.
 
     Args:
-        name: Name of the node to resolve the dagpath for
+        name: Name of the node to resolve the dag path for
 
     Returns:
-        OpenMaya.DagPath
+        The MDagPath of the node, or None if no node with that name exists
     """
-    if not cmds.objExists(name):
+    if not mref.objExists(name):
         return None
 
     slist = om.MSelectionList()

@@ -1,6 +1,17 @@
 """
 Skinning utilities: copying, interpolating, saving and loading skin weights,
 and managing skin influences.
+
+Nodes are handled through mref where it is an exact equivalent. The
+following deliberately stay outside it:
+
+- Skin clusters are found with Maya's own ``findRelatedSkinCluster`` mel
+  procedure, which has a different resolution rule to mref's ``skin()``.
+- Vertex and CV work (skinPercent, component strings and the selection of
+  components) uses cmds, as mref items wrap nodes and attributes but not
+  components.
+- Reading and writing whole weight sets uses the OpenMaya
+  ``MFnSkinCluster`` api, which does it in a single call per mesh.
 """
 import json
 import os
@@ -9,17 +20,27 @@ from maya import cmds
 from maya import mel
 from maya.api import OpenMaya as om
 from maya.api import OpenMayaAnim as om_anim
-import maya
 import mref
 
 from ..registry import tool
 from ..core import api as _api
 
 
+def _related_skin(mesh: str) -> str:
+    """
+    Returns the name of the skinCluster deforming the given mesh, or an
+    empty string if there is none.
+    """
+    return mel.eval(f'findRelatedSkinCluster "{mesh}";')
+
+
 def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str] = None) -> None:
     """
-    This will copy the skin weights from the skinned_mesh object
-    to all the unskinned_meshes.
+    Binds each of the unbound meshes to the influences of the skinned mesh
+    (with the same maximum influences) and copies the skin weights onto them,
+    matching by closest point and by influence name, closest joint and label.
+
+    The skinned mesh is left selected afterwards.
 
     Args:
         skinned_mesh: the name of the skinned mesh
@@ -29,11 +50,10 @@ def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str
     Returns:
          None
     """
-    # -- Look for the mesh
-    skin = mel.eval(f'findRelatedSkinCluster "{skinned_mesh}";')
+    skin = _related_skin(skinned_mesh)
 
     # -- Get all the joints for the skin
-    influences = cmds.skinCluster(
+    influences = mref.skinCluster(
         skin,
         query=True,
         influence=True,
@@ -41,11 +61,11 @@ def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str
 
     for target in unbound_meshes:
         # -- Create a skin cluster for the given target
-        new_skin = cmds.skinCluster(
+        new_skin = mref.skinCluster(
             influences,
             target,
             toSelectedBones=True,
-            maximumInfluences=cmds.skinCluster(
+            maximumInfluences=mref.skinCluster(
                 skin,
                 query=True,
                 maximumInfluences=True,
@@ -53,7 +73,7 @@ def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str
         )[0]
 
         # -- Copy the skin weights between them
-        cmds.copySkinWeights(
+        mref.copySkinWeights(
             sourceSkin=skin,
             destinationSkin=new_skin,
             noMirror=True,
@@ -62,16 +82,20 @@ def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str
         )
 
     # -- Keep the source mesh selected
-    cmds.select(skinned_mesh)
+    mref.select(skinned_mesh)
 
 
 def disconnect_all_skins() -> None:
     """
-    This will disconnect all the skinCluster nodes in the scene. It does not
-    remove them, and does not disconnect them.
+    Puts every skinCluster in the scene into move joints mode, so the
+    influences can be moved without deforming the meshes. The skin clusters
+    are not removed. Use reconnect_all_skins to undo this.
+
+    Returns:
+        None
     """
-    for skin in cmds.ls(type="skinCluster"):
-        cmds.skinCluster(
+    for skin in mref.ls(type="skinCluster"):
+        mref.skinCluster(
             skin,
             edit=True,
             moveJointsMode=True,
@@ -80,11 +104,14 @@ def disconnect_all_skins() -> None:
 
 def reconnect_all_skins() -> None:
     """
-    This will reconnect all skin clusters in the scene which have previously
-    been disconnected.
+    Takes every skinCluster in the scene out of move joints mode (see
+    disconnect_all_skins), so the influences deform the meshes again.
+
+    Returns:
+        None
     """
-    for skin in cmds.ls(type="skinCluster"):
-        cmds.skinCluster(
+    for skin in mref.ls(type="skinCluster"):
+        mref.skinCluster(
             skin,
             edit=True,
             moveJointsMode=False,
@@ -92,13 +119,27 @@ def reconnect_all_skins() -> None:
 
 
 class LocalisedSkinCopy(object):
+    """
+    Copies skin weights onto a stored set of vertices, from another skinned
+    mesh. This works on the selection:
+
+    1. Select the vertices to copy onto and call snapshot_vertices.
+    2. Select the skinned mesh to copy from and call copy_skinweights.
+    """
 
     _STORED_MESH = []
     _STORED_VERTICES = []
 
     @classmethod
     def snapshot_vertices(cls):
+        """
+        Stores the object of the first selected component, and the indices
+        of all the selected vertices, as the destination for
+        copy_skinweights.
 
+        Returns:
+            None
+        """
         LocalisedSkinCopy._STORED_MESH = cmds.ls(selection=True, o=True)[0]
         LocalisedSkinCopy._STORED_VERTICES = list()
 
@@ -107,7 +148,18 @@ class LocalisedSkinCopy(object):
 
     @classmethod
     def copy_skinweights(cls):
+        """
+        Copies the skin weights of the first selected mesh onto the vertices
+        stored by snapshot_vertices. The weights are first transferred onto
+        a temporary duplicate of the stored mesh, and then copied vertex by
+        vertex (using Maya's copy/paste vertex weights) onto the stored mesh.
 
+        A message is printed if there is nothing selected or nothing stored,
+        but the copy is still attempted.
+
+        Returns:
+            None
+        """
         if not cmds.ls(selection=True):
             print('No mesh to copy weights from')
 
@@ -150,7 +202,8 @@ _WEIGHT_VALUE_COPY_DESTINATION = None
 def declare_weight_value_copy_destination() -> None:
     """
     Stores the currently selected mesh as the destination for a subsequent
-    call to :func:`copy_weight_values_to_destination`.
+    call to :func:`copy_weight_values_to_destination`. A message is printed
+    (and nothing stored) if nothing is selected.
 
     Returns:
         None
@@ -174,7 +227,9 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
     destination skin cluster will be added.
 
     The destination mesh must be declared first via
-    :func:`declare_weight_value_copy_destination`.
+    :func:`declare_weight_value_copy_destination`. A message is printed (and
+    nothing changed) if there is no destination, no vertices, or either mesh
+    has no skin cluster.
 
     Args:
         vertices: The source vertices to copy weights from. If not given
@@ -198,19 +253,21 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
         return
 
     source_mesh = vertices[0].split(".")[0]
-    source_skin = mel.eval(f'findRelatedSkinCluster "{source_mesh}";')
+    source_skin = _related_skin(source_mesh)
 
     if not source_skin:
         print(f"Source mesh {source_mesh} has no skin cluster")
         return
 
     destination_mesh = _WEIGHT_VALUE_COPY_DESTINATION
-    destination_skin = mel.eval(f'findRelatedSkinCluster "{destination_mesh}";')
+    destination_skin = _related_skin(destination_mesh)
 
     if not destination_skin:
         print(f"Destination mesh {destination_mesh} has no skin cluster")
         return
 
+    # -- Influence names stay cmds strings, as they are compared by name and
+    # -- paired with the weight values for skinPercent.
     source_influences = cmds.skinCluster(
         source_skin,
         query=True,
@@ -254,6 +311,12 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
 
 
 class SkinLerper:
+    """
+    Sets the skin weights of a set of vertices to an interpolation between
+    the weights of two other vertices (target a and target b) of the same
+    skin. Set the targets and destination vertices first, then call
+    set_by_interpolation_factor.
+    """
 
     target_a_weights = []
     target_b_weights = []
@@ -262,11 +325,34 @@ class SkinLerper:
 
     @classmethod
     def get_interpolated_value(cls, interp, a, b):
+        """
+        Returns the linear interpolation between a and b.
+
+        Args:
+            interp: The interpolation factor, where 0 gives a and 1 gives b
+            a: The value at an interpolation factor of 0
+            b: The value at an interpolation factor of 1
+
+        Returns:
+            float
+        """
         return a + ((b - a) * interp)
 
     @classmethod
     def set_by_interpolation_factor(cls, interpolation_factor):
-        skin = mel.eval(f'findRelatedSkinCluster "{cls.destination_mesh}";')
+        """
+        Sets the weights of every destination vertex to the interpolation
+        between the target a and target b weights. The weights are paired
+        with the destination skin's influences by index.
+
+        Args:
+            interpolation_factor: Where 0 gives the target a weights and 1
+                gives the target b weights
+
+        Returns:
+            None
+        """
+        skin = _related_skin(cls.destination_mesh)
         influences = cmds.skinCluster(skin, query=True, influence=True)
         interpolated_values = []
 
@@ -292,53 +378,94 @@ class SkinLerper:
 
     @classmethod
     def set_target_a_weights(cls, vertex):
+        """
+        Stores the skin weights of the given vertex as the target a weights.
+
+        Args:
+            vertex: The vertex (e.g. "mesh.vtx[0]") to read the weights from
+
+        Returns:
+            None
+        """
         mesh = vertex.split(".")[0]
-        skin = mel.eval(f'findRelatedSkinCluster "{mesh}";')
+        skin = _related_skin(mesh)
         SkinLerper.target_a_weights = cmds.skinPercent(skin, vertex, query=True, value=True)
 
     @classmethod
     def set_target_b_weights(cls, vertex):
+        """
+        Stores the skin weights of the given vertex as the target b weights.
+
+        Args:
+            vertex: The vertex (e.g. "mesh.vtx[0]") to read the weights from
+
+        Returns:
+            None
+        """
         mesh = vertex.split(".")[0]
-        skin = mel.eval(f'findRelatedSkinCluster "{mesh}";')
+        skin = _related_skin(mesh)
         SkinLerper.target_b_weights = cmds.skinPercent(skin, vertex, query=True, value=True)
 
     @classmethod
     def set_destination_vertices(cls, vertices):
+        """
+        Stores the vertices whose weights set_by_interpolation_factor will
+        set. They must all belong to the same mesh.
+
+        Args:
+            vertices: List of vertices (e.g. "mesh.vtx[0]")
+
+        Returns:
+            None
+        """
         SkinLerper.destination_mesh = vertices[0].split(".")[0]
-        SkinLerper.destination_vertices = [n for n in vertices]
+        SkinLerper.destination_vertices = list(vertices)
 
 
-def skin_to_dict(mesh: str = "") -> dict:
+def _vertex_count_and_components(mesh):
     """
-    This will save the skin weights of the given mesh to the given
-    filepath.
-
-    Args:
-        mesh: The node to save the skin weights for
-
-    Returns:
-        dictionary of skin data
+    Returns the number of skinnable components of the given mesh or nurbs
+    surface, and an MObject for all of them.
     """
-    skin_node = maya.mel.eval(
-        f"findRelatedSkinCluster {mesh}",
-    )
-
-    # -- Get the skin function set from the mesh
-    skin_fn = om_anim.MFnSkinCluster(
-        _api.get_mobject(skin_node)
-    )
-
-    # # -- Get the vertex count
     vertex_count = cmds.polyEvaluate(
         mesh,
         vertex=True,
     )
+
+    # -- polyEvaluate returns a message string rather than a count for
+    # -- anything which is not a polygon mesh
     if isinstance(vertex_count, int):
-        vertex_component = _get_mesh_components(mesh)
-    else:
-        # -- Fall back to surface
-        vertex_count = len(cmds.ls(f"{mesh}.cv[*]", flatten=True))
-        vertex_component = _get_nurbs_cv_components(mesh)
+        return vertex_count, _get_mesh_components(mesh)
+
+    # -- Fall back to surface
+    vertex_count = len(cmds.ls(f"{mesh}.cv[*]", flatten=True))
+    return vertex_count, _get_nurbs_cv_components(mesh)
+
+
+def skin_to_dict(mesh: str = "") -> dict:
+    """
+    Reads the skin weights of the given mesh (or nurbs surface) into a json
+    serialisable dictionary.
+
+    Args:
+        mesh: The node to read the skin weights from
+
+    Returns:
+        dictionary of the form {"influences": [...], "weights": [...],
+        "max_influences": int}, where weights holds one list of per-vertex
+        weights for each influence
+    """
+    skin_node = mel.eval(
+        f"findRelatedSkinCluster {mesh}",
+    )
+
+    # -- The MFnSkinCluster api reads every weight in one call
+    skin_fn = om_anim.MFnSkinCluster(
+        _api.get_mobject(skin_node)
+    )
+
+    vertex_count, vertex_component = _vertex_count_and_components(mesh)
+
     # -- Now get the weight data
     all_weights, influence_count = skin_fn.getWeights(
         _api.get_dagpath(mesh),
@@ -364,9 +491,7 @@ def skin_to_dict(mesh: str = "") -> dict:
     packaged_data = dict(
         influences=influences,
         weights=influence_weights,
-        max_influences=cmds.getAttr(
-            f"{skin_node}.maxInfluences",
-        )
+        max_influences=mref.get(skin_node).attr("maxInfluences").get(),
     )
 
     return packaged_data
@@ -374,8 +499,8 @@ def skin_to_dict(mesh: str = "") -> dict:
 
 def save(mesh: str = "", filepath: str = ""):
     """
-    This will save the skin weights of the given mesh to the given
-    filepath.
+    This will save the skin weights of the given mesh (see skin_to_dict) to
+    the given filepath as json.
 
     Args:
         mesh: The node to save the skin weights for
@@ -385,7 +510,6 @@ def save(mesh: str = "", filepath: str = ""):
         None
     """
     packaged_data = skin_to_dict(mesh)
-    print("data : %s " % packaged_data)
 
     with open(filepath, "w") as f:
         json.dump(
@@ -402,27 +526,29 @@ def save(mesh: str = "", filepath: str = ""):
     categories=["Skinning"],
 )
 def dict_to_skin(mesh, weight_data) -> str:
+    """
+    Skins the given mesh (or nurbs surface) with the given skin data, as
+    returned by skin_to_dict. Any existing skin on the mesh is removed first,
+    then a new skinCluster is bound to the influences in the data and the
+    weights are applied (normalised).
 
-    # # -- Get the vertex count
-    vertex_count = cmds.polyEvaluate(
-        mesh,
-        vertex=True,
-    )
-    if isinstance(vertex_count, int):
-        vertex_component = _get_mesh_components(mesh)
-    else:
-        # -- Fall back to surface
-        vertex_count = len(cmds.ls(f"{mesh}.cv[*]", flatten=True))
-        vertex_component = _get_nurbs_cv_components(mesh)
+    Args:
+        mesh: The node to apply the skin to
+        weight_data: Dictionary of skin data (influences, weights and
+            max_influences)
 
-    # -- Check that the filepath exists
+    Returns:
+        The name of the new skinCluster node
+    """
+    vertex_count, vertex_component = _vertex_count_and_components(mesh)
+
     # -- Start by removing any existing skin
     existing_skin = mel.eval(
         f"findRelatedSkinCluster {mesh}",
     )
 
     if existing_skin:
-        cmds.skinCluster(
+        mref.skinCluster(
             existing_skin,
             geometry=mesh,
             edit=True,
@@ -430,7 +556,7 @@ def dict_to_skin(mesh, weight_data) -> str:
         )
 
     # -- Create a new skin cluster
-    skin_node = cmds.skinCluster(
+    skin_node = mref.skinCluster(
         weight_data["influences"],
         mesh,
         toSelectedBones=True,
@@ -438,22 +564,20 @@ def dict_to_skin(mesh, weight_data) -> str:
         recacheBindMatrices=True,
     )[0]
 
-    # -- Build up the influence list
-    influence_indices = om.MIntArray()
-    for i in range(len(weight_data["influences"])):
-        influence_indices.append(i)
+    # -- The new skin's influences are in the same order as the data's
+    num_influences = len(weight_data["influences"])
+    influence_indices = om.MIntArray(list(range(num_influences)))
 
     # -- Build the weight list in component-major layout, matching
     # -- what MFnSkinCluster.setWeights expects:
     # -- [v0_inf0, v0_inf1, ..., v1_inf0, v1_inf1, ...].
-    num_influences = len(weight_data["influences"])
     all_weights = om.MDoubleArray()
     for c in range(vertex_count):
         for i in range(num_influences):
             all_weights.append(weight_data["weights"][i][c])
 
-    # -- Now apply the weights
-    skin_fn = om_anim.MFnSkinCluster(_api.get_mobject(skin_node))
+    # -- Now apply the weights, in one call through the api
+    skin_fn = om_anim.MFnSkinCluster(skin_node.pointer())
 
     skin_fn.setWeights(
         _api.get_dagpath(mesh),
@@ -463,7 +587,7 @@ def dict_to_skin(mesh, weight_data) -> str:
         True,
     )
 
-    return skin_node
+    return skin_node.name()
 
 
 def load(mesh="", filepath="") -> str:
@@ -476,7 +600,10 @@ def load(mesh="", filepath="") -> str:
         filepath: The location to load the skinweights from
 
     Returns:
-        The skinCluster node
+        The name of the skinCluster node
+
+    Raises:
+        FileNotFoundError: If the filepath does not exist
     """
     # -- Ensure we can access the file
     if not os.path.exists(filepath):
@@ -490,18 +617,17 @@ def load(mesh="", filepath="") -> str:
 
 
 def _get_mesh_components(mesh):
-
-    # -- Get the vertex count
+    """
+    Returns an MObject representing all the vertices of a polygon mesh.
+    """
     vertex_count = cmds.polyEvaluate(
         mesh,
         v=True,
     )
 
-    # -- Build a list of all the vertices
-    vertex_indices = [i for i in range(vertex_count)]
     indices_fn = om.MFnSingleIndexedComponent()
     vertex_component = indices_fn.create(om.MFn.kMeshVertComponent)
-    indices_fn.addElements(vertex_indices)
+    indices_fn.addElements(list(range(vertex_count)))
 
     return vertex_component
 
@@ -514,7 +640,7 @@ def _get_nurbs_cv_components(nurbs_surface):
         nurbs_surface (str): Name of the NURBS surface.
 
     Returns:
-        MObject: MFnSingleIndexedComponent for all CVs.
+        MObject: MFnDoubleIndexedComponent for all CVs.
     """
     # Get DAG path
     sel = om.MSelectionList()
@@ -540,9 +666,13 @@ def _get_nurbs_cv_components(nurbs_surface):
 
 def add_all_skin_joints_to_all_skins():
     """
-    This will add all joints that are part of all skin clusters
-    within the scene to all skin clusters.
-    :return:
+    Adds every influence of every skinCluster in the scene to every
+    skinCluster in the scene. The influences are added with zero weight
+    (locked while being added) and their lock weights state is restored
+    afterwards. Influences which cannot be added are skipped.
+
+    Returns:
+        None
     """
     # -- Get a list of all the skin clusters in the scene
     all_skins = mref.ls(type="skinCluster")
@@ -562,10 +692,10 @@ def add_all_skin_joints_to_all_skins():
     # -- of the skins
     for skin in all_skins:
         for joint in all_skin_joints:
-            print(skin)
             try:
                 skin.add_influence(joint, lockWeights=True)
-            except: pass
+            except Exception:
+                pass
 
     # -- Now restore the lock weights
     for joint, lock_value in lock_weight_values.items():
@@ -574,9 +704,18 @@ def add_all_skin_joints_to_all_skins():
 
 def add_all_skin_joints_to_target_meshes(meshes):
     """
-    This will add all joints that are part of all skin clusters
-    within the scene to all skin clusters.
-    :return:
+    Takes the skinClusters deforming the given meshes and adds every
+    influence of any of them to all of them. Only skinClusters whose
+    (first) deformed shape is the first shape of one of the meshes are
+    considered. The influences have their weights locked while being added
+    (so they come in with zero weight) and their lock weights state is
+    restored afterwards. Influences which cannot be added are skipped.
+
+    Args:
+        meshes: List of mesh transforms (names or mref items)
+
+    Returns:
+        None
     """
     meshes = mref.get(
         [
@@ -602,14 +741,15 @@ def add_all_skin_joints_to_target_meshes(meshes):
     for joint in all_skin_joints:
         lock_weight_values[joint] = joint.attr("liw").get()
         joint.attr("liw").set(1)
-        print("yep")
+
     # -- Now ensure all of those joints are part of all
     # -- of the skins
     for skin in skins_to_process:
         for joint in all_skin_joints:
             try:
                 skin.add_influence(joint, lockWeights=True)
-            except: pass
+            except Exception:
+                pass
 
     # -- Now restore the lock weights
     for joint, lock_value in lock_weight_values.items():

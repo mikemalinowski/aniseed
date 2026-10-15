@@ -4,7 +4,11 @@ Target: a layered library (A) whose functions are the API, with user tools
 registered from functions by a decorator (C). Component-support code moves into
 aniseed. Every step is incremental, behind compatibility shims, and verified.
 
-Status: proposal. No code has been changed.
+Status: phases 0-6 done on branch `toolkit-restructure` (not pushed). Phase 7
+(removing the shims) is intentionally left for 4.0, see decision D22.
+Commits: 8f7fb35 (1a), 8e145f1..a67d6ec (individual fixes), 0200c51, 7a03997 (2),
+b0b9468 (3), 66d6b4d (4a), d7466c4 (4b), 87a2c73 (5), phase 6 (next commit).
+Decisions taken while implementing are in TOOLKIT_MIGRATION_DECISIONS.md.
 
 
 ## 1. Rules the new structure enforces
@@ -289,7 +293,9 @@ Each phase ends with the verification in section 8. Commit after every phase.
   code must not reorder node creation.
 - Functions keep their current return types until phase 6 deliberately changes them.
 - control.create without match_to currently matches the selection. After phase 1 it
-  is explicit: no match_to means "leave at the parent". Today this is equivalent
+  is explicit: no match_to means each node is re-matched to its own world transform
+  (in practice the world origin, as the nodes are created there and parented
+  absolutely; see decision D3). Today this is equivalent
   only because the selection is the new node. The harness confirms this for every
   component; external callers relying on the old behaviour are unlikely, but the
   change goes in the release notes.

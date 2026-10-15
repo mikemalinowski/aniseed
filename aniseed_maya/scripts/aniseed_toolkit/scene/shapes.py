@@ -1,6 +1,14 @@
 """
 Curve shapes: applying shapes from the shape library or from data, editing
 (rotating, offsetting, scaling, mirroring, colouring) and saving shapes.
+
+Nodes are handled through mref. Two things deliberately stay outside it:
+
+- CV edits go through ``cmds.xform`` on ``<curve>.cv[:]`` strings, as mref
+  items wrap nodes and attributes but not components.
+- Per-CV vector maths (rotating, world space mirroring) uses
+  ``OpenMaya.MFnNurbsCurve`` directly, as it reads and writes the CVs with
+  exact double precision and has no mref equivalent.
 """
 import functools
 import json
@@ -9,73 +17,120 @@ import typing
 
 from maya import cmds
 import maya.api.OpenMaya as om
+import mref
 
 from ..registry import tool
 from .. import resources
-from ..core import api as _api
 from ..core import units as _units
+
+
+def _get_node(node, error=ValueError) -> mref.ReferencedItem:
+    """
+    Returns the given node (a name or an mref item) as an mref item.
+
+    A name which matches no node, or more than one node, raises the error
+    the cmds command this lookup replaces would raise:
+
+    - listRelatives (error=ValueError): "No object matches name: x" or
+      "More than one object matches name: x".
+    - nodeType (error=RuntimeError): "No object matches name: x" in both
+      cases, as nodeType does not distinguish them.
+
+    Args:
+        node: Name or mref item of the node
+        error: The exception type of the cmds command being replaced
+            (ValueError for listRelatives, RuntimeError for nodeType).
+
+    Returns:
+        mref.ReferencedItem
+    """
+    # -- mref.get would silently resolve an ambiguous name to its first match
+    if isinstance(node, str) and len(cmds.ls(node)) > 1:
+        if error is ValueError:
+            raise ValueError(f"More than one object matches name: {node}")
+        raise error(f"No object matches name: {node}")
+
+    item = mref.get(node)
+    if not isinstance(item, mref.ReferencedItem):
+        raise error(f"No object matches name: {node}")
+    return item
+
+
+def _set_override_colour(item: mref.ReferencedItem, rgb: typing.List[float]) -> None:
+    """
+    Enables the rgb override and outliner colours on the given item and sets
+    them to the given (0-1) rgb values.
+    """
+    item.attr("overrideRGBColors").set(True)
+    item.attr("useOutlinerColor").set(True)
+
+    for channel, value in zip(("R", "G", "B"), rgb):
+        item.attr(f"overrideColor{channel}").set(value)
+        item.attr(f"outlinerColor{channel}").set(value)
 
 
 def apply_color(node: str = "", r: float = 0, g: float = 0, b: float = 0) -> None:
     """
-    This will apply the given rgb values to the shapes of the selected nodes
-    and ensure that their colour overrides are set.
+    Applies the given rgb colour to the node and, if the node is a transform
+    or joint, to all of its shapes. The drawing override (rgb mode) and the
+    outliner colour are both enabled and set.
 
     Args:
-        node: The node to apply the colour to
-        r: The red channel value (between zero and one)
-        g: The green channel value (between zero and one)
-        b: The blue channel value (between zero and one)
+        node: The node to apply the colour to. This may be a transform, a
+            joint or a nurbsCurve shape.
+        r: The red channel value (between 0 and 255)
+        g: The green channel value (between 0 and 255)
+        b: The blue channel value (between 0 and 255)
 
     Returns:
         None
+
+    Raises:
+        TypeError: If node is a transform or joint without any shapes.
     """
-    rgb = [r, g, b]
+    item = _get_node(node, RuntimeError)
+    node_type = item.node_type()
+
     all_shapes = list()
 
-    if cmds.nodeType(node) == "transform" or cmds.nodeType(node) == "joint":
-        all_shapes.extend(
-            cmds.listRelatives(
-                node,
-                shapes=True,
-            )
-        )
+    if node_type in ("transform", "joint"):
+        # -- listRelatives returns None for a node without shapes, which
+        # -- (as it always has) makes this raise a TypeError.
+        all_shapes.extend(mref.listRelatives(item, shapes=True))
 
-    elif cmds.nodeType(node) == "nurbsCurve":
-        all_shapes.append(node)
+    elif node_type == "nurbsCurve":
+        all_shapes.append(item)
 
+    rgb = [r / 255.0, g / 255.0, b / 255.0]
+
+    # -- The override may be locked or driven (e.g. by a display layer)
     try:
-        cmds.setAttr(f"{node}.overrideEnabled", True)
-    except: pass
+        item.attr("overrideEnabled").set(True)
+    except Exception:
+        pass
 
-    cmds.setAttr(f"{node}.overrideRGBColors", True)
-    cmds.setAttr(f"{node}.useOutlinerColor", True)
-
-    for idx, channel in enumerate(["R", "G", "B"]):
-        cmds.setAttr(f"{node}.overrideColor{channel}", rgb[idx] / 255.0)
-        cmds.setAttr(f"{node}.outlinerColor{channel}", rgb[idx] / 255.0)
+    _set_override_colour(item, rgb)
 
     for shape in all_shapes:
-
-        cmds.setAttr(f"{shape}.overrideEnabled", True)
-        cmds.setAttr(f"{shape}.overrideRGBColors", True)
-        cmds.setAttr(f"{shape}.useOutlinerColor", True)
-
-        for idx, channel in enumerate(["R", "G", "B"]):
-            cmds.setAttr(f"{shape}.overrideColor{channel}", rgb[idx] / 255.0)
-            cmds.setAttr(f"{shape}.outlinerColor{channel}", rgb[idx] / 255.0)
+        shape.attr("overrideEnabled").set(True)
+        _set_override_colour(shape, rgb)
 
 
 def combine(nodes: typing.List[str] = None):
     """
-    Parents all the shapes under all the given nodes under the first given node
+    Moves the nurbsCurve shapes of all the given nodes under the first given
+    node and then deletes those other nodes. If fewer than two nodes are
+    given a message is printed and nothing is changed.
 
     Args:
-        nodes: List of nodes to combine, with the first one being the node where
-            all the resulting shapes will be applied
+        nodes: List of nodes to combine, with the first one being the node
+            where all the resulting shapes will be placed
 
     Returns:
         None
+
+    Raises:
+        TypeError: If one of the nodes to merge in has no nurbsCurve shapes.
     """
     if len(nodes) < 2:
         print("At least two nodes must be given")
@@ -83,15 +138,17 @@ def combine(nodes: typing.List[str] = None):
 
     base_node = nodes[0]
     for node in nodes[1:]:
-        for shape in cmds.listRelatives(node, type="nurbsCurve"):
-            cmds.parent(
+        # -- listRelatives returns None for a node without curve shapes,
+        # -- which (as it always has) makes this raise a TypeError.
+        for shape in mref.listRelatives(node, type="nurbsCurve"):
+            mref.parent(
                 shape,
                 base_node,
                 shape=True,
                 relative=True,
             )
 
-        cmds.delete(node)
+        mref.delete(node)
 
 
 def rotate(
@@ -102,70 +159,63 @@ def rotate(
     pivot: list[float] or str = None,
 ) -> None:
     """
-    Spins the shape around by the given x, y, z (local values)
+    Spins the CVs of the node's nurbsCurve shapes around the shape's local
+    origin by the given x, y, z rotation (in object space).
 
     Args:
-        node: The node whose shapes should be spun
+        node: The node whose shapes should be spun. This may be a transform,
+            a joint or a nurbsCurve shape.
         x: Amount to spin on the shapes local X axis in degrees
         y: Amount to spin on the shapes local Y axis in degrees
         z: Amount to spin on the shapes local Z axis in degrees
-        pivot: Optional alternate pivot to rotate around. This can
-            either be a vector (list[float]) or an actual object (str)
+        pivot: Currently ignored. The shapes always rotate around their
+            local origin.
 
     Returns:
         None
+
+    Raises:
+        TypeError: If node is a transform or joint without any shapes.
     """
-    # -- If we"re not given a pivot, then default
-    # -- to a zero vector.
-    pivot = pivot or list()
+    item = _get_node(node, RuntimeError)
+    node_type = item.node_type()
 
     # -- Get a list of all the curves we need to modify
     all_curves = list()
 
-    if cmds.nodeType(node) == "transform" or cmds.nodeType(node) == "joint":
-        all_curves.extend(
-            cmds.listRelatives(
-                node,
-                shapes=True,
-            )
-        )
+    if node_type in ("transform", "joint"):
+        # -- listRelatives returns None for a node without shapes, which
+        # -- (as it always has) makes this raise a TypeError.
+        all_curves.extend(mref.listRelatives(item, shapes=True))
 
-    elif cmds.nodeType(node) == "nurbsCurve":
-        all_curves.append(node)
+    elif node_type == "nurbsCurve":
+        all_curves.append(item)
 
     # -- Validate that all entries are nurbs curves
     all_curves = [
         curve
         for curve in all_curves
-        if cmds.nodeType(curve) == "nurbsCurve"
+        if curve.node_type() == "nurbsCurve"
     ]
+
+    # -- Degrees to radians. The truncated constant is kept as changing it
+    # -- would change the resulting cv positions.
+    rotation = om.MEulerRotation(x * 0.017453, y * 0.017453, z * 0.017453)
+
     for curve in all_curves:
-        dag = _api.get_dagpath(curve)
-        nurbs_fn = om.MFnNurbsCurve(dag)
+        # -- OpenMaya for the per-CV vector maths, which has no mref equivalent
+        nurbs_fn = om.MFnNurbsCurve(curve.dag_path())
 
         for idx in range(nurbs_fn.numCVs):
-            worldspace_cv = nurbs_fn.cvPosition(idx, om.MSpace.kObject)
-
-            worldspace_vector = om.MVector(worldspace_cv)
-            # -- Get the relative vector between the cv and pivot
-            relative_cv = worldspace_vector #- pivot
-
-            # -- Rotate our relative vector by the rotation values
-            # -- given to us
-            rotated_position = relative_cv.rotateBy(
-                om.MEulerRotation(x * 0.017453, y * 0.017453, z * 0.017453),
-            )
-
-            # -- Add the worldspace pivot vector onto our rotated vector
-            # -- to give ourselves the final vector
-            final_position = rotated_position# + pivot
+            cv_vector = om.MVector(nurbs_fn.cvPosition(idx, om.MSpace.kObject))
+            rotated_position = cv_vector.rotateBy(rotation)
 
             nurbs_fn.setCVPosition(
                 idx,
                 om.MPoint(
-                    final_position.x,
-                    final_position.y,
-                    final_position.z,
+                    rotated_position.x,
+                    rotated_position.y,
+                    rotated_position.z,
                 ),
                 space=om.MSpace.kObject,
             )
@@ -181,10 +231,12 @@ def offset(
     z: float = 1.0,
 ) -> None:
     """
-    This will do an in-place scaling of the shapes for a given node
+    Moves the CVs of all the nurbsCurve shapes directly under the given node
+    by offset_by, multiplied per axis by x, y and z (a relative move).
 
     Args:
-        node: The node whose shapes should be offset
+        node: The node whose shapes should be offset. If not given, the first
+            selected node is used.
         offset_by: The amount to offset the shapes by
         x: A multiplier for the offset amount specifically on the x axis
         y: A multiplier for the offset amount specifically on the y axis
@@ -193,18 +245,17 @@ def offset(
     Returns:
         None
     """
-
     if not node:
-        node = cmds.ls(selection=True)[0]
+        node = mref.selected()[0]
 
-    curves = cmds.listRelatives(node, type="nurbsCurve")
+    curves = _get_node(node).children(node_type="nurbsCurve")
 
     if not curves:
         return
 
     for curve in curves:
         cmds.xform(
-            f"{curve}.cv[:]",
+            f"{curve.full_name()}.cv[:]",
             translation=(
                 offset_by * x,
                 offset_by * y,
@@ -222,29 +273,33 @@ def scale(
     z: float = 1.0,
 ) -> None:
     """
-    This will do an in-place scaling of the shapes for a given node
+    Scales the CVs of the node's nurbsCurve shapes in place by scale_by,
+    multiplied per axis by x, y and z.
 
     Args:
-        node: The node whose shapes should be offset
-        scale_by: The amount to offset the shapes by
-        x: A multiplier for the offset amount specifically on the x axis
-        y: A multiplier for the offset amount specifically on the y axis
-        z: A multiplier for the offset amount specifically on the z axis
+        node: The node whose shapes should be scaled. This may be a
+            nurbsCurve shape, or a node whose nurbsCurve shapes are scaled.
+        scale_by: The amount to scale the shapes by
+        x: A multiplier for the scale amount specifically on the x axis
+        y: A multiplier for the scale amount specifically on the y axis
+        z: A multiplier for the scale amount specifically on the z axis
 
     Returns:
         None
     """
-    if cmds.nodeType(node) == "nurbsCurve":
-        curves = [node]
+    item = _get_node(node, RuntimeError)
+
+    if item.node_type() == "nurbsCurve":
+        curves = [item]
     else:
-        curves = cmds.listRelatives(node, type="nurbsCurve")
+        curves = item.children(node_type="nurbsCurve")
 
     if not curves:
         return
 
     for curve in curves:
         cmds.xform(
-            f"{curve}.cv[:]",
+            f"{curve.full_name()}.cv[:]",
             scale=(
                 scale_by * x,
                 scale_by * y,
@@ -255,13 +310,19 @@ def scale(
 
 def mirror(nodes: list[str] = None, axis: str = "") -> None:
     """
-    This will mirror the shapes for a given node across a specific axis (x, y, z)
+    Mirrors the nurbsCurve shapes of each given node across the given local
+    axis, by scaling their CVs by -1 on that axis. Nothing happens if no axis
+    is given.
+
+    Note that processing stops at the first node which has no nurbsCurve
+    shapes; nodes after it are not mirrored.
 
     Args:
-        nodes: List of nodes to perform the mirror on
-        axis: What axis should be mirrored (x, y, z)
+        nodes: Node, or list of nodes, to perform the mirror on
+        axis: What axis should be mirrored (x, y or z, any case)
 
-    Returns: None
+    Returns:
+        None
     """
     if isinstance(nodes, str):
         nodes = [nodes]
@@ -270,21 +331,25 @@ def mirror(nodes: list[str] = None, axis: str = "") -> None:
         return
 
     for node in nodes:
-        curves = cmds.listRelatives(node, type="nurbsCurve")
+        curves = _get_node(node).children(node_type="nurbsCurve")
 
         if not curves:
             return
 
-        scale = _get_mirror_array(axis)
+        mirror_scale = _get_mirror_array(axis)
 
         for curve in curves:
             cmds.xform(
-                f"{curve}.cv[:]",
-                scale=scale,
+                f"{curve.full_name()}.cv[:]",
+                scale=mirror_scale,
             )
 
 
 def _get_mirror_array(axis):
+    """
+    Returns a [x, y, z] scale which is 1 on every axis apart from the given
+    axis (x, y or z, any case), which is -1.
+    """
     core_axis = ["x", "y", "z"]
     scale = [
         1,
@@ -299,13 +364,17 @@ def _get_mirror_array(axis):
 
 def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: str = ""):
     """
-    This will attempt to mirror (globally) the shape from the from_node to the
-    to_node across the specified axis.
+    For each pair of nodes, replaces the shapes of the to_node with a copy of
+    the shapes of the from_node, mirrored in world space across the given
+    axis. Pairs whose to_node does not exist are skipped with a message.
+
+    The to_node is left selected (see load_shape).
 
     Args:
-        from_nodes: What node should be the mirror from
-        to_nodes: What node should be the mirror to
-        axis: What axis should be mirrored (x, y, z)
+        from_nodes: The nodes to mirror the shapes from
+        to_nodes: The nodes to mirror the shapes onto, matched to from_nodes
+            by index
+        axis: What world axis should be mirrored (x, y or z, any case)
 
     Returns:
         None
@@ -313,41 +382,31 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
     for idx, from_node in enumerate(from_nodes):
 
         to_node = to_nodes[idx]
-        if not cmds.objExists(to_node):
+        if not mref.objExists(to_node):
             print("Could not find node with name : %s" % to_node)
             continue
 
-
-        scale = _get_mirror_array(axis)
+        mirror_scale = _get_mirror_array(axis)
 
         # -- Read the shape data from the current side
         shape_data = shape_to_dict(from_node)
 
         # -- Clear the shapes on the other side
-        shapes_to_remove = cmds.listRelatives(
-            to_node,
-            shapes=True,
-        ) or list()
-
-        for shape in shapes_to_remove:
-            cmds.delete(shape)
+        for shape in _get_node(to_node).shapes():
+            shape.delete()
 
         # -- Apply the shapes to that side
         load_shape(node=to_node, data=shape_data)
 
-        source_shapes = cmds.listRelatives(from_node, shapes=True) or list()
-        target_shapes = cmds.listRelatives(to_node, shapes=True) or list()
+        source_shapes = _get_node(from_node).shapes()
+        target_shapes = _get_node(to_node).shapes()
 
         for shape_idx in range(len(source_shapes)):
 
-            source_shape = source_shapes[shape_idx]
-            target_shape = target_shapes[shape_idx]
-
-            source_dag = _api.get_dagpath(source_shape)
-            target_dag = _api.get_dagpath(target_shape)
-
-            source_nurbs_fn = om.MFnNurbsCurve(source_dag)
-            target_nurbs_fn = om.MFnNurbsCurve(target_dag)
+            # -- OpenMaya for the world space CV maths, which has no
+            # -- mref equivalent
+            source_nurbs_fn = om.MFnNurbsCurve(source_shapes[shape_idx].dag_path())
+            target_nurbs_fn = om.MFnNurbsCurve(target_shapes[shape_idx].dag_path())
 
             for cv_idx in range(source_nurbs_fn.numCVs):
 
@@ -355,16 +414,12 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
 
                 worldspace_vector = om.MVector(source_worldspace_cv)
 
-                worldspace_vector.x = worldspace_vector.x * scale[0]
-                worldspace_vector.y = worldspace_vector.y * scale[1]
-                worldspace_vector.z = worldspace_vector.z * scale[2]
-
                 target_nurbs_fn.setCVPosition(
                     cv_idx,
                     om.MPoint(
-                        worldspace_vector.x,
-                        worldspace_vector.y,
-                        worldspace_vector.z,
+                        worldspace_vector.x * mirror_scale[0],
+                        worldspace_vector.y * mirror_scale[1],
+                        worldspace_vector.z * mirror_scale[2],
                     ),
                     space=om.MSpace.kWorld,
                 )
@@ -380,43 +435,51 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
 )
 def shape_to_dict(node: str = "") -> typing.Dict:
     """
-    Looks at all the NurbsCurve shape nodes under  the given node
-    and attempts to read them into a dictionary format.
+    Reads the nurbsCurve shapes under the given node (or the given curve shape
+    itself) into a dictionary which can be stored as json and re-applied with
+    load_shape.
 
     Args:
-        node: The node to seralise the shape data for
+        node: The transform or joint whose curve shapes should be read, or a
+            nurbsCurve shape
 
     Returns:
-        dictionary
+        A dictionary of the form {"node": node, "curves": [...]}, where each
+        curve holds its form, degree, knots and object space cvs. An empty
+        dictionary is returned (and a message printed) if there are no
+        shapes.
+
+    Raises:
+        AttributeError: If node is a shape which is not a nurbsCurve (for
+            example a mesh).
     """
-    if cmds.nodeType(node) == "transform" or cmds.nodeType(node) == "joint":
-        shapes = cmds.listRelatives(node, type="nurbsCurve")
+    item = _get_node(node, RuntimeError)
+
+    if item.node_type() in ("transform", "joint"):
+        shapes = item.children(node_type="nurbsCurve")
 
     else:
-        shapes = [node]
+        shapes = [item]
+
     if not shapes:
         print("no shapes found")
         return {}
 
-    # -- Define out output data. Right now we"re only storing
-    # -- cv"s, but we wrap it in a dict so we can expand it
+    # -- Define out output data. Right now we're only storing
+    # -- cv's, but we wrap it in a dict so we can expand it
     # -- later without compatibility issues.
     data = dict(
         node=node,
         curves=list(),
     )
 
-    # -- Cycle the shapes and store thm
+    # -- Cycle the shapes and store them
     for shape in shapes:
-        pointer = _api.get_mobject(shape)
-        nurbs_fn = om.MFnNurbsCurve(pointer)
-        cvs = [list(p)[:3] for p in nurbs_fn.cvPositions(om.MSpace.kObject)]
-
         node_data = dict(
-            form=cmds.getAttr(f"{shape}.form"),
-            degree=cmds.getAttr(f"{shape}.degree"),
-            knots=[n for n in nurbs_fn.knots()],
-            cvs=cvs,
+            form=shape.attr("form").get(),
+            degree=shape.attr("degree").get(),
+            knots=shape.knots(),
+            cvs=shape.cv_positions(space="object"),
         )
 
         data["curves"].append(node_data)
@@ -429,7 +492,8 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
     """
     This will attempt to get the shape dictionary data from a shape file.
     The shape file can either be the local name of a shape in the shapes
-    directory or an absolute path to a shape file.
+    directory or an absolute path to a shape file. The ".json" extension is
+    optional.
 
     The parsed shape data is cached per input string — subsequent calls
     with the same argument return the cached dict without touching
@@ -441,7 +505,7 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
             of a shape in the shapes directory)
 
     Returns:
-        dict
+        dict, or None (and a message is printed) if the file cannot be found
     """
     if not shape_file.endswith(".json"):
         shape_file = shape_file + ".json"
@@ -459,14 +523,16 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
 
 def save_to_file(node: str = "", filepath: str = "") -> typing.Dict:
     """
-    Writes the curve data of the given node to the given filepath
+    Writes the curve data of the given node (see shape_to_dict) to the given
+    filepath as json. Nothing is written if the node has no curve shapes.
 
     Args:
         node: Node to read from
         filepath: Path to write the data into
 
     Returns:
-        Dict of the data stored in the filepath
+        Dict of the data stored in the filepath, or an empty dict if nothing
+        was written
     """
     data = shape_to_dict(node)
 
@@ -492,21 +558,27 @@ def load_shape(
         scale_by=1,
 ) -> typing.List[str]:
     """
-    Applies the given shape data to the given node.
+    Applies the given shape data to the given node, creating one nurbsCurve
+    shape under the node per curve in the data. The cvs in the data are in
+    centimetres and are converted to the scene's units.
+
+    The node is left selected afterwards.
 
     Args:
         node: Node to apply the shape data to
         data: Either a dictionary of shape data, or the absolute path
             to a shape file, or the name of a shape in the shapes directory
-        clear: If true, any pre-existing shapes will be removed before this applies
-            the shape.
-        color: Optional list [r, g, b] which will be used to colour the shape
-            on creation
+        clear: If true, any pre-existing curve shapes will be removed before
+            this applies the shape.
+        color: Optional list [r, g, b] (0-255) which will be used to colour
+            the node and its shapes on creation (see apply_color)
         scale_by: Optional multiplier for scaling the shape at the time of it
             being applied.
 
     Returns:
-        List of shape nodes created
+        List of the names of the shape nodes created. An empty list is
+        returned (and a message printed) if the shape cannot be found, in
+        which case nothing is changed.
     """
 
     if isinstance(data, str):
@@ -517,8 +589,8 @@ def load_shape(
         return []
 
     if clear:
-        for curve in cmds.listRelatives(node, type="nurbsCurve") or list():
-            cmds.delete(curve)
+        for curve in _get_node(node).children(node_type="nurbsCurve"):
+            curve.delete()
 
     # -- Define a list which we will collate all the shapes
     # -- in
@@ -526,30 +598,30 @@ def load_shape(
 
     # -- Cycle over each curve element in the data
     for curve_data in data["curves"]:
-        # -- Create a curve with the given cv"s
-        points = []
+        # -- Create a curve with the given cv's
+        points = [
+            [
+                _units.from_cm(v)
+                for v in p
+            ]
+            for p in curve_data["cvs"]
+        ]
 
-        for p in curve_data["cvs"]:
-
-            points.append(
-                [
-                    _units.from_cm(v)
-                    for v in p
-                ]
-            )
-
-        transform = cmds.curve(
+        transform = mref.curve(
             point=points,
             degree=curve_data["degree"],
             knot=curve_data["knots"],
         )
 
-        # -- Parent the shape under the node
-        curve = cmds.listRelatives(transform, type="nurbsCurve")[0]
+        # -- Maya gives a new curve shape a unique name, so its short
+        # -- name is the name cmds would report for it.
+        curve = transform.children(node_type="nurbsCurve")[0]
+        curve_name = curve.name()
 
         scale(curve, scale_by)
 
-        cmds.parent(
+        # -- Parent the shape under the node
+        mref.parent(
             curve,
             node,
             shape=True,
@@ -557,34 +629,32 @@ def load_shape(
         )
 
         # -- Delete the transform
-        cmds.delete(transform)
+        transform.delete()
 
-        shape_list.append(curve)
+        shape_list.append(curve_name)
 
     if color:
         apply_color(node, *color)
 
-    cmds.select(node)
+    mref.select(node)
 
     return shape_list
 
 
 def select_shapes(nodes=None) -> None:
     """
-    This will return a list of shape files which are present in the
-    aniseed toolkit shapes directory
+    Selects the shapes of all the given nodes, replacing the current
+    selection. If none of the nodes have shapes, the selection is cleared.
+
+    Args:
+        nodes: List of nodes whose shapes should be selected
 
     Returns:
-        List of absolute paths to the json shape files
+        None
     """
     shapes = []
 
     for node in nodes:
-        shapes.extend(
-            cmds.listRelatives(
-                node,
-                shapes=True,
-            ) or list()
-        )
+        shapes.extend(_get_node(node).shapes())
 
-    cmds.select(shapes)
+    mref.select(shapes)

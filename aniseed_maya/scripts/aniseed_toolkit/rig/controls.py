@@ -2,8 +2,13 @@
 Queries across the controls of aniseed rigs: finding all controls, the rig a
 node belongs to, opposing controls, controls by location, and mirroring
 control shapes by name.
+
+Note: node names are returned exactly as maya reports them (short names, or
+partial paths where a short name is not unique), so the maya queries which
+return node names use cmds rather than mref.
 """
 from maya import cmds
+import mref
 
 from ..registry import tool
 from . import control as _control
@@ -16,6 +21,17 @@ from ..scene import shapes as _shapes
     user_facing=False,
 )
 def all_controls(namespace: str = "") -> list[str]:
+    """
+    Returns every controller tagged node in the scene which belongs to an
+    aniseed rig (i.e. whose top level node has an aniseed_rig attribute).
+
+    Args:
+        namespace: If given, only controls whose name starts with this
+            string are returned.
+
+    Returns:
+        The names of the controls, as maya reports them
+    """
     controls = []
 
     for control_node in cmds.controller(query=True, allControllers=True):
@@ -23,7 +39,7 @@ def all_controls(namespace: str = "") -> list[str]:
             continue
 
         root_node = cmds.ls(control_node, long=True)[0].split("|")[1]
-        if cmds.objExists(f"{root_node}.aniseed_rig"):
+        if mref.objExists(f"{root_node}.aniseed_rig"):
             controls.append(control_node)
 
     return controls
@@ -35,10 +51,22 @@ def all_controls(namespace: str = "") -> list[str]:
     user_facing=False,
 )
 def get_rig_node(node: str = "") -> str:
+    """
+    Returns the aniseed rig node which the given node sits beneath - the
+    closest node in its hierarchy (including the node itself) which has an
+    aniseed_rig attribute.
+
+    Args:
+        node: The node to find the rig node for
+
+    Returns:
+        The short name of the rig node, or an empty string if the node is
+        not part of an aniseed rig.
+    """
     full_node_path = cmds.ls(node, long=True)[0].split("|")
 
     for potential_rig_node in reversed(full_node_path):
-        if cmds.objExists(f"{potential_rig_node}.aniseed_rig"):
+        if mref.objExists(f"{potential_rig_node}.aniseed_rig"):
             return potential_rig_node
     return ""
 
@@ -46,7 +74,13 @@ def get_rig_node(node: str = "") -> str:
 def get(node):
     """
     Returns the aniseed Rig which the given node belongs to, or None if it
-    is not part of an aniseed rig.
+    is not part of an aniseed rig. This requires aniseed to be importable.
+
+    Args:
+        node: Any node within the rig
+
+    Returns:
+        aniseed.Rig or None
     """
     # -- aniseed is imported here rather than at module level so that the
     # -- toolkit can be imported (and used) without aniseed
@@ -68,11 +102,20 @@ def get(node):
 )
 def opposing_controls(controls: list[str] or None = None) -> list[str]:
     """
-    This will return the opposite controls for the given controls
+    This will return the names of the opposite controls for the given
+    controls, using the configuration of the rig the first control belongs
+    to. Any control which is not on the left is given the left location,
+    and left controls are given the right location.
+
+    The names are generated from the rig configuration, so they are not
+    guaranteed to exist.
 
     Args:
-        controls: List of controls to get the opposites for. If none are
-            given then the selection will be used.
+        controls: List of controls to get the opposites for. This must be
+            given (None raises an error).
+
+    Returns:
+        List of opposite control names
     """
     opposites = []
     rig_instance = None
@@ -102,7 +145,6 @@ def opposing_controls(controls: list[str] or None = None) -> list[str]:
         opposite_control = rig_config.generate_name(
             unique=False,
             **name_decomposition
-
         )
         opposites.append(opposite_control)
 
@@ -111,24 +153,29 @@ def opposing_controls(controls: list[str] or None = None) -> list[str]:
 
 def controls_by_location(controls: list[str] or None = None) -> list[str]:
     """
-    This will return the opposite controls for the given controls
+    Returns all the rig controls in the scene which share the location of
+    the first of the given controls.
 
     Args:
-        controls: List of controls to get the opposites for. If none are
-            given then the selection will be used.
+        controls: List of controls, of which the first defines the location
+            to filter by. If none are given then the first selected node
+            is used.
+
+    Returns:
+        The ctl names of the controls with the same location
     """
     filtered_controls = []
-    rig = None
 
     if not controls:
         reference_node = cmds.ls(selection=True)[0]
     else:
         reference_node = controls[0]
 
-    # -- Get the rig
-    location_filter = None
     control_node = _control.get(reference_node)
-    rig = get(control_node.ctl)
+
+    # -- The rig is resolved (which requires aniseed) even though only the
+    # -- location of the control is used
+    get(control_node.ctl)
     location_filter = control_node.location
 
     for node in all_controls():
@@ -143,7 +190,15 @@ def controls_by_location(controls: list[str] or None = None) -> list[str]:
 
 
 def mirror_control_shapes(mapping: str = "_LF:_RT", axis="x"):
+    """
+    Mirrors the shapes of every rig control whose name contains the "from"
+    tag onto the control with the same name but the "to" tag, if one
+    exists.
 
+    Args:
+        mapping: The from and to name tags, separated by a colon
+        axis: The axis to mirror the shapes across
+    """
     from_tag = mapping.split(":")[0]
     to_tag = mapping.split(":")[1]
 
@@ -153,7 +208,7 @@ def mirror_control_shapes(mapping: str = "_LF:_RT", axis="x"):
 
         to_node = node.replace(from_tag, to_tag)
 
-        if not cmds.objExists(to_node):
+        if not mref.objExists(to_node):
             continue
 
         _shapes.mirror_across(

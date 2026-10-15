@@ -88,6 +88,21 @@ class FacialControlRig:
         We allow the user to specify a control directly, or to allow us to create
         it as part of the rig build. This function will return the existing control
         if one has been specified, otherwise it will generate a new one.
+
+        The settings read (through read_setting) are "<identity_label>_control",
+        "<identity_label>_parent" and "<identity_label>_shape".
+
+        Args:
+            description: The description of the control (description_prefix
+                is prepended)
+            identity_label: The prefix of the settings for this control
+            location: The location of the control
+            parent: The parent to use if the parent setting is empty
+            guide: The node to match the control to, if any
+            lock_and_hide: Attributes to lock and hide on a created control
+
+        Returns:
+            The control (the ctl of a created control)
         """
         # -- If the user has specified a control then we use that rather
         # -- than create one.
@@ -132,6 +147,17 @@ class FacialControlRig:
         but with a clamp in between set to the given values. If do_next is
         True the destination is treated as an array attribute and the next
         free element is used.
+
+        Args:
+            driving_attribute: The attribute (mref item) driving the clamp
+            destination_attribute: The attribute (mref item) to drive
+            clamp_min: The minimum of the clamp
+            clamp_max: The maximum of the clamp
+            do_next: If True connect to the next free element of the
+                destination array attribute
+
+        Returns:
+            {"clamp": clamp node}
         """
         # -- Create and setup the clamp node
         clamp = mref.create("clamp")
@@ -162,7 +188,17 @@ class FacialControlRig:
         """
         This will connect the driving attribute to the destination attribute
         but with a reversal (*-1) and then clamping that result to the given
-        clamp values.
+        clamp values. The destination is always treated as an array
+        attribute, and the next free element is used.
+
+        Args:
+            driving_attribute: The attribute (mref item) to reverse
+            destination_attribute: The array attribute (mref item) to drive
+            clamp_min: The minimum of the clamp
+            clamp_max: The maximum of the clamp
+
+        Returns:
+            {"clamp": clamp node, "multiplier": floatMath node}
         """
         clamp = mref.create("clamp")
         clamp.attr("maxR").set(clamp_max)
@@ -188,6 +224,15 @@ class FacialControlRig:
         Returns the animator facing float attribute with the given label on
         the control, creating it (and its proxy on the attribute host, if
         there is one) if it does not already exist.
+
+        Args:
+            control: The control (mref item) to add the attribute to
+            label: The name of the attribute
+            proxy_prefix: If given, the proxy attribute is named
+                <proxy_prefix>_<label>
+
+        Returns:
+            The attribute (mref item)
         """
         if control.has_attribute(label):
             return control.attr(label)
@@ -219,7 +264,11 @@ class FacialControlRig:
     ) -> dict:
         """
         This will expose the attribute on the control, allowing the animator to drive
-        it directly.
+        it directly. The animator attribute (see animator_attribute) is
+        connected to the destination through a clamp (see clamped_connection).
+
+        Returns:
+            {"clamp": clamp node}
         """
         return self.clamped_connection(
             driving_attribute=self.animator_attribute(control, label, proxy_prefix),
@@ -240,7 +289,11 @@ class FacialControlRig:
     ) -> dict:
         """
         This will expose the given destination attribute up to the control
-        but it will also reverse the value and clamp it.
+        but it will also reverse the value and clamp it (see
+        animator_attribute and clamped_reversal).
+
+        Returns:
+            {"clamp": clamp node, "multiplier": floatMath node}
         """
         return self.clamped_reversal(
             driving_attribute=self.animator_attribute(control, label, proxy_prefix),
@@ -257,6 +310,14 @@ class FacialControlRig:
         This will create the control for the lip pullers (left and right). If
         a jaw is given then the push in is also blended against the jaw opening
         to drive the {location}_lip_corner_push_in_jaw_open pose.
+
+        Args:
+            location: The location (side) of the lip corner
+            guide: The node to match a created control to
+            parent: The parent for a created control
+            connection_map: Dictionary of pose label to the attribute
+                driving that pose
+            jaw: Optional jaw node (mref item) whose rotateX is blended in
         """
         control = self.resolve_control(
             description="lip_puller",
@@ -437,6 +498,12 @@ class FacialControlRig:
     def setup_nose(self, guide, parent, connection_map):
         """
         This sets up the control connections for the nose control
+
+        Args:
+            guide: The node to match a created control to
+            parent: The parent for a created control
+            connection_map: Dictionary of pose label to the attribute
+                driving that pose
         """
         control = self.resolve_control(
             description="nose",
@@ -457,6 +524,13 @@ class FacialControlRig:
     def setup_inner_brow(self, location, guide, parent, connection_map):
         """
         This sets up the control connections for the inner eye brow.
+
+        Args:
+            location: The location (side) of the brow
+            guide: The node to match a created control to
+            parent: The parent for a created control
+            connection_map: Dictionary of pose label to the attribute
+                driving that pose
         """
         control = self.resolve_control(
             description="brow_inner",
@@ -499,6 +573,13 @@ class FacialControlRig:
     def setup_outer_brow(self, location, guide, parent, connection_map):
         """
         This will create the control for the outer brows (left and right)
+
+        Args:
+            location: The location (side) of the brow
+            guide: The node to match a created control to
+            parent: The parent for a created control
+            connection_map: Dictionary of pose label to the attribute
+                driving that pose
         """
         control = self.resolve_control(
             description="brow_outer",
@@ -529,6 +610,12 @@ class FacialControlRig:
     def setup_eye(self, location, control, connection_map):
         """
         Exposes the blink attribute on the given eye control
+
+        Args:
+            location: The location (side) of the eye
+            control: The eye control (mref item)
+            connection_map: Dictionary of pose label to the attribute
+                driving that pose
         """
         self.expose_direct(
             control=control,

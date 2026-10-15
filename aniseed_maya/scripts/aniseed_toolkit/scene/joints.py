@@ -2,6 +2,14 @@
 Joint creation and joint chain utilities: replicating, reversing and measuring
 chains, moving rotations to and from joint orients, twist joints, and the
 facing and upvector directions of a chain.
+
+Note on maya.cmds: most functions here take node names from the caller and
+return the names Maya gives back (e.g. cmds.rename returns a partial path such
+as "grp|joint1" when the short name is not unique, and callers rely on those
+exact strings). Their error behaviour (the ValueError cmds raises for a missing
+or ambiguous name) is also relied upon. mref resolves names differently, so
+those calls stay on cmds; mref is used for the temporary nodes these functions
+create and delete themselves.
 """
 import typing
 
@@ -29,16 +37,23 @@ def create(
     match_to: str = None,
 ):
     """
-    This is a simple tool which creates a joint but sets up the name based on the
-    aniseed configuration.
+    Creates a joint named using the aniseed configuration (the joint
+    classification with the given description and location).
+
+    The selection is cleared before the joint is created, and the new joint
+    is left selected.
 
     Args:
         description: The descriptive part of the name to apply
-        location: The location to apply the name to
-        parent: The parent of the joint
-        config: The aniseed configuration
-        match_to: If given, the joint will have its transform matched
-            to this node
+        location: The location part of the name to apply
+        parent: The node to parent the joint under. If empty, the joint
+            stays at the scene root.
+        config: The aniseed rig configuration used to generate the name
+        match_to: If given, the joint is matched to this node's world
+            space matrix
+
+    Returns:
+        The name of the created joint, as returned by Maya
     """
     cmds.select(clear=True)
 
@@ -86,14 +101,35 @@ def create_spread(
     axis="X",
     naming_function: callable = None,
 ):
+    """
+    Creates joints spread evenly between the root joint and the tip joint.
+    Each joint is parented under the root joint, matched to it in world
+    space and then offset along its translateX.
 
+    The selection is cleared before each joint is created.
+
+    Args:
+        root_joint: The joint the spread joints are parented under and
+            start from
+        tip_joint: The joint whose translation (along the given axis)
+            defines the length of the spread
+        joint_count: The number of joints to create (a whole number, at
+            least 2)
+        axis: The axis of the tip joint's translation used to measure the
+            spread length. The joints themselves are always offset along
+            translateX.
+        naming_function: An optional callable taking no arguments which
+            returns the name for each new joint. If not given, each joint
+            is named "SpreadJoint".
+
+    Returns:
+        List of the created joint names
+    """
     created_joints = []
 
     upper_increment = cmds.getAttr(
         f"{tip_joint}.translate{axis.upper()}",
     ) / (joint_count - 1)
-
-    upper_twist_joints = list()
 
     for idx in range(joint_count):
         cmds.select(clear=True)
@@ -134,14 +170,14 @@ def copy_attributes(
     link: bool = False,
 ) -> None:
     """
-    Copies all the transform and joint specific attribute data from the
-    first given joint to the second.
+    Copies the translate, rotate, scale, jointOrient and preferredAngle
+    values (per axis) from the first given joint to the second.
 
     Args:
         from_this: The joint to copy values from
         to_this: The joint to copy values to
-        link: If true, instead of setting values, the attributes will be
-            connected.
+        link: If true, instead of setting values, the attributes of
+            from_this are connected (forced) to those of to_this.
 
     Returns:
         None
@@ -183,12 +219,18 @@ def replicate(
     copy_local_name: bool = False,
 ):
     """
-    Replicates an individual joint and makes it a child of the given
-    parent.
+    Replicates an individual joint (see copy_attributes for the attributes
+    which are copied) and makes it a child of the given parent.
+
+    The selection is cleared and the new joint is created with Maya's
+    default joint name (joint1, joint2, ...) unless copy_local_name is set.
 
     Args:
         joint: Joint to replicate
-        parent: Node to parent the new node under
+        parent: Node to parent the new joint under. If empty or None, the
+            new joint stays at the scene root.
+        worldspace: If True, the new joint is matched to the world space
+            matrix of the given joint after the attributes are copied.
         link: If True then the attributes of the initial joint will be
             used as driving connections to this joint.
         copy_local_name: If true, the joint will be renamed to match
@@ -244,16 +286,17 @@ def get_between(
     including the start and end joints. Only joints that are directly
     in the relationship chain between these joints will be included.
 
+    The result is read from the full path of the end node, so the start
+    node must be one of its ancestors (or the end node itself), otherwise
+    a ValueError is raised.
+
     Args:
         start: The highest level joint to search from
         end: The lowest level joint to search from.
 
-    Return:
-        List of joints
+    Returns:
+        List of short (leaf) node names, ordered from start to end
     """
-    joints = []
-    next_joint = end
-
     # -- Get all the joints that make up part of the continuous hierarchy
     long_name = cmds.ls(end, long=True)[0]
     chain = long_name.split("|")
@@ -273,16 +316,19 @@ def replicate_chain(
     between them exactly - ensuring that all joint attributes are correctly
     replicated.
 
+    The new joints get Maya's default joint names (joint1, joint2, ...)
+    unless replacements are given.
+
     Args:
-         from_this: Joint from which to start duplicating
-         to_this: Joint to which the duplicating should stop. Only joints
+        from_this: Joint from which to start duplicating
+        to_this: Joint to which the duplicating should stop. Only joints
             between this and from_this will be replicated.
         parent: The node the replicated chain should be parented under
         world: Whether to apply the first replicated chains transform
             in worldspace, otherwise it will be given the same local space
             attribute data.
-        replacements: A dictionary of replacements to apply to the duplicated
-            joint names.
+        replacements: A dictionary of replacements (search: replace) to
+            apply to the default names of the duplicated joints.
 
     Returns:
         List of new joints
@@ -340,10 +386,14 @@ def replicate_chain(
 
 def reverse_chain(joints: list[str] = None) -> list[str]:
     """
-    Reverses the hierarchy of the joint chain.
+    Reverses the hierarchy of the joint chain, so the last joint becomes
+    the root (under the original root's parent, or the scene root) and the
+    first joint becomes the tip.
+
+    Note that the given list is reversed in place and returned.
 
     Args:
-        joints: List of joints in the chain to reverse
+        joints: List of joints in the chain to reverse, ordered root to tip
 
     Returns:
         The joint chain in its new order
@@ -400,12 +450,14 @@ def replicate_entire_chain(
 ) -> str:
     """
     Given a starting point, this will replicate (duplicate) the entire
-    joint chain. It allows for you to specify the parent for the duplicated
-    chain, as well as optionally attribute-link it.
+    joint hierarchy below it (every descendant joint). It allows for you to
+    specify the parent for the duplicated chain, as well as optionally
+    attribute-link it.
 
     Args:
         joint_root: The joint from which to duplicate from
-        parent: The parent node for the duplicated chain
+        parent: The parent node for the duplicated chain. If empty, the new
+            root stays at the scene root.
         link: If true, then the attributes will be linked together
         copy_local_name: If true, then the name of the joint being duplicated
             will be used as the name of the joint being created (minus namespace)
@@ -460,12 +512,15 @@ def replicate_entire_chain(
 
 def chain_length(start: str = "", end: str = "", log_result: bool = True) -> float:
     """
-    This will calculate the length of the chain in total.
+    This will calculate the length of the chain in total, as the sum of the
+    world space distances between each consecutive pair of joints from
+    start to end.
 
     Args:
         start: The joint from which to start measuring
         end: The joint to which measuring should end
-        log_result: If true, the result should be printed
+        log_result: Not used (the result is never printed). Kept for
+            compatibility.
 
     Returns:
         The total length of all the bones in the chain
@@ -486,9 +541,6 @@ def chain_length(start: str = "", end: str = "", log_result: bool = True) -> flo
             all_joints[idx - 1],
         )
 
-    # if log_result:
-    #     print(f"Distance between {start} and {end}: {distance}")
-
     return distance
 
 
@@ -500,10 +552,12 @@ def chain_length(start: str = "", end: str = "", log_result: bool = True) -> flo
 def move_rotations_to_orients(joints: list[str] = None) -> None:
     """
     Moves the rotations on the given joints to the joint orients
-    attributes (zeroing the rotations).
+    attributes (zeroing the rotations) whilst retaining the world
+    transform of each joint.
 
     Args:
-        joints: List of joints to move the rotation attributes for
+        joints: A joint or list of joints to move the rotation attributes
+            for. Uses the selection if no joints are given.
 
     Returns:
         None
@@ -564,11 +618,13 @@ def move_rotations_to_orients(joints: list[str] = None) -> None:
 )
 def move_orients_to_rotation(joints: list[str] = None) -> None:
     """
-    Moves the values from the joint orient of the node to the rotation
-    whilst retaining the transform of the node.
+    Moves the values from the joint orient of the given joints to their
+    rotation (zeroing the joint orients) whilst retaining the world
+    transform of each joint.
 
     Args:
-        joints: The joint to alter
+        joints: A joint or list of joints to alter. Uses the selection if
+            no joints are given.
 
     Returns:
         None
@@ -609,11 +665,17 @@ def move_orients_to_rotation(joints: list[str] = None) -> None:
 
 def roll(joints: list[str] = None, axis="x", value=90) -> None:
     """
-    Moves the rotations on the given joints to the joint orients
-    attributes (zeroing the rotations).
+    Rolls each of the given joints around one of its own local axes by the
+    given amount, keeping the world transforms of its children.
+
+    The new orientation is applied through the joint's world matrix, so
+    the resulting values end up on the joint's rotate channels. The given
+    joints are selected afterwards.
 
     Args:
-        joints: List of joints to move the rotation attributes for
+        joints: A joint or list of joints to roll (required)
+        axis: The local axis to roll around: "x", "y" or "z"
+        value: The amount to roll by, in degrees
 
     Returns:
         None
@@ -621,25 +683,24 @@ def roll(joints: list[str] = None, axis="x", value=90) -> None:
     if isinstance(joints, str):
         joints = [joints]
 
-    mapped_joints = dict()
-
     # -- Create our mapping joints
     for joint in joints:
 
+        # -- A temporary joint which is matched to the joint, has its
+        # -- rotation moved to its orients and is then rolled
         cmds.select(clear=True)
-        transient_joint = cmds.joint()
-        cmds.xform(
-            transient_joint,
-            worldSpace=True,
-            matrix=cmds.xform(
+        transient_joint = mref.get(cmds.joint())
+        transient_joint.set_matrix(
+            cmds.xform(
                 joint,
                 query=True,
                 worldSpace=True,
                 matrix=True,
             ),
+            space="world",
         )
-        move_rotations_to_orients(joints=[transient_joint])
-        cmds.setAttr(f"{transient_joint}.rotate{axis.upper()}", value)
+        move_rotations_to_orients(joints=[transient_joint.name()])
+        transient_joint.attr(f"rotate{axis.upper()}").set(value)
 
         # -- Now we need to get the matrix of all children whilst
         # -- we perform the match
@@ -656,12 +717,7 @@ def roll(joints: list[str] = None, axis="x", value=90) -> None:
         cmds.xform(
             joint,
             worldSpace=True,
-            matrix=cmds.xform(
-                transient_joint,
-                query=True,
-                worldSpace=True,
-                matrix=True,
-            ),
+            matrix=transient_joint.get_matrix(space="world"),
         )
 
         for child, matrix in child_matrices.items():
@@ -672,13 +728,34 @@ def roll(joints: list[str] = None, axis="x", value=90) -> None:
             )
 
         # -- Finally delete the transient
-        cmds.delete(transient_joint)
+        transient_joint.delete()
 
     cmds.select(joints)
     return None
 
 
 def chain_from_ordered_dict(joint_data, location, config, parent, prefix="", subtract_label=""):
+    """
+    Creates a chain of joints (each one parented under the previous one)
+    from an ordered dictionary of joint names and attribute values.
+
+    Each joint is created with create() and first reset to identity
+    (translate, rotate and jointOrient zeroed, scale one) before the given
+    attribute values are applied.
+
+    Args:
+        joint_data: Ordered dictionary where each key is a joint description
+            and each value is a dictionary of attribute names (e.g. "tx",
+            "jointOrientZ") and the values to set on that joint
+        location: The location part of the joint names
+        config: The aniseed rig configuration used to generate the names
+        parent: The node the first joint is parented under
+        prefix: A string prefixed to each description
+        subtract_label: A string removed from each description
+
+    Returns:
+        List of the created joint names, in chain order
+    """
     identity_data = {"tx": 0, "ty": 0, "tz": 0, "rx": 0, "ry": 0, "rz": 0, "sx": 1, "sy": 1, "sz": 1, "jointOrientX": 0, "jointOrientY": 0, "jointOrientZ": 0}
 
     joints = []
@@ -703,6 +780,15 @@ def chain_from_ordered_dict(joint_data, location, config, parent, prefix="", sub
 
 
 def make_referenced(joints):
+    """
+    Makes the given joints display as referenced (unselectable in the
+    viewport) by enabling their drawing overrides and setting the display
+    type to Reference. Joints which cannot be changed (e.g. missing nodes)
+    are silently skipped.
+
+    Args:
+        joints: A joint or list of joints
+    """
 
     if isinstance(joints, str):
         joints = [joints]
@@ -716,6 +802,14 @@ def make_referenced(joints):
 
 
 def unreference(joints):
+    """
+    Sets the drawing override display type of the given joints back to
+    Normal (overrideEnabled is left as it is). Stops silently at the first
+    joint which cannot be changed.
+
+    Args:
+        joints: A joint or list of joints
+    """
     if isinstance(joints, str):
         joints = [joints]
 
@@ -727,16 +821,37 @@ def unreference(joints):
 
 
 def is_referenced(joint):
+    """
+    Returns whether the given joint is displayed as referenced, i.e. its
+    drawing overrides are enabled and its display type is Reference.
+
+    Args:
+        joint: The joint to check
+
+    Returns:
+        True if the joint is displayed as referenced
+    """
     if not cmds.getAttr(joint + ".overrideEnabled"):
         return False
 
-    if cmds.getAttr(joint + ".overrideDisplayType")  != 2: # 2 = Reference
+    if cmds.getAttr(joint + ".overrideDisplayType") != 2:  # 2 = Reference
         return False
 
     return True
 
 
 def reparent_unknown_children(known_joints, new_parent):
+    """
+    Reparents (keeping world transforms) every child of the given known
+    joints which is not itself one of the known joints to the new parent.
+
+    Args:
+        known_joints: List of joints whose children should be checked
+        new_parent: The node to move the unknown children under
+
+    Returns:
+        List of the short names of the reparented children
+    """
 
     # -- Get a reference to all the known joints
     known_joints = [mref.get(j) for j in known_joints]
@@ -761,7 +876,24 @@ def reparent_unknown_children(known_joints, new_parent):
 def create_twist_joints(start, end, twist_count, description, location, config, down_bone_axis="x"):
     """
     This will create an even spread of twist joints which are a child
-    of the start joint and spread between the start and end
+    of the start joint and spread between the start and end.
+
+    Each twist joint is created with create(), matched to the start joint
+    and offset along the down-the-bone axis. If the offset moves the joint
+    away from the end joint, the offset is negated (for chains pointing
+    down the negative axis).
+
+    Args:
+        start: The joint the twist joints are parented under
+        end: The joint the twist joints spread towards
+        twist_count: The number of twist joints to create
+        description: The descriptive part of the twist joint names
+        location: The location part of the twist joint names
+        config: The aniseed rig configuration used to generate the names
+        down_bone_axis: The axis ("x", "y" or "z") pointing down the bone
+
+    Returns:
+        List of the created twist joint names
     """
     parent = start
 
@@ -809,17 +941,40 @@ def create_twist_joints(start, end, twist_count, description, location, config, 
 
 
 class HeldTransforms:
+    """
+    Context manager which stores the local (object space) matrices of the
+    given nodes on entry and restores them on exit, skipping any node which
+    no longer exists.
+
+    Args:
+        joints: List of nodes whose transforms should be held
+
+    Attributes:
+        joints: The nodes given
+        matrices: Dictionary of node to its stored local matrix (filled
+            on entry)
+    """
 
     def __init__(self, joints):
         self.joints = joints
         self.matrices = dict()
 
     def __enter__(self):
+        """
+        Stores the local matrix of every node.
+
+        Returns:
+            This HeldTransforms instance
+        """
         for joint in self.joints:
             self.matrices[joint] = cmds.xform(joint, query=True, matrix=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Restores the stored local matrix of every node which still exists.
+        Exceptions are not suppressed.
+        """
         for joint, matrix in self.matrices.items():
             if cmds.objExists(joint):
                 cmds.xform(joint, matrix=matrix)
@@ -834,7 +989,8 @@ def get_chain_facing_direction(start: str = "", end: str = "", epsilon: float = 
     """
     This will return a Direction class which represents the facing direction
     of a chain. The facing direction is the direction ALL bones are using
-    down-the-bone.
+    down-the-bone, worked out from the sum of the local translations of
+    every joint after the start joint.
 
     The Direction instance is a class which provides easy access to directional
     data in different formats such as:
@@ -850,7 +1006,7 @@ def get_chain_facing_direction(start: str = "", end: str = "", epsilon: float = 
         epsilon: How much variance in axis change we will tolerate
 
     Returns:
-        Direction instance
+        Direction instance (Unknown if more than one axis is used, or none)
     """
     axis = dict(
         x=0,
@@ -897,6 +1053,11 @@ def get_upvector_direction(start: str = "", end: str = "", epsilon: float = 0.01
     This will attempt to return a Direction instance which represents the
     upvector direction of the chain between the start and end joint.
 
+    It is worked out from the facing direction of the chain and the
+    rotation of the second joint relative to the first (measured with two
+    temporary transforms, which are deleted again). The chain must contain
+    at least two joints.
+
     The Direction instance is a class which provides easy access to directional
     data in different formats such as:
         axis: x, y, z
@@ -915,47 +1076,45 @@ def get_upvector_direction(start: str = "", end: str = "", epsilon: float = 0.01
     """
     all_joints = get_between(start, end)
 
-    temp_a = cmds.createNode("transform")
-    temp_b = cmds.createNode("transform")
+    temp_a = mref.create("transform")
+    temp_b = mref.create("transform")
 
     facing_direction = get_chain_facing_direction(start, end, epsilon)
 
-    cmds.parent(temp_b, temp_a)
+    temp_a.add_child(temp_b)
 
-    cmds.xform(
-        temp_a,
-        matrix=cmds.xform(
+    temp_a.set_matrix(
+        cmds.xform(
             all_joints[0],
             query=True,
             matrix=True,
             worldSpace=True,
         ),
-        worldSpace=True,
+        space="world",
     )
 
-    cmds.xform(
-        temp_b,
-        matrix=cmds.xform(
+    temp_b.set_matrix(
+        cmds.xform(
             all_joints[1],
             query=True,
             matrix=True,
             worldSpace=True,
         ),
-        worldSpace=True,
+        space="world",
     )
 
     highest_rotation_value = 0
     recorded_value = 0
     rotate_axis = "X"
 
-    for idx, axis in enumerate(["X", "Y", "Z"]):
-        value = cmds.getAttr(f"{temp_b}.rotate{axis}")
+    for axis in ["X", "Y", "Z"]:
+        value = temp_b.attr(f"rotate{axis}").get()
         if abs(value) > highest_rotation_value:
             rotate_axis = axis
             highest_rotation_value = abs(value)
             recorded_value = value
 
-    cmds.delete(temp_a)
+    temp_a.delete()
 
     if facing_direction == _direction.Direction.PositiveX and rotate_axis == "Z":
         if recorded_value >= 0:

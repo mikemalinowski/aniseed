@@ -1,5 +1,9 @@
 """
 Serialising and constructing nurbs surfaces.
+
+This module works through OpenMaya (MFnNurbsSurface) by design: it reads and
+writes the whole cv/knot description of a surface in single api calls, which
+mref does not expose.
 """
 import maya.api.OpenMaya as om
 
@@ -7,6 +11,11 @@ from ..registry import tool
 
 
 def _get_surface_fn(node_name):
+    """
+    Returns an MFnNurbsSurface for the given surface shape, or for the
+    shape of the given transform. Raises a RuntimeError if it is not a
+    nurbs surface.
+    """
     sel = om.MSelectionList()
     sel.add(node_name)
     dag = sel.getDagPath(0)
@@ -20,12 +29,40 @@ def _get_surface_fn(node_name):
     return om.MFnNurbsSurface(dag)
 
 
+def _local_matrix(node_name):
+    """
+    Returns the local transformation matrix (MMatrix) of the given
+    transform.
+    """
+    sel = om.MSelectionList()
+    sel.add(node_name)
+    return om.MFnTransform(sel.getDagPath(0)).transformation().asMatrix()
+
+
 @tool(
     "Serialise Nurbs Surface",
     classification="Rigging",
     categories=["Visibility"],
 )
 def serialise(surface, relative_to=None):
+    """
+    Returns a json friendly description of a nurbs surface, which construct
+    can rebuild it from.
+
+    Args:
+        surface: The nurbs surface shape, or its transform
+        relative_to: Optional transform. If given, the world space cv
+            positions are multiplied by the inverse of this node's local
+            transformation matrix (not its world matrix).
+
+    Returns:
+        Dictionary with the keys degreeU, degreeV, formU, formV, knotsU,
+        knotsV, cvs (a list per u of [x, y, z] lists per v), weights (a
+        flat list) and relativeTo (the relative_to argument)
+
+    Raises:
+        RuntimeError: If the node is not a nurbs surface
+    """
     fn = _get_surface_fn(surface)
 
     degree_u = fn.degreeInU
@@ -42,11 +79,7 @@ def serialise(surface, relative_to=None):
 
     # Compute transform relative to another object if given
     if relative_to:
-        sel = om.MSelectionList()
-        sel.add(relative_to)
-        ref_dag = sel.getDagPath(0)
-        ref_transform = om.MFnTransform(ref_dag)
-        inv_matrix = ref_transform.transformation().asMatrix().inverse()
+        inv_matrix = _local_matrix(relative_to).inverse()
     else:
         inv_matrix = None
 
@@ -84,6 +117,20 @@ def serialise(surface, relative_to=None):
     categories=["Visibility"],
 )
 def construct(data, name="reconstructedSurface", parent_transform=None):
+    """
+    Creates a nurbs surface from data returned by serialise. The surface is
+    created under a new transform at the scene root.
+
+    Args:
+        data: The serialised surface description
+        name: The name to give the new transform
+        parent_transform: Optional transform. If given, the cv positions are
+            multiplied by this node's local transformation matrix. The new
+            surface is not parented to it.
+
+    Returns:
+        The full path of the new surface transform
+    """
     degree_u = data["degreeU"]
     degree_v = data["degreeV"]
     form_u = data["formU"]
@@ -99,13 +146,9 @@ def construct(data, name="reconstructedSurface", parent_transform=None):
     points = om.MPointArray()
     index = 0
 
-    # If a parent transform is given, apply its world matrix
+    # If a parent transform is given, apply its matrix
     if parent_transform:
-        sel = om.MSelectionList()
-        sel.add(parent_transform)
-        dag = sel.getDagPath(0)
-        parent_fn = om.MFnTransform(dag)
-        parent_matrix = parent_fn.transformation().asMatrix()
+        parent_matrix = _local_matrix(parent_transform)
     else:
         parent_matrix = None
 

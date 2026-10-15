@@ -1,16 +1,31 @@
 """
 Spatial maths between nodes and points: distances, factors, directions,
 interpolation and upvector positions.
+
+Vector maths uses OpenMaya's MVector, which some functions also return.
+Node positions are read with xform through mref, so components (such as
+vertices) can be given as well as transforms.
 """
-from maya import cmds
+import time
+
 from maya.api import OpenMaya as om
+import mref
 
 from ..registry import tool
 
 
 def timed_function_call(func):
+    """
+    Decorator which prints how long each call of the decorated function
+    took, in seconds.
+
+    Args:
+        func: The function to time
+
+    Returns:
+        The wrapped function, which returns whatever func returns
+    """
     def wrapper(*args, **kwargs):
-        import time
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
@@ -25,59 +40,45 @@ def distance_between(
     print_result: bool = False,
 ) -> float:
     """
-    Returns the distance between two objects
+    Returns the world space distance between two nodes.
 
     Args:
-        node_a: The object to measure from
-        node_b: The object to measure to
-        print_result: If true, the result will be printed
+        node_a: The node to measure from. Uses the first selected node if
+            not given.
+        node_b: The node to measure to. Uses the second selected node if
+            not given.
+        print_result: Unused, kept for compatibility. Nothing is printed.
 
     Returns:
-        The distance between two objects
+        The distance between the two nodes
     """
-
     if not node_a:
-        node_a = cmds.ls(sl=True)[0]
+        node_a = mref.selected()[0]
 
     if not node_b:
-        node_b = cmds.ls(sl=True)[1]
+        node_b = mref.selected()[1]
 
-    point_a = cmds.xform(
-        node_a,
-        query=True,
-        translation=True,
-        worldSpace=True,
-    )
+    point_a = om.MVector(*mref.xform(node_a, query=True, translation=True, worldSpace=True))
+    point_b = om.MVector(*mref.xform(node_b, query=True, translation=True, worldSpace=True))
 
-    point_b = cmds.xform(
-        node_b,
-        query=True,
-        translation=True,
-        worldSpace=True,
-    )
-
-    point_a = om.MVector(*point_a)
-    point_b = om.MVector(*point_b)
-
-    delta = point_b - point_a
-
-    # if print_result:
-    #     print(f"Distance between {node_a} and {node_b} is {delta}")
-    return delta.length()
+    return (point_b - point_a).length()
 
 
 def factor_between(node: str = "", from_this: str = "", to_this: str = "", print_result: bool = False) -> float:
     """
-    This will return a factor (between zero and one) for how close the given
-    node is between the from_this and to_this nodes.
+    Returns how far the given node is from to_this, as a factor of the
+    distance between from_this and to_this, clamped between zero and one.
+    A node on top of to_this gives 0, and a node at least as far from
+    to_this as from_this is gives 1.
 
     Args:
-        node: The node to monitor
+        node: The node to measure
         from_this: The first node to compare to
         to_this: The second node to compare to
+        print_result: If True, the result is printed
 
     Returns:
-        The factor for how close the given node is between the from_this and to_this
+        The clamped factor
     """
     total_distance = distance_between(from_this, to_this)
     delta = distance_between(node, to_this)
@@ -102,56 +103,42 @@ def direction_between(
     print_result: bool = True,
 ) -> list[float]:
     """
-    This will return a direction vector (normalised vector) between the
-    two nodes
+    Returns the normalised direction from node_a to node_b, expressed in
+    the local space of node_a (so it takes node_a's rotation into account).
+
+    Two temporary transforms (named Xfoo1 and Xfoo2) are created to do the
+    calculation and are deleted again.
 
     Args:
-        node_a: The object to measure from
-        node_b: The object to measure to
-        print_result: If true, the result will be printed
+        node_a: The node to measure from
+        node_b: The node to measure to
+        print_result: If True, the result is printed
 
     Returns:
-        The direction vector between the two nodes
+        The direction as an MVector
     """
-    a = cmds.rename(cmds.createNode("transform"), "Xfoo1")
-    b = cmds.rename(cmds.createNode("transform"), "Xfoo2")
+    a = mref.create("transform")
+    a.rename("Xfoo1")
+    b = mref.create("transform")
+    b.rename("Xfoo2")
 
-    cmds.parent(
-        b,
-        a,
+    a.add_child(b)
+
+    a.set_matrix(
+        mref.xform(node_a, query=True, matrix=True, worldSpace=True),
+        space="world",
     )
 
-    cmds.xform(
-        a,
-        matrix=cmds.xform(
-            node_a,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
+    b.set_matrix(
+        mref.xform(node_b, query=True, matrix=True, worldSpace=True),
+        space="world",
     )
 
-    cmds.xform(
-        b,
-        matrix=cmds.xform(
-            node_b,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
-    )
+    # -- xform without a space flag rather than get_position, whose
+    # -- explicit objectSpace query differs in the last floating point bits
+    n = om.MVector(*b.xform(query=True, translation=True)).normal()
 
-    tx = cmds.xform(
-        b,
-        query=True,
-        translation=True,
-    )
-
-    n = om.MVector(*tx).normal()
-
-    cmds.delete(a)
+    a.delete()
 
     if print_result:
         print(f"Direction between {node_a} and {node_b} is {n}")
@@ -167,56 +154,44 @@ def calculate_upvector_position(
     create: bool = False,
 ):
     """
-    Based on three points, this will calculate the position for an
-    up-vector for the plane.
+    Calculates a position for an upvector (pole vector) from three points,
+    such as the joints of a limb. The position lies on the plane of the
+    three points, out from point_b, away from the line between point_a and
+    point_c.
 
     Args:
-        point_a: Start point (which can be a float list or a node name)
-        point_b: End point (which can be a float list or a node name)
-        point_c: Start point (which can be a float list or a node name)
-        length: By default the vector will be multipled by the chain length
-            but you can use this value to multiply that to make it further or
-            shorter
-        create: If true, a transform node will be created at the specified location
+        point_a: Start point, as a node or a position (list of floats). Uses
+            the first selected node if not given.
+        point_b: Mid point, as a node or a position. Uses the second
+            selected node if not given.
+        point_c: End point, as a node or a position. Uses the third
+            selected node if not given.
+        length: The distance from point_b, as a factor of the chain length
+            (the distance a->b plus b->c)
+        create: If True, a transform is created at the position and
+            selected
 
     Returns:
-        MVector of the position in worldspace
+        The world space position as an MVector
     """
-
     if not point_a:
-        point_a = cmds.ls(selection=True)[0]
+        point_a = mref.selected()[0]
 
     if not point_b:
-        point_b = cmds.ls(selection=True)[1]
+        point_b = mref.selected()[1]
 
     if not point_c:
-        point_c = cmds.ls(selection=True)[2]
+        point_c = mref.selected()[2]
 
-    # -- If we're given transforms we need to convert them to
-    # -- vectors
-    if isinstance(point_a, str):
-        point_a = cmds.xform(
-            point_a,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
+    # -- If we're given nodes we need to convert them to positions
+    if isinstance(point_a, (str, mref.ReferencedItem)):
+        point_a = mref.xform(point_a, query=True, translation=True, worldSpace=True)
 
-    if isinstance(point_b, str):
-        point_b = cmds.xform(
-            point_b,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
+    if isinstance(point_b, (str, mref.ReferencedItem)):
+        point_b = mref.xform(point_b, query=True, translation=True, worldSpace=True)
 
-    if isinstance(point_c, str):
-        point_c = cmds.xform(
-            point_c,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
+    if isinstance(point_c, (str, mref.ReferencedItem)):
+        point_c = mref.xform(point_c, query=True, translation=True, worldSpace=True)
 
     point_a = om.MVector(*point_a)
     point_b = om.MVector(*point_b)
@@ -227,10 +202,10 @@ def calculate_upvector_position(
     ac = point_c - point_a
     cb = point_c - point_b
 
-    # -- Get the center point between the end points
+    # -- Project point_b onto the line between point_a and point_c
     center = point_a + (((ab * ac) / (ac * ac))) * ac
 
-    # -- Create a normal vector pointing at the mid point
+    # -- Create a normal vector pointing from that point to point_b
     normal = (point_b - center).normal()
 
     # -- Define the length for the upvector
@@ -240,17 +215,12 @@ def calculate_upvector_position(
     result = point_b + (vector_length * normal)
 
     if create:
-        node = cmds.createNode('transform')
-        cmds.xform(
-            node,
-            translation=(
-                result.x,
-                result.y,
-                result.z,
-            ),
-            worldSpace=True,
+        node = mref.create("transform")
+        node.set_position(
+            [result.x, result.y, result.z],
+            space="world",
         )
-        cmds.select(node)
+        node.select()
 
     return result
 
@@ -259,22 +229,20 @@ def calculate_four_point_spline_positions(
     nodes: [str],
 ):
     """
-    This will determine the positions for a bezier spline in order
-    to keep the joints transforms.
+    Returns the four control point positions of a single span cubic curve
+    which follows the given nodes. A temporary linear curve is built through
+    the nodes, rebuilt to one cubic span, read and then deleted.
 
     Args:
-        nodes: List of nodes
+        nodes: The nodes (in order) the curve should pass along
+
+    Returns:
+        List of four world space positions, each a list of three floats
     """
-    positions = list()
     degree = 1
 
     points = [
-        cmds.xform(
-            node,
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
+        list(mref.xform(node, query=True, translation=True, worldSpace=True))
         for node in nodes
     ]
 
@@ -283,13 +251,14 @@ def calculate_four_point_spline_positions(
         for i in range(len(points) + degree - 1)
     ]
 
-    cmds.curve(
+    curve = mref.curve(
         point=points,
         degree=degree,
         knot=knots
     )
 
-    quad_curve = cmds.rebuildCurve(
+    quad_curve = mref.rebuildCurve(
+        curve,
         replaceOriginal=True,
         rebuildType=0,  # Uniform
         endKnots=1,
@@ -301,18 +270,15 @@ def calculate_four_point_spline_positions(
         tolerance=0.01,
     )[0]
 
-    cv_count = cmds.getAttr(f"{quad_curve}.spans") + cmds.getAttr(f"{quad_curve}.degree")
+    shape = quad_curve.shape()
+    cv_count = shape.attr("spans").get() + shape.attr("degree").get()
 
-    for cv_index in range(cv_count):
-        position = cmds.xform(
-            f"{quad_curve}.cv[{cv_index}]",
-            query=True,
-            translation=True,
-            worldSpace=True,
-        )
-        positions.append(position)
+    positions = [
+        list(mref.xform(f"{quad_curve.full_name()}.cv[{cv_index}]", query=True, translation=True, worldSpace=True))
+        for cv_index in range(cv_count)
+    ]
 
-    cmds.delete(quad_curve)
+    quad_curve.delete()
     return positions
 
 
@@ -326,15 +292,24 @@ def interpolate_vector(
     vector_b: list[float],
     factor: float,
 ):
-    vector_length = len(vector_a)
+    """
+    Linearly interpolates between two vectors (of any length), component
+    by component.
 
+    Args:
+        vector_a: The vector at a factor of 0
+        vector_b: The vector at a factor of 1 (at least as long as
+            vector_a)
+        factor: How far to interpolate from vector_a to vector_b
+
+    Returns:
+        The interpolated vector as a list of floats
+    """
     resolved_vector = []
 
-    for component_index in range(vector_length):
-
+    for component_index in range(len(vector_a)):
         a = vector_a[component_index]
         b = vector_b[component_index]
-        interpolated_result = a + (b - a) * factor
-        resolved_vector.append(interpolated_result)
+        resolved_vector.append(a + (b - a) * factor)
 
     return resolved_vector

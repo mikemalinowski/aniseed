@@ -3,6 +3,16 @@ The Direction class, which describes an axis and its direction (such as
 Positive X) and exposes it in different forms - strings, vectors and indices.
 """
 class Direction:
+    """
+    An axis and its direction (such as Positive X), stored as an index (one
+    of the class constants below) and exposed as strings, vectors and the
+    index Maya's ik solver attributes use.
+
+    Note that NegativeZ is 6 (there is no 5), and Unknown is 7.
+
+    Args:
+        idx: One of the direction constants, e.g. Direction.PositiveX
+    """
     PositiveX = 0
     PositiveY = 1
     PositiveZ = 2
@@ -17,6 +27,10 @@ class Direction:
         self.idx = idx
 
     def __eq__(self, other):
+        """
+        A Direction is equal to another Direction with the same index, or to
+        an int equal to its index.
+        """
         if isinstance(other, Direction):
             return self.idx == other.idx
 
@@ -25,6 +39,19 @@ class Direction:
         return False
 
     def set_direction(self, direction):
+        """
+        Sets the direction from an index or a string.
+
+        Accepted strings are a single axis ("x", "Y" - positive), a signed
+        axis ("-x") or a full name ("Positive X", "Negative z"). Any other
+        type is ignored.
+
+        Args:
+            direction: The direction index (int) or string
+
+        Raises:
+            KeyError: If a string does not end in x, y or z
+        """
         if isinstance(direction, int):
             self.idx = direction
             return
@@ -46,6 +73,9 @@ class Direction:
 
     @property
     def full_string(self):
+        """
+        The direction as a readable string, e.g. "Positive X", or "Unknown".
+        """
         direction = self.idx
         if direction == self.PositiveX: return "Positive X"
         if direction == self.NegativeX: return "Negative X"
@@ -58,6 +88,10 @@ class Direction:
 
     @property
     def axis(self):
+        """
+        The axis as a lowercase letter ("x", "y" or "z"), or None if the
+        direction is Unknown.
+        """
         if self.idx == self.Unknown:
             return None
 
@@ -65,13 +99,20 @@ class Direction:
 
     @property
     def direction_multiplier(self):
+        """
+        -1 for a negative direction, otherwise 1.
+        """
         if "Negative" in self.full_string:
             return -1
         return 1
 
     @property
     def ik_solve_attribute_index(self):
-
+        """
+        The index of this direction in Maya's ik axis enum attributes
+        (+X, -X, +Y, -Y, +Z, -Z). Negative Z and anything unrecognised
+        give 5.
+        """
         direction = self.idx
 
         if direction == self.PositiveX:
@@ -93,6 +134,10 @@ class Direction:
 
     @property
     def cross_axis(self):
+        """
+        The next axis along from this one: "y" for x, "z" for y and "x" for
+        z (and for Unknown).
+        """
         axis = self.axis
         if axis == "x":
             return "y"
@@ -104,6 +149,10 @@ class Direction:
 
     @property
     def axis_vector(self):
+        """
+        The unsigned unit vector of the axis as a list, e.g. [0, 1, 0] for
+        both Positive Y and Negative Y. Unknown gives [0, 0, 1].
+        """
         axis = self.axis
 
         if axis == "x":
@@ -117,6 +166,10 @@ class Direction:
 
     @property
     def direction_vector(self):
+        """
+        The signed unit vector of the direction as a list, e.g. [0, -1, 0]
+        for Negative Y, or None if the direction is Unknown.
+        """
         direction = self.idx
         if direction == self.PositiveX: return [1, 0, 0]
         if direction == self.NegativeX: return [-1, 0, 0]
@@ -129,6 +182,17 @@ class Direction:
 
     @classmethod
     def from_string(cls, string_axis):
+        """
+        Creates a Direction from an axis string: "x" (positive) or "-x"
+        (negative), case insensitive.
+
+        Args:
+            string_axis: The axis string
+
+        Returns:
+            The Direction, or None if the string is not recognised (for
+            example "+x" or "Positive X")
+        """
         string_axis = string_axis.lower()
 
         for axis in ["x", "y", "z"]:

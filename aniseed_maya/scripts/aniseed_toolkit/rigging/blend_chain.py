@@ -16,6 +16,12 @@ def create_blend_chain(
         attribute_name,
         match_transforms=None,
     ):
+    """
+    Creates a BlendChain (see BlendChain for the arguments) and builds it.
+
+    Returns:
+        The BlendChain, whose blend_joints holds the created joints
+    """
     instance = BlendChain(
         parent,
         transforms_a,
@@ -33,6 +39,16 @@ class BlendChain:
     Creates a chain of joints which are blended between two sets of
     transforms by a 0-1 attribute (where 0 is fully transforms_a and 1 is
     fully transforms_b).
+
+    Args:
+        parent: The node to parent the first blend joint under
+        transforms_a: The transforms to follow when the attribute is 0
+        transforms_b: The transforms to follow when the attribute is 1.
+            This must be the same length as transforms_a.
+        attribute_host: The node to add the blend attribute to
+        attribute_name: The name of the blend attribute to add
+        match_transforms: Optional transforms to place the blend joints
+            at. If not given they are placed at transforms_a.
     """
 
     def __init__(
@@ -56,6 +72,15 @@ class BlendChain:
         self.blend_joints = None
 
     def create(self):
+        """
+        Adds the 0-1 blend attribute and builds the chain of blend joints,
+        each parent constrained to both of its transforms (with offsets
+        maintained, using shortest interpolation) with the weights driven
+        by the attribute. The joints are stored in blend_joints.
+
+        Raises:
+            Exception: If transforms_a and transforms_b differ in length
+        """
         # -- Start by validating
         if len(self.transforms_a) != len(self.transforms_b):
             raise Exception("Transforms need to match")
@@ -78,7 +103,7 @@ class BlendChain:
             # -- is not created under whatever is selected (cmds is used
             # -- as mref.select does not support clearing)
             cmds.select(clear=True)
-            blend_joint = mref.get(mref.joint())
+            blend_joint = mref.joint()
 
             match_target = self.match_transforms[idx] if self.match_transforms else transform_a
 

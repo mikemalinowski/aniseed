@@ -3,6 +3,7 @@ Guides: lightweight controls which drive joints while laying out a skeleton,
 along with guide lines and tween guides.
 """
 from maya import cmds
+import mref
 
 from ..core import maths as _maths
 from ..core import naming as _naming
@@ -20,7 +21,10 @@ def create(
         constrain=True,
     ) -> str:
     """
-    Creates a simple guide control object to transform a joint
+    Creates a simple guide control object to transform a joint. The guide
+    is named GDE_<joint> (made unique), tagged as "guide", linked to the
+    joint through its guideLink attribute and matched to the joint's world
+    transform.
 
     Args:
         joint: The joint to drive with this guide
@@ -32,32 +36,34 @@ def create(
         scale: The scale of the guide control shape
         link_to: If given, a guide line will be drawn between this node
             and the linked node
-        constrain: If True then the constraints will be made between the two
+        constrain: If True the guide constrains the joint. If False the
+            constraint is still created (so node names are unaffected) but
+            is then deleted.
 
     Returns:
         Name of the guide control node
     """
 
     # -- Create the guide control
-    guide_control = cmds.rename(
-        cmds.createNode("transform"),
-        _naming.unique("GDE_" + joint),
-    )
-    _tagging.tag(guide_control, "guide")
+    guide_control = mref.create("transform")
+    guide_control.rename(_naming.unique("GDE_" + joint))
+    _tagging.tag(guide_control.name(), "guide")
 
-    cmds.addAttr(
-        guide_control,
-        shortName="guideLink",
-        attributeType="message",
+    guide_link = guide_control.add_attribute(
+        "guideLink",
+        value=None,
+        attribute_type="message",
     )
 
-    cmds.connectAttr(
+    # -- The passthrough (rather than Attribute.connect) is used so that
+    # -- a failed connection raises
+    mref.connectAttr(
         f"{joint}.message",
-        f"{guide_control}.guideLink",
+        guide_link,
     )
 
     _shapes.load_shape(
-        guide_control,
+        guide_control.name(),
         shape,
         color=[
             50,
@@ -67,56 +73,58 @@ def create(
         scale_by=scale,
     )
 
-    cmds.xform(
-        guide_control,
-        matrix=cmds.xform(
-            joint,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
-    )
+    guide_control.match_to(joint)
 
     if position_only:
-        cns = cmds.pointConstraint(
+        cns = mref.pointConstraint(
             guide_control,
             joint,
             maintainOffset=False,
         )
 
     else:
-        cns = cmds.parentConstraint(
+        cns = mref.parentConstraint(
             guide_control,
             joint,
             maintainOffset=False,
         )
 
     # -- We dont want the joints to snap back
-    cmds.setAttr(f"{cns[0]}.enableRestPosition", False)
+    cns[0].attr("enableRestPosition").set(False)
 
     if not constrain:
-        cmds.delete(cns)
+        mref.delete(cns)
 
     if parent:
-        cmds.parent(
+        mref.parent(
             guide_control,
             parent,
         )
 
     if link_to:
         link(
-            guide_control,
+            guide_control.name(),
             link_to,
         )
 
-    return guide_control
+    return guide_control.name()
 
 
 def link(item_a, item_b):
+    """
+    Draws a guide line (a templated, linear curve) between the two nodes.
+    The curve lives under item_a and each end is driven by a hidden
+    cluster, one under item_a and one under item_b.
 
+    The selection is changed by this function (the clusters are created
+    from component selections).
+
+    Args:
+        item_a: The node the line starts from (and which owns the curve)
+        item_b: The node the line ends at
+    """
     cmds.select(clear=True)
-    curve = cmds.curve(
+    curve = mref.curve(
         degree=1,
         point=[
             (0, 0, 0),
@@ -124,87 +132,74 @@ def link(item_a, item_b):
         ],
     )
 
-    cmds.setAttr(
-        f"{curve}.inheritsTransform",
-        False,
-    )
+    curve.attr("inheritsTransform").set(False)
 
-    cmds.parent(
+    mref.parent(
         curve,
         item_a,
     )
 
-    curve_shape = cmds.listRelatives(curve, shapes=True)[0]
+    curve_shape = curve.shapes()[0]
 
     # -- Make the curve unselectable
-    cmds.setAttr(
-        f"{curve_shape}.template",
-        True
-    )
+    curve_shape.attr("template").set(True)
 
-    # -- Create the first cluster
-    cmds.select("%s.cv[0]" % curve_shape)
-    cls_root_handle, cls_root_xfo = cmds.cluster()
+    # -- Create the first cluster (cmds.cluster returns the cluster
+    # -- deformer followed by its handle transform)
+    mref.select(f"{curve_shape.full_name()}.cv[0]")
+    _, cls_root_xfo = mref.cluster()
 
     # -- Create the second cluster
-    cmds.select("%s.cv[1]" % curve)
-    cls_target_handle, cls_target_xfo = cmds.cluster()
+    mref.select(f"{curve.full_name()}.cv[1]")
+    _, cls_target_xfo = mref.cluster()
 
     # -- Hide the clusters, as we do not want them
     # -- to be interactable
-    cmds.setAttr(
-        f"{cls_root_xfo}.visibility",
-        False,
-    )
+    cls_root_xfo.attr("visibility").set(False)
+    cls_target_xfo.attr("visibility").set(False)
 
-    cmds.setAttr(
-        f"{cls_target_xfo}.visibility",
-        False,
-    )
-
-    # -- Ensure they"re both children of the guide
-    cmds.parent(
+    # -- Ensure they're both children of the guide
+    mref.parent(
         cls_root_xfo,
         item_a,
     )
 
-    cmds.parent(
+    mref.parent(
         cls_target_xfo,
         item_b,
     )
 
-    cmds.xform(
-        cls_root_xfo,
-        matrix=cmds.xform(
-            item_a,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
-    )
-
-    cmds.xform(
-        cls_target_xfo,
-        matrix=cmds.xform(
-            item_b,
-            query=True,
-            matrix=True,
-            worldSpace=True,
-        ),
-        worldSpace=True,
-    )
+    cls_root_xfo.match_to(item_a)
+    cls_target_xfo.match_to(item_b)
 
 
 def create_tweens(drive_these, from_this, to_this, parent=None):
+    """
+    Creates a tween guide (see create_tween) for each of the given nodes.
 
+    Args:
+        drive_these: The nodes (typically joints) to create tween guides for
+        from_this: The node the tweens blend from
+        to_this: The node the tweens blend to
+        parent: Optional parent for the tween guides
+    """
     for item_to_drive in drive_these:
         create_tween(item_to_drive, from_this, to_this, parent)
 
 
 def create_tween(drive_this, from_this, to_this, parent=None):
     """
-    Creates a blended constraint
+    Creates a tween guide which position constrains the given node. The
+    guide itself is point constrained between from_this and to_this, and
+    its "blend" attribute (which defaults to the node's current relative
+    distance between the two) sets the weighting. The transform channels
+    of the guide are locked.
+
+    Args:
+        drive_this: The node (typically a joint) to drive
+        from_this: The node the tween blends from
+        to_this: The node the tween blends to
+        parent: Optional parent for the tween guide
     """
     tween_control = create(
         drive_this,
@@ -216,64 +211,64 @@ def create_tween(drive_this, from_this, to_this, parent=None):
     # -- We specifically dont constrain in the create function as this
     # -- creates a parent constraint and  for a tween we specifically
     # -- want a position constraint.
-    cmds.pointConstraint(tween_control, drive_this)
+    mref.pointConstraint(tween_control, drive_this)
 
     total_distance = _maths.distance_between(from_this, to_this)
     delta = _maths.distance_between(drive_this, to_this)
     distance_factor = min(1.0, delta / total_distance)
 
-    cns = cmds.pointConstraint(
+    cns = mref.pointConstraint(
         to_this,
         tween_control,
         maintainOffset=False,
     )[0]
 
-    cmds.pointConstraint(
+    mref.pointConstraint(
         from_this,
         tween_control,
         maintainOffset=False,
     )
 
     # -- We dont want the joints to snap back
-    cmds.setAttr(f"{cns}.enableRestPosition", False)
+    cns.attr("enableRestPosition").set(False)
 
-    cmds.addAttr(
-        tween_control,
-        shortName="blend",
-        attributeType="float",
+    tween_node = mref.get(tween_control)
+    blend = tween_node.add_attribute(
+        "blend",
+        value=None,
+        attribute_type="float",
         keyable=True,
         defaultValue=distance_factor,
     )
 
-    reverse_node = cmds.createNode("reverse")
+    reverse_node = mref.create("reverse")
 
-    cmds.connectAttr(
-        f"{tween_control}.blend",
-        f"{reverse_node}.inputX",
+    mref.connectAttr(
+        blend,
+        reverse_node.attr("inputX"),
     )
 
-    cmds.connectAttr(
-        f"{reverse_node}.outputX",
-        cns + "." + cmds.pointConstraint(
-            cns,
-            query=True,
-            weightAliasList=True,
-        )[0],
+    # -- The first weight is for to_this, the last for from_this
+    weights = cns.weight_attributes()
+
+    mref.connectAttr(
+        reverse_node.attr("outputX"),
+        weights[0],
     )
 
-    cmds.connectAttr(
-        f"{tween_control}.blend",
-        cns + "." + cmds.pointConstraint(
-            cns,
-            query=True,
-            weightAliasList=True,
-        )[-1],
+    mref.connectAttr(
+        blend,
+        weights[-1],
     )
 
+    # -- The setAttr passthrough is used rather than Attribute.set, as
+    # -- Attribute.set queries the attribute type first, which evaluates
+    # -- the (constrained) channel and so changes the result of any later
+    # -- tween in the same chain.
     for srt in ["s", "t", "r"]:
         for axis in ["x", "y", "z"]:
-            cmds.setAttr(
-                f"{tween_control}.{srt}{axis}",
+            mref.setAttr(
+                f"{tween_node.full_name()}.{srt}{axis}",
                 lock=True,
                 keyable=False,
             )

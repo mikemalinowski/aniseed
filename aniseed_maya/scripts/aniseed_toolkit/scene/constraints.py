@@ -1,16 +1,24 @@
 """
 Helpers for creating and wiring constraints.
 """
-from maya import cmds
 import mref
+
+from ..core import _nodes
 
 
 def parent_and_scale(driver, driven, maintain_offset: bool = True) -> tuple:
     """
     Parent and scale constrains the driven node to the driver.
 
+    Args:
+        driver: The node to constrain to
+        driven: The node to constrain
+        maintain_offset: If True the driven node keeps its current offset
+            from the driver
+
     Returns:
-        The parent constraint and the scale constraint
+        A tuple of the parent constraint and the scale constraint (mref
+        items)
     """
     parent_constraint = mref.parentConstraint(
         driver,
@@ -52,7 +60,24 @@ def blend_weights(attribute, constraint) -> mref.ReferencedItem:
 
 
 def remove_all(nodes: list[str] = ""):
+    """
+    Deletes every constraint which is a direct child of the given nodes
+    (any child whose node type contains "constraint").
+
+    Args:
+        nodes: The nodes to remove the constraints from
+
+    Returns:
+        None
+    """
     for node in nodes:
-        for child in cmds.listRelatives(node, children=True) or list():
-            if "constraint" in cmds.nodeType(child).lower():
-                cmds.delete(child)
+        # -- listRelatives rather than children(), so nodes which are not
+        # -- dag nodes (and so have no children) are skipped, not an error
+        children = mref.listRelatives(
+            _nodes.resolve(node),
+            children=True,
+            fullPath=True,
+        )
+        for child in children or []:
+            if "constraint" in child.node_type().lower():
+                child.delete()

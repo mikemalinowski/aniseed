@@ -1,18 +1,25 @@
 """
 Helpers for generating unique node names.
 """
-from maya import cmds
+import mref
 
 
 def unique(name):
     """
-    Returns a unique version of the given name by appending a number
-    to the end
+    Returns a name which no node in the scene has. If the given name is
+    free it is returned unchanged, otherwise a number is appended, counting
+    up from 1 (name1, name2, ...).
+
+    Args:
+        name: The name to make unique
+
+    Returns:
+        The unique name
     """
     base_name = name
     counter = 1
 
-    while cmds.objExists(name):
+    while mref.objExists(name):
         name = f"{base_name}{counter}"
         counter += 1
 

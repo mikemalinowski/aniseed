@@ -4,7 +4,6 @@ onto deformer transforms, much like a blendshape does for vertices.
 """
 import functools
 
-from maya import cmds
 import mref
 
 from ..core import maths as _maths
@@ -16,11 +15,19 @@ class TransformMixer:
     Allows for transforms to be interacted with in the same way that blendshapes
     can be interacted with.
 
-    Must be able to add a deformer. When adding a deformer it will generate a target
-    for each pose.
+    The mixer node holds a float attribute per pose (the pose weight). Each
+    deformer has one target transform per pose, and the deformer's
+    translate, rotate and scale are the sum of every target's local values
+    multiplied by the weight of that target's pose.
 
-    Must be able to add a pose. When adding a pose it must generate a target representing
-    this pose for each deformer.
+    Adding a deformer generates a target for each existing pose, and adding
+    a pose generates a target for each existing deformer.
+
+    Args:
+        node: An existing mixer node to bind to. If not given a new mixer
+            node is created.
+        parent: The parent for the new mixer node (only used when no node
+            is given)
     """
 
     def __init__(self, node=None, parent=None):
@@ -39,9 +46,8 @@ class TransformMixer:
         self._suspend_depth = 0
         self._previous_undo_state = None
 
-        # -- Cached output of get_target_mapping(). Invalidated whenever
-        # -- poses/deformers/targets change so the next get_target call
-        # -- rebuilds it from the scene.
+        # -- Cached output of get_target_mapping(). Updated or invalidated
+        # -- whenever poses/deformers/targets change.
         self._target_mapping_cache = None
 
     def __enter__(self):
@@ -57,30 +63,40 @@ class TransformMixer:
                     mixer.add_pose(name)
         """
         if self._suspend_depth == 0:
-            self._previous_undo_state = cmds.undoInfo(
+            self._previous_undo_state = mref.undoInfo(
                 query=True,
                 stateWithoutFlush=True,
             )
-            cmds.refresh(suspend=True)
-            cmds.undoInfo(stateWithoutFlush=False)
+            mref.refresh(suspend=True)
+            mref.undoInfo(stateWithoutFlush=False)
         self._suspend_depth += 1
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Restores the viewport refresh and undo state when the outermost
+        ``with`` block exits. Exceptions are never suppressed.
+        """
         self._suspend_depth -= 1
         if self._suspend_depth == 0:
-            cmds.undoInfo(stateWithoutFlush=self._previous_undo_state)
-            cmds.refresh(suspend=False)
+            mref.undoInfo(stateWithoutFlush=self._previous_undo_state)
+            mref.refresh(suspend=False)
         # -- Don't suppress exceptions — let any error propagate.
         return False
 
-    # @timed_function_call
     def add_deformer(self, name):
         """
-        This should create a transform for the deformer
+        Creates a deformer (a deformer_<name> transform beneath a
+        deformerspace_<name> parent) and a target for it for every existing
+        pose.
+
+        Args:
+            name: The name of the deformer
+
+        Returns:
+            The deformer transform (mref item)
         """
         deformer_parent = mref.create("transform", name=f"deformerspace_{name}", parent=self.deformer_root())
-        # shapes.load_shape(deformer_parent.name(), "core_lollipop")
 
         new_deformer = mref.create("transform", name=f"deformer_{name}", parent=deformer_parent)
         new_deformer.add_attribute(
@@ -89,11 +105,10 @@ class TransformMixer:
             value=name,
         )
 
-        new_deformer.message.connect_next(self.node.deformers)
+        new_deformer.attr("message").connect_next(self.node.attr("deformers"))
 
         new_entries = {}
         for pose in self.poses():
-            print("[in add deformer] creating target for pose : %s" % pose)
             target = self.create_target(new_deformer, pose)
             pose_name = pose.attr("pose_name").get()
             new_entries[f"{pose_name}--{name}"] = target
@@ -111,15 +126,31 @@ class TransformMixer:
         return new_deformer
 
     def pose_attributes(self):
+        """
+        Returns the float user defined attributes of the mixer node - which
+        are the pose weight attributes.
+
+        Returns:
+            List of attributes (mref items)
+        """
         results = []
         for attribute in self.node.attributes(ud=True):
             if attribute.get_type() == "float":
                 results.append(attribute)
         return results
 
-    # @timed_function_call
     def add_pose(self, name):
+        """
+        Creates a pose: a keyable <name> weight attribute and a
+        show_<name>_targets visibility attribute on the mixer node, a
+        pose_<name> transform, and a target for every existing deformer.
 
+        Args:
+            name: The name of the pose
+
+        Returns:
+            The pose transform (mref item)
+        """
         self.node.add_attribute(
             name,
             attribute_type="float",
@@ -130,7 +161,7 @@ class TransformMixer:
         visibility_label = f"show_{name}_targets"
         if not self.node.has_attribute(visibility_label):
             self.node.add_attribute(
-                f"show_{name}_targets",
+                visibility_label,
                 attribute_type="bool",
                 keyable=True,
                 value=False,
@@ -149,12 +180,12 @@ class TransformMixer:
             multi=True,
         )
 
-        new_pose.message.connect_next(self.node.attr("poses"))
+        new_pose.attr("message").connect_next(self.node.attr("poses"))
 
         new_entries = {}
         for deformer in self.deformers():
             target = self.create_target(deformer, new_pose)
-            self.node.attr(visibility_label).connect(target.visibility)
+            self.node.attr(visibility_label).connect(target.attr("visibility"))
             deformer_name = deformer.attr("deformer_name").get()
             new_entries[f"{name}--{deformer_name}"] = target
 
@@ -170,8 +201,20 @@ class TransformMixer:
 
         return new_pose
 
-    # @timed_function_call
     def create_target(self, deformer, pose):
+        """
+        Creates the target transform for the given deformer and pose, at
+        the deformer's current world transform and with a locator shape,
+        and wires its local translate, rotate and scale (as an offset from
+        1) multiplied by the pose weight into the deformer.
+
+        Args:
+            deformer: The deformer transform (mref item)
+            pose: The pose transform (mref item)
+
+        Returns:
+            The target transform (mref item)
+        """
         label = f"{deformer.name()}__{pose.name()}"
 
         target = mref.create("transform", name=f"target__{label}", parent=deformer.parent())
@@ -192,13 +235,15 @@ class TransformMixer:
         target.add_attribute(
             "pose_name",
             attribute_type="string",
-            value=pose.pose_name.get(),
+            value=pose.attr("pose_name").get(),
         )
-        target.message.connect_next(pose.attr("targets"))
+        target.attr("message").connect_next(pose.attr("targets"))
         blend_translation = mref.create("multiplyDivide", name=f"blendtrans__{label}")
         blend_rotation = mref.create("multiplyDivide", name=f"blendtrot__{label}")
         blend_scale = mref.create("multiplyDivide", name=f"blendtscale__{label}")
 
+        # -- Each deformer channel is driven by a plusMinusAverage which
+        # -- sums all the targets. Reuse it if it already exists.
         try:
             translation_combiner = deformer.attr("translate").inputs()[0].node()
         except IndexError:
@@ -211,6 +256,8 @@ class TransformMixer:
             rotation_combiner = mref.create("plusMinusAverage", name=f"addrotate_{label}")
             rotation_combiner.attr("output3D").connect(deformer.attr("rotate"))
 
+        # -- The scale sum is offset by one (scaleFromZero) before reaching
+        # -- the deformer, so the combiner is two nodes upstream
         try:
             scale_combiner = deformer.attr("scale").inputs()[0].node().inputs()[0]
         except:
@@ -224,10 +271,9 @@ class TransformMixer:
         target.attr("translate").connect(blend_translation.attr("input1"))
         target.attr("rotate").connect(blend_rotation.attr("input1"))
 
-
         # -- For the scale we need to add from zero rather than 1
         scale_from_zero = mref.create("plusMinusAverage", name=f"scaleFromZero_{label}")
-        scale_from_zero.operation.set(2)  # -- Subtract
+        scale_from_zero.attr("operation").set(2)  # -- Subtract
         target.attr("scale").connect_next(scale_from_zero.attr("input3D"))
         scale_from_zero.attr("output3D").connect(blend_scale.attr("input1"))
 
@@ -247,6 +293,16 @@ class TransformMixer:
         return target
 
     def create_node(self, parent=None):
+        """
+        Creates a new mixer node (a transformMixer transform with deformers
+        and poses message arrays, and deformerRoot and poseRoot children).
+
+        Args:
+            parent: Optional parent for the mixer node
+
+        Returns:
+            The mixer node (mref item)
+        """
         node = mref.create("transform", name="transformMixer", parent=parent)
         node.add_attribute(
             "deformers",
@@ -266,6 +322,13 @@ class TransformMixer:
         return node
 
     def remove_deformer(self, deformer_name):
+        """
+        Deletes the deformer with the given name along with all of its
+        targets.
+
+        Args:
+            deformer_name: The name of the deformer to remove
+        """
         self.get_deformer(deformer_name).delete()
 
         for pose in self.poses():
@@ -280,6 +343,13 @@ class TransformMixer:
         self.get_deformer.cache_clear()
 
     def remove_pose(self, pose_name):
+        """
+        Deletes the pose with the given name, all of its targets, and its
+        weight and visibility attributes on the mixer node.
+
+        Args:
+            pose_name: The name of the pose to remove
+        """
         for deformer in self.deformers():
             deformer_name = deformer.attr("deformer_name").get()
             target = self.get_target(
@@ -295,10 +365,9 @@ class TransformMixer:
         # -- the mixer node so they aren't left as orphans on self.node
         # -- after the pose has gone. Mirrors the attributes added by
         # -- add_pose.
-        mixer_node_name = self.node.full_name()
         for attribute_name in (pose_name, f"show_{pose_name}_targets"):
             if self.node.has_attribute(attribute_name):
-                cmds.deleteAttr(f"{mixer_node_name}.{attribute_name}")
+                self.node.attr(attribute_name).delete()
 
         # -- Drop every cache entry for this pose.
         if self._target_mapping_cache is not None:
@@ -311,19 +380,40 @@ class TransformMixer:
         self.get_pose.cache_clear()
 
     def deformer_root(self):
+        """
+        Returns the deformerRoot transform beneath the mixer node.
+        """
         return self.node.children(node_type="transform", name_match="deformerRoot")[0]
 
     def pose_root(self):
+        """
+        Returns the poseRoot transform beneath the mixer node.
+        """
         return self.node.children(node_type="transform", name_match="poseRoot")[0]
 
     def poses(self):
-        return [n.node() for n in self.node.poses.inputs()]
+        """
+        Returns the pose transforms (mref items), in the order they were
+        added.
+        """
+        return [n.node() for n in self.node.attr("poses").inputs()]
 
     def deformers(self):
-        return [n.node() for n in self.node.deformers.inputs()]
+        """
+        Returns the deformer transforms (mref items), in the order they
+        were added.
+        """
+        return [n.node() for n in self.node.attr("deformers").inputs()]
 
     @functools.lru_cache(maxsize=None)
     def get_pose(self, pose_name):
+        """
+        Returns the pose transform with the given name, or None if there is
+        no such pose. Results are cached until the poses change.
+
+        Args:
+            pose_name: The name of the pose
+        """
         for pose_node in self.poses():
             if pose_node.attr("pose_name").get() == pose_name:
                 return pose_node
@@ -331,6 +421,14 @@ class TransformMixer:
 
     @functools.lru_cache(maxsize=None)
     def get_deformer(self, deformer_name):
+        """
+        Returns the deformer transform with the given name, or None if
+        there is no such deformer. Results are cached until the deformers
+        change.
+
+        Args:
+            deformer_name: The name of the deformer
+        """
         for deformer_node in self.deformers():
             if deformer_node.attr("deformer_name").get() == deformer_name:
                 return deformer_node
@@ -342,16 +440,19 @@ class TransformMixer:
         None if no such target exists. Backed by the cached
         ``get_target_mapping()`` lookup, so calls are O(1) after the
         first mapping build.
+
+        Args:
+            pose_name: The name of the pose
+            deformer_name: The name of the deformer
         """
         return self.get_target_mapping().get(f"{pose_name}--{deformer_name}")
 
     def get_target_mapping(self):
         """
         Returns a dict mapping ``"{pose_name}--{deformer_name}"`` to
-        the corresponding target node. The result is cached on the
-        mixer instance and rebuilt on first access after any
-        pose/deformer/target mutation (add_deformer, add_pose,
-        remove_deformer, remove_pose).
+        the corresponding target node. The result is built from the scene
+        on first access and cached on the mixer instance; add_deformer,
+        add_pose, remove_deformer and remove_pose keep the cache up to date.
         """
         if self._target_mapping_cache is not None:
             return self._target_mapping_cache
@@ -359,7 +460,7 @@ class TransformMixer:
         results = dict()
         for pose in self.poses():
             pose_name = pose.attr("pose_name").get()
-            targets = [n.node() for n in pose.targets.inputs()]
+            targets = [n.node() for n in pose.attr("targets").inputs()]
 
             for target in targets:
                 results[f"{pose_name}--{target.attr('deformer_name').get()}"] = target
@@ -369,10 +470,9 @@ class TransformMixer:
 
     def _invalidate_target_caches(self):
         """
-        Clears the cached target mapping and per-name lookup caches.
-        Called automatically by add_deformer / add_pose /
-        remove_deformer / remove_pose so subsequent get_target /
-        get_pose / get_deformer calls re-query the scene.
+        Clears the cached target mapping and per-name lookup caches, so
+        subsequent get_target / get_pose / get_deformer calls re-query the
+        scene. Use this if the mixer is changed outside of this instance.
         """
         self._target_mapping_cache = None
         self.get_pose.cache_clear()
@@ -381,23 +481,25 @@ class TransformMixer:
     @_maths.timed_function_call
     def serialise(self):
         """
-        {
-        "deformers": [
-            {"name":"", "transform": []},
-            {"name":"", "transform": []},
-            {"name":"", "transform": []}
-        ]
-        "poses": [
+        Returns the mixer as a dictionary, which can be rebuilt with
+        deserialise. The deformer transforms are those of the deformerspace
+        parents, and all matrices are local (object space)::
+
             {
-                "name":"",
-                "targets": [
-                    {"name":"", "transform": []},
-                    {"name":"", "transform": []},
+                "deformers": [
+                    {"name": "", "transform": [], "rotation_order": 0},
+                ],
+                "poses": [
+                    {
+                        "name": "",
+                        "targets": [
+                            {"name": "", "transform": []},
+                        ]
+                    }
                 ]
             }
-        ]
 
-        }
+        Note: the timed_function_call decorator prints the time taken.
         """
         data = {
             "deformers": [],
@@ -436,7 +538,6 @@ class TransformMixer:
                 deformer_name = deformer_names[deformer_idx]
                 lookup_label = f"{pose_name}--{deformer_name}"
                 target = target_data[lookup_label]
-                # target = self.get_target(pose_names[pose_idx], deformer_name=deformer_names[deformer_idx])
                 pose_data["targets"].append(
                     {
                         "name": deformer_name,
@@ -448,17 +549,28 @@ class TransformMixer:
 
     @classmethod
     def deserialise(cls, data, parent=None):
+        """
+        Creates a new mixer from data returned by serialise. The target
+        transforms are converted from cm (see units.matrix_from_cm) whereas
+        the deformer transforms are applied as they are.
 
+        Args:
+            data: The serialised mixer data
+            parent: Optional parent for the new mixer node
+
+        Returns:
+            The new TransformMixer
+        """
         mixer = cls(parent=parent)
 
         with mixer:
             for deformer_data in data.get("deformers", list()):
                 deformer = mixer.add_deformer(deformer_data["name"])
                 deformer.parent().set_matrix(deformer_data["transform"])
-                deformer.rotateOrder.set(deformer_data["rotation_order"])
+                deformer.attr("rotateOrder").set(deformer_data["rotation_order"])
 
             for pose_data in data.get("poses", list()):
-                pose = mixer.add_pose(pose_data["name"])
+                mixer.add_pose(pose_data["name"])
 
                 for target_data in pose_data["targets"]:
                     target = mixer.get_target(pose_data["name"], target_data["name"])

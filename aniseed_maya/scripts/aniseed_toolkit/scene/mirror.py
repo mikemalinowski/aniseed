@@ -1,10 +1,16 @@
 """
 Mirroring transforms across a plane, optionally swapping names to find the
 opposite node.
+
+Note on maya.cmds: the nodes given by the caller are addressed by name (and
+name replacement works on those strings), so those calls stay on cmds and keep
+their error behaviour. mref is used for the temporary joint used by
+rotate_flip.
 """
 import collections
 
 from maya import cmds
+import mref
 
 from . import joints as _joints
 
@@ -30,30 +36,36 @@ def mirror_transforms(
     Github Url:
         https://gist.github.com/rondreas/1c6d4e5fc6535649780d5b65fc5a9283
 
-    Mirrors transform across hyperplane.
+    Mirrors the world space matrix of each transform across a plane through
+    the world origin. Nodes which are not transforms or joints are skipped
+    (with a message printed).
 
     Args:
-        transforms: list of Transform or string.
-        across: plane which to mirror across (XY, YX or XZ).
+        transforms: List of transform or joint names. Uses the selection if
+            none are given.
+        across: Plane which to mirror across ('XY', 'YZ' or 'XZ'). Any other
+            value raises a ValueError.
         behaviour: If true, it should mirror the rotational behaviour too
         rotate_flip: If true, the result is flipped 180 degrees in X and Y
-        name_replacement : a tuple of length two, where the first part should
-            be replaced with the second part. If None, each transform's
-            mirrored matrix is applied to the transform itself.
+        name_replacement: A sequence of two strings; in each transform's
+            name the first is replaced with the second to find the node the
+            mirrored matrix is applied to. If empty or None, each
+            transform's mirrored matrix is applied to the transform itself.
+
+    Returns:
+        None
 
     Note: this never prompts the user - see ui.dialogs.global_mirror for the
     interactive version.
     """
-    # No specified transforms, so will get selection
+    # -- No specified transforms, so use the selection
     if not transforms:
         transforms = cmds.ls(selection=True)
 
-
-    # Validate plane which to mirror across,
+    # -- Validate plane which to mirror across
     if across not in ('XY', 'YZ', 'XZ'):
         raise ValueError(
             "Keyword Argument: 'across' not of accepted value ('XY', 'YZ', 'XZ').")
-
 
     stored_matrices = collections.OrderedDict()
 
@@ -82,7 +94,7 @@ def mirror_transforms(
         t = [n * -1 for n in mtx[12:15]]
 
         # Set matrix based on given plane, and whether to include behaviour or not.
-        if str(across) == 'XY':
+        if across == 'XY':
             mtx[14] = t[2]  # set inverse of the Z translation
 
             # Set inverse of all rotation columns but for the one we've set translate to.
@@ -90,7 +102,7 @@ def mirror_transforms(
                 mtx[0:9:4] = rx
                 mtx[1:10:4] = ry
 
-        elif str(across) == 'YZ':
+        elif across == 'YZ':
             mtx[12] = t[0]  # set inverse of the X translation
 
             if behaviour:
@@ -105,6 +117,9 @@ def mirror_transforms(
 
         stored_matrices[transform] = mtx
 
+    # -- The matrices are world space, so setting a parent after its child
+    # -- moves the child again. Applying the whole set once per transform
+    # -- means every node ends up on its mirrored matrix regardless of order.
     for _ in stored_matrices:
         for transform in stored_matrices:
             target = transform
@@ -122,32 +137,35 @@ def mirror_transforms(
             )
 
             if rotate_flip:
+                # -- Flip using a temporary joint: its rotation is moved to
+                # -- its orients, then it is rotated 180 in Y and X and the
+                # -- result is applied to the target
                 cmds.select(clear=True)
-                joint = cmds.joint()
-                cmds.xform(joint, matrix=stored_matrices[transform])
+                joint = mref.get(cmds.joint())
+                joint.set_matrix(stored_matrices[transform])
 
-                _joints.move_rotations_to_orients([joint])
-                cmds.setAttr(f"{joint}.rotateY", 180)
-                cmds.setAttr(f"{joint}.rotateX", 180)
-                _joints.move_orients_to_rotation([joint])
-                cmds.xform(target, matrix=cmds.xform(joint, q=True, m=True, ws=True), ws=True)
-                cmds.delete(joint)
+                _joints.move_rotations_to_orients([joint.name()])
+                joint.attr("rotateY").set(180)
+                joint.attr("rotateX").set(180)
+                _joints.move_orients_to_rotation([joint.name()])
+                cmds.xform(target, matrix=joint.get_matrix(space="world"), ws=True)
+                joint.delete()
 
 
 def invert_translation(transforms: list[str] = None) -> None:
     """
-    This will invert the translation channels of a node
+    This will invert (negate) the local translateX/Y/Z values of the given
+    nodes.
 
     Args:
-        transforms: List of transforms to invert the translation of
+        transforms: List of transforms to invert the translation of. Uses
+            the selected joints if none are given.
 
     Returns:
         None
     """
     if not transforms:
         transforms = cmds.ls(selection=True, type="joint")
-
-    parent_map = dict()
 
     for transform in transforms:
         for axis in ["tx", "ty", "tz"]:

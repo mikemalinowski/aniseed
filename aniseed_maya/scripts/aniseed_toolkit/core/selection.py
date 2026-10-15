@@ -7,8 +7,14 @@ from maya import cmds
 
 def first_selected():
     """
-    This will return the first selected object
+    Returns the first selected object.
+
+    Returns:
+        The name of the first selected object, as cmds.ls gives it (the
+        shortest unique name), or None if nothing is selected
     """
+    # -- cmds rather than mref.selected, because callers get the shortest
+    # -- unique name, which mref does not provide
     selection = cmds.ls(selection=True)
     if selection:
         return selection[0]

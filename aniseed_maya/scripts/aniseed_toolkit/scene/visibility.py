@@ -1,70 +1,65 @@
 """
 Showing and hiding nodes, using the draw style for joints.
 """
-from maya import cmds
+import mref
+
+from ..core import _nodes
 
 
 def hide(items: list[str] = None) -> None:
     """
-    This will hide all the given nodes. However, it will first do a
-    node type test, and if it is a joint it will hide it using the joint
-    style attribute rather than the visibility attribute.
+    Hides the given nodes. Joints are hidden by setting their draw style to
+    None (so their children stay visible); other nodes have their
+    visibility turned off.
 
     Args:
-        items: List of nodes to hide
+        items: A node or list of nodes to hide. Uses the selection if not
+            given.
 
     Returns:
         None
     """
     if not items:
-        items = cmds.ls(sl=True)
+        items = mref.selected()
 
     if not isinstance(items, list):
         items = [items]
 
     for item in items:
+        # -- RuntimeError, as cmds.nodeType raised for a bad name
+        item = _nodes.resolve(item, error=RuntimeError)
 
-        if cmds.nodeType(item) == "joint":
-            cmds.setAttr(
-                f"{item}.drawStyle",
-                2,  # Invisible
-            )
+        if item.node_type() == "joint":
+            item.attr("drawStyle").set(2)  # None (invisible)
 
         else:
-            cmds.setAttr(
-                f"{item}.visibility",
-                False,
-            )
+            item.hide()
 
 
 def show(items: list[str] = None) -> None:
     """
-    This will show all the given nodes. However, it will first do a
-    node type test, and if it is a joint it will show it using the joint
-    style attribute rather than the visibility attribute.
+    Shows the given nodes. Joints are shown by setting their draw style to
+    Bone; other nodes have their visibility turned on.
 
     Args:
-        items: List of nodes to hide
+        items: A node or list of nodes to show. Uses the selection if not
+            given.
 
     Returns:
         None
     """
     if not items:
-        items = cmds.ls(sl=True)
+        items = mref.selected()
 
     if not isinstance(items, list):
         items = [items]
 
     for item in items:
+        # -- RuntimeError, as cmds.nodeType raised for a bad name
+        item = _nodes.resolve(item, error=RuntimeError)
 
-        if cmds.nodeType(item) == "joint":
-            cmds.setAttr(
-                f"{item}.drawStyle",
-                0,  # Bone
-            )
+        if item.node_type() == "joint":
+            item.attr("drawStyle").set(0)  # Bone
 
         else:
-            cmds.setAttr(
-                f"{item}.visibility",
-                True,
-            )
+            item.show()

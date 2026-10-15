@@ -11,16 +11,24 @@ from maya import cmds
 import mref
 
 from ..registry import tool
+from ..core._nodes import resolve as _resolve
 from ..scene import shapes as _shapes
 
 if typing.TYPE_CHECKING:
     import aniseed
 
 
+
 class Control:
     """
     The control class ensures that you can easily access the org, offset, zero and
     control parts which make up a typical aniseed control hierarchy.
+
+    Every part is returned as a node name (str), exactly as maya reports it.
+
+    Args:
+        node: The control node (the ctl part) of the hierarchy. Use
+            Control.get to instance the class from any part of a hierarchy.
     """
 
     def __init__(self, node: str):
@@ -56,44 +64,67 @@ class Control:
         return self.part("zro")
 
     @property
-    def location(self):
+    def location(self) -> str:
         """
-        Returns the location tag of the control
+        Returns the location stored in the control's naming_data attribute,
+        or an empty string if the control has no naming_data.
         """
-        if cmds.objExists(f"{self._control_node}.naming_data"):
-            return json.loads(cmds.getAttr(f"{self._control_node}.naming_data"))["location"]
+        address = f"{self._control_node}.naming_data"
+        if mref.objExists(address):
+            return json.loads(_resolve(address).get())["location"]
         return ""
 
     def part(self, classification: str) -> str or None:
         """
-        This will attempt to look at the structure of the control hierarchy
-        and return the part based on the given classification.
+        Returns the part of the control hierarchy with the given
+        classification, by following the link_<classification> attribute.
+
+        Args:
+            classification: One of "org", "zro", "off" or "ctl"
+
+        Returns:
+            The name of the part. If the node has no such link attribute
+            (i.e. it is not part of a control hierarchy) the node itself is
+            returned. None is returned if the link attribute has no
+            connection.
         """
         attr = f"{self._control_node}.link_{classification}"
 
-        if not cmds.objExists(attr):
+        if not mref.objExists(attr):
             return self._control_node
 
+        # -- cmds rather than mref, as the part is returned as the name
+        # -- maya reports (which may be a partial path if it is not unique)
         try:
             return cmds.listConnections(
                 attr,
             )[0]
 
         except (ValueError, IndexError):
-            print(f"Failed to get component")
+            print("Failed to get component")
             traceback.print_exc()
             return None
 
     @classmethod
     def get(cls, node: str) -> "Control" or None:
         """
-        This will attempt to instance a Control class for the given node
+        Instances a Control class for the given node, which can be any part
+        of a control hierarchy.
+
+        Args:
+            node: Any part of a control hierarchy. If the node is not part
+                of a control hierarchy it is used as the control node itself.
+
+        Returns:
+            The Control instance, or None if the hierarchy link is broken.
         """
         attr = f"{node}.link_ctl"
 
-        if not cmds.objExists(attr):
+        if not mref.objExists(attr):
             return Control(node)
 
+        # -- cmds rather than mref, as the Control stores the node name
+        # -- maya reports
         try:
             return Control(
                 cmds.listConnections(
@@ -102,7 +133,7 @@ class Control:
             )
 
         except (ValueError, IndexError):
-            print(f"Failed to get component")
+            print("Failed to get component")
             traceback.print_exc()
             return None
 
@@ -121,22 +152,32 @@ class Control:
             counter=1
     ) -> "Control":
         """
-        This will create a control structure. It is not mandatory to use this within the
-        rigging framework, but by doing so you will have a consistent behaviour with all
-        components that come packaged with the rigging tool.
+        This will create a control structure (org, zero, offset and ctl
+        transforms, each parented under the previous one). It is not mandatory
+        to use this within the rigging framework, but by doing so you will have
+        a consistent behaviour with all components that come packaged with the
+        rigging tool.
+
+        Every part is linked to every other part through link_<part> message
+        attributes, the ctl is given a naming_data attribute and is tagged as
+        a controller.
 
         Args:
             description (str): Descriptive part of the nodes name
             location (str): Location of the control
-            parent (str): Parent of the control
+            parent (str): Parent of the control. If empty, the control is
+                created at the scene root.
             shape (str): Shape of the control to apply (should be accessible via
-                aniseed_toolkit/_resources/shapes
+                aniseed_toolkit/_resources/shapes). If empty no shape is applied.
             config: The rig configuration instance
-            match_to: Optional object to match transform to
+            match_to: Optional object to match transform to. If not given,
+                the nodes keep the world transform they were created with (the origin).
             shape_scale: Scale of the shape to apply to the control, default is 1.0
-            rotate_shape: Optional object to rotate shape to apply to the control, default is None
+            rotate_shape: Optional x, y, z rotation to apply to the shape,
+                default is None
             classification_override: By default this will always use the control
                 prefix as per the rig configuration, but you can specify an override.
+            counter: The counter to use when generating the names, default is 1
 
         Returns:
             Control: The created control which has an accessor for the zero,
@@ -239,20 +280,26 @@ def create(
     """
     This will create a control structure. It is not mandatory to use this within the
     rigging framework, but by doing so you will have a consistent behaviour with all
-    components that come packaged with the rigging tool.
+    components that come packaged with the rigging tool. See Control.create for
+    the structure which is built.
 
     Args:
         description (str): Descriptive part of the nodes name
         location (str): Location of the control
-        parent (str): Parent of the control
+        parent (str): Parent of the control. If empty, the control is
+            created at the scene root.
         shape (str): Shape of the control to apply (should be accessible via
-            aniseed_toolkit/_resources/shapes
-        config: The rig configuration instance
-        match_to: Optional object to match transform to
+            aniseed_toolkit/_resources/shapes). If empty no shape is applied.
+        config: The rig configuration instance (required, despite the
+            default of None)
+        match_to: Optional object to match transform to. If not given,
+            the nodes keep the world transform they were created with (the origin).
         shape_scale: Scale of the shape to apply to the control, default is 1.0
-        rotate_shape: Optional object to rotate shape to apply to the control, default is None
+        rotate_shape: Optional x, y, z rotation to apply to the shape,
+            default is None
         classification_override: By default this will always use the control
             prefix as per the rig configuration, but you can specify an override.
+        counter: The counter to use when generating the names, default is 1
 
     Returns:
         Control: The created control which has an accessor for the zero,
@@ -296,17 +343,19 @@ def get(node: str) -> Control:
     classification="Rigging",
 )
 def set_as_zero_transform(node: str) -> None:
+    """
+    Makes the current world transform of the control the rest transform of
+    its hierarchy: the org, zero, offset and ctl are all moved to the
+    current world matrix of the ctl, leaving the ctl with zero values.
 
+    Args:
+        node: Any part of a control hierarchy
+    """
     # -- Get the node as a control object
     control = Control.get(node)
 
     # -- Read the world transform
-    world_xform = cmds.xform(
-        control.ctl,
-        query=True,
-        matrix=True,
-        worldSpace=True,
-    )
+    world_xform = _resolve(control.ctl).get_matrix(space="world")
 
     # -- We need to reset all of these in this specific order
     items = [
@@ -317,11 +366,7 @@ def set_as_zero_transform(node: str) -> None:
     ]
 
     for item in items:
-        cmds.xform(
-            item,
-            matrix=world_xform,
-            worldSpace=True,
-        )
+        _resolve(item).set_matrix(world_xform, space="world")
 
 
 def add_offset_control(

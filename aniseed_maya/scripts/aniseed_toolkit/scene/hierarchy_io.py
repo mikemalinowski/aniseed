@@ -1,6 +1,11 @@
 """
 Serialising node hierarchies (typically joints) to and from dictionaries and
 files.
+
+Note on maya.cmds: the dataset is keyed by node names, and the names Maya
+returns when nodes are created and renamed (which can be partial paths such as
+"grp|joint1" when not unique) are what the functions return. mref resolves and
+reports names differently, so this module stays on cmds.
 """
 import json
 import typing
@@ -30,20 +35,30 @@ def get_supported_io_types() -> list[str]:
     the joint writing tools.
 
     Returns:
-        List of node types which are supported
+        List of node types which are supported (the module level
+        SUPPORTED_TYPES list itself, not a copy)
     """
     return SUPPORTED_TYPES
 
 
 def hierarchy_to_dict(nodes: list[str]) -> dict:
     """
-    This will store the given nodes and their attributes to a dictionary
+    This will store the given nodes and their attributes to a dictionary.
+
+    For each node the name, type and parent (only if the parent is also
+    one of the given nodes) are stored, along with the translate, rotate
+    and scale values (plus jointOrient and radius for joints). Parent and
+    point constraints are stored with the node they constrain and their
+    first target, but only if that target is one of the given nodes.
+    Nodes which do not exist are skipped.
 
     Args:
-         nodes: List of nodes to serialise
+         nodes: List of nodes to serialise. Uses the selection if no nodes
+            are given.
 
     Returns:
-        dict of the dataset in the format supported by the joint writing tools
+        dict of the dataset in the format supported by the joint writing
+        tools, keyed by node name
     """
     nodes = nodes or cmds.ls(selection=True)
     return _create_dataset_from_nodes(nodes)
@@ -63,16 +78,22 @@ def dict_to_hierarchy(
         worldspace_root: bool = False,
 ) -> dict:
     """
-    This will take a dictionary (in the format returned by SerialiseNodesToDict)
+    This will take a dictionary (in the format returned by hierarchy_to_dict)
     and generate nodes based on that description.
+
+    Only joint and transform entries create nodes (constraint entries are
+    ignored). The selection is cleared before each node is created.
 
     Args:
         root_parent: The node the newly created structure should reside under
         dataset: The dictionary of data
-        apply_names: Whether to apply the names to the created nodes
+        apply_names: Whether to apply the names to the created nodes.
+            Otherwise they keep Maya's default names (joint1, transform1...)
         invert: Whether translations should be inverted or not (useful when
             mirroring)
-        worldspace_root: If true, the values will be applied in worldspace
+        worldspace_root: If true, the stored local values of each root
+            node (one without a parent in the data) are applied as its
+            world space matrix
 
     Returns:
         Dictionary where the key is the name as defined in the data and the value
@@ -89,8 +110,9 @@ def dict_to_hierarchy(
 
 def write_hierarchy_file(nodes: list[str], filepath: str) -> None:
     """
-    This will take the given nodes and serialise them to a json file
-    and save that json file to the given filepath.
+    This will take the given nodes and serialise them (in the format
+    returned by hierarchy_to_dict) to a json file and save that json file
+    to the given filepath.
 
     Args:
         nodes: List of nodes to serialise
@@ -117,7 +139,7 @@ def load_hierarchy_file(
 ):
     """
     This will parse the given json file and generate the structure defined within
-    it.
+    it (see dict_to_hierarchy).
 
     Args:
         root_parent: The node the newly created structure should reside under
@@ -125,8 +147,8 @@ def load_hierarchy_file(
         apply_names: Whether to apply the names to the created nodes
         invert: Whether translations should be inverted or not (useful when
             mirroring)
-        worldspace_root: If false, the root of the structure will be matched
-            in worldspace
+        worldspace_root: If true, the stored local values of each root
+            node are applied as its world space matrix
 
     Returns:
         Dictionary where the key is the name as defined in the data and the value
@@ -149,6 +171,10 @@ def load_hierarchy_file(
 
 # --------------------------------------------------------------------------------------
 def _create_dataset_from_nodes(nodes):
+    """
+    Builds the serialised dataset for the given nodes (see
+    hierarchy_to_dict for the format).
+    """
     all_node_data = dict()
 
     for node in nodes:
@@ -171,14 +197,13 @@ def _create_dataset_from_nodes(nodes):
             name=node,
             parent=parent,
             attributes=dict(),
-            type=cmds.nodeType(node),
+            type=node_type,
             root_transform_data=dict(),
         )
 
         if node_type == "joint":
 
             item_data["radius"] = cmds.getAttr(f"{node}.radius")
-            # item_data["root_transform_data"] = _get_root_transform_data(node)
 
             for type_ in ["translate", "rotate", "scale", "jointOrient"]:
                 for axis in ["X", "Y", "Z"]:
@@ -187,8 +212,6 @@ def _create_dataset_from_nodes(nodes):
                     )
 
         if node_type == "transform":
-
-            # item_data["root_transform_data"] = _get_root_transform_data(node)
 
             for type_ in ["translate", "rotate", "scale"]:
                 for axis in ["X", "Y", "Z"]:
@@ -227,12 +250,10 @@ def _create_dataset_from_nodes(nodes):
 
             except IndexError:
                 # -- We cannot get the constraint output, so skip
-                print("Could not get constraint target")
                 continue
 
             # -- We wont save constraints to nodes outside of our save list
             if constrain_to not in nodes:
-                print(f"{constrain_to} does not exist")
                 continue
 
             item_data["constrain_this"] = cmds.listRelatives(node, parent=True)[0]
@@ -247,21 +268,23 @@ def _create_dataset_from_nodes(nodes):
 def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_names=True,
                                invert=False, worldspace_root=False):
     """
-    Creates a joint hierarchy based on the given data. If the data
-    is a dictionary it is parsed as is otherwise it is assumed to be
-    a json file and will be read accordingly.
+    Creates the joints and transforms described by the given dataset (in
+    the format returned by hierarchy_to_dict), rebuilds their parenting and
+    applies the stored attribute values. Entries of any other type are
+    skipped.
 
-    :param root_parent: The joint in which to parent the generated
-        structure under.
-    :type root_parent: pm.nt.Joint
+    Args:
+        root_parent: The node to parent the root nodes (those without a
+            parent in the data) under. If empty they stay at the scene root.
+        dataset: The dataset dictionary
+        apply_names: Whether to rename the created nodes to the stored names
+        invert: Whether to negate the translation of every created node
+        worldspace_root: If true, the local matrix of each root node is
+            reapplied as its world space matrix
 
-    :param dataset: Either a dictionary conforming to the structure
-        generated by the write_joint_file method or a filepath to a json file
-        containing the equivalent structure.
-    :type dataset: dict or str
-
-    :return: dictionary where the key is the name entry in the file
-        and the value is the generated joint
+    Returns:
+        Dictionary where the key is the name entry in the data and the value
+        is the created node
     """
     generated_item_map = dict()
 
@@ -289,12 +312,9 @@ def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_nam
                 item_data["name"]
             )
 
-        # -- Set the joint attributes
         generated_item_map[item_data["name"]] = created_item
 
-    root_nodes = []
-
-    # -- Now set up the parenting
+    # -- Now set up the parenting and set the attributes
     for identifier, item in generated_item_map.items():
 
         parent_name = dataset[identifier]["parent"]
@@ -310,7 +330,6 @@ def _create_nodes_from_dataset(root_parent: str, dataset: typing.Dict, apply_nam
                 item,
                 root_parent,
             )
-            root_nodes.append(identifier)
 
         for name, value in dataset[identifier]["attributes"].items():
             if cmds.objExists(item + "." + name):
