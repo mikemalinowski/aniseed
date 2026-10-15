@@ -1,9 +1,13 @@
+"""
+Provides the "Limb : Head" component, which builds a chain of fk neck
+controls followed by a head control, each driving its joint, with optional
+world alignment. It can generate the neck and head joints from head.json when
+added to the stack.
+"""
 import os
+import mref
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
-
-from aniseed.components.maya.limbs.hand.hand import HandComponent
 
 
 class HeadComponent(aniseed.RigComponent):
@@ -19,6 +23,11 @@ class HeadComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, neck joints and head joint inputs, the prefix,
+        location and world alignment options, and the neck and head control
+        outputs (the head being the default).
+        """
         super(HeadComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -77,23 +86,31 @@ class HeadComponent(aniseed.RigComponent):
             is_default=True,
         )
 
-        # -- Declare our properties we will use during our build process
-        self.neck_control = None
-        self.head_control = None
-
     def on_enter_stack(self):
+        """
+        Creates the neck and head joints under the current selection and
+        attempts to hook the parent input to a "tip" or "chest" output.
+        """
         self.user_func_create_skeleton()
 
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent(tags=["tip", "chest"])
 
     def input_widget(self, requirement_name):
-        if requirement_name in ["Parent", "Neck Joint", "Head Joint"]:
+        """
+        Returns an object selector for the parent and head joint inputs and
+        an object list for the neck joints.
+        """
+        if requirement_name in ["Parent", "Head Joint"]:
             return aniseed.widgets.ObjectSelector(component=self)
         if requirement_name == "Neck Joints":
             return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name: str):
+        """
+        Returns an item selector of the left, middle and right locations for
+        the Location option.
+        """
         if option_name in ["Location"]:
             return aniseed.widgets.ItemSelector(
                 items=[
@@ -105,18 +122,22 @@ class HeadComponent(aniseed.RigComponent):
             )
 
     def user_functions(self):
+        """
+        Exposes a "Create Joints" menu entry when no head joint is set.
+        """
         menu = super(HeadComponent, self).user_functions()
 
         if not self.input("Head Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
-            return menu
 
         return menu
 
     def run(self):
-
-        neck_joints = self.input("Neck Joints").get()
-        head_joint = self.input("Head Joint").get()
+        """
+        Builds a chain of fk neck controls (one per neck joint) followed by a
+        head control, each driving its joint. The neck control output is the
+        first neck control, so at least one neck joint is required.
+        """
 
         prefix = self.option("Description Prefix").get()
         location = self.option("Location").get()
@@ -124,10 +145,9 @@ class HeadComponent(aniseed.RigComponent):
         neck_controls = []
         next_parent = self.input("Parent").get()
 
-        for neck_joint in neck_joints:
-            # -- Create the main hip control
-            neck_control = aniseed_toolkit.run(
-                "Create Control",
+        for neck_joint in self.input("Neck Joints").get():
+            # -- Create the neck control
+            neck_control = aniseed_toolkit.control.create(
                 description=f"{prefix}Neck",
                 location=location,
                 parent=next_parent,
@@ -138,30 +158,19 @@ class HeadComponent(aniseed.RigComponent):
             )
 
             if self.option("Align Neck To World").get():
-                mc.xform(
-                    neck_control.org,
-                    rotation=[0, 0, 0],
-                    worldSpace=True,
-                )
+                mref.get(neck_control.org).set_rotation([0, 0, 0], space="world")
 
             # -- Constrain our neck
-            mc.parentConstraint(
+            aniseed_toolkit.constraints.parent_and_scale(
                 neck_control.ctl,
                 neck_joint,
-                maintainOffset=True,
-            )
-
-            mc.scaleConstraint(
-                neck_control.ctl,
-                neck_joint,
-                maintainOffset=True,
             )
             neck_controls.append(neck_control)
             next_parent = neck_control.ctl
 
-        # -- Create the main hip control
-        head_control = aniseed_toolkit.run(
-            "Create Control",
+        # -- Create the head control
+        head_joint = self.input("Head Joint").get()
+        head_control = aniseed_toolkit.control.create(
             description=f"{prefix}Head",
             location=location,
             parent=next_parent,
@@ -173,23 +182,12 @@ class HeadComponent(aniseed.RigComponent):
         )
 
         if self.option("Align Head To World").get():
-            mc.xform(
-                head_control.org,
-                rotation=[0, 0, 0],
-                worldSpace=True,
-            )
+            mref.get(head_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Constrain the head joint
-        mc.parentConstraint(
+        aniseed_toolkit.constraints.parent_and_scale(
             head_control.ctl,
             head_joint,
-            maintainOffset=True,
-        )
-
-        mc.scaleConstraint(
-            head_control.ctl,
-            head_joint,
-            maintainOffset=True,
         )
 
         # -- Set our outputs
@@ -197,11 +195,15 @@ class HeadComponent(aniseed.RigComponent):
         self.output("Neck Control").set(neck_controls[0].ctl)
 
     def user_func_create_skeleton(self):
+        """
+        Loads the neck and head joints from head.json under the first selected
+        node, renames them using the prefix and location, sets the neck and
+        head inputs and snaps the neck to the parent's position.
+        """
 
         parent = aniseed_toolkit.mutils.first_selected()
 
-        joint_map = aniseed_toolkit.run(
-            "Load Joints File",
+        joint_map = aniseed_toolkit.io.load_hierarchy_file(
             root_parent=parent,
             filepath=os.path.join(
                 os.path.dirname(__file__),
@@ -214,8 +216,8 @@ class HeadComponent(aniseed.RigComponent):
         location = self.option("Location").get()
         prefix = self.option("Description Prefix").get()
 
-        neck = mc.rename(
-            joint_map["JNT_Neck_01_MD"],
+        neck = mref.get(joint_map["JNT_Neck_01_MD"])
+        neck.rename(
             self.config.generate_name(
                 classification=self.config.joint,
                 description=f"{prefix}Neck",
@@ -223,19 +225,18 @@ class HeadComponent(aniseed.RigComponent):
             ),
         )
 
-
-        head = mc.rename(
-            joint_map["JNT_Head_01_MD"],
+        head = mref.get(joint_map["JNT_Head_01_MD"])
+        head.rename(
             self.config.generate_name(
                 classification=self.config.joint,
                 description=f"{prefix}Head",
                 location=location
             ),
         )
+        head.set_rotation([0, 0, 0], space="world")
 
-        mc.xform(head, rotation=[0, 0, 0], worldSpace=True)
-        self.input("Neck Joints").set([neck])
-        self.input("Head Joint").set(head)
+        self.input("Neck Joints").set([neck.name()])
+        self.input("Head Joint").set(head.name())
 
         if parent:
-            aniseed_toolkit.transformation.snap_position(neck, parent)
+            aniseed_toolkit.transformation.snap_position(neck.name(), parent)

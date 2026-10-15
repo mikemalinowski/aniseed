@@ -1,11 +1,15 @@
+"""
+Provides the "Limb : Mouth" component, which rigs a jaw joint and upper and
+lower lip joints. The jaw control carries StickyLips and LipBias attributes that
+blend the lip controls between the parent and the jaw, and an optional aim
+control can drive the jaw. Joints can be created for the user on entering the
+stack.
+"""
 import os
+import mref
 import typing
-
 import aniseed
 import aniseed_toolkit
-
-import mref
-from maya import cmds
 
 
 class MouthComponent(aniseed.RigComponent):
@@ -18,6 +22,10 @@ class MouthComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, jaw and upper/lower lip joint inputs, the naming
+        and aim control options and the jaw and lip control outputs.
+        """
         super(MouthComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -79,40 +87,50 @@ class MouthComponent(aniseed.RigComponent):
         )
 
     def on_enter_stack(self):
+        """
+        Creates the mouth joints (relative to the current selection) and hooks
+        the Parent input to the parent component's default output.
+        """
         self.user_func_create_skeleton()
 
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
     def input_widget(self, requirement_name: str):
-
-        object_attributes = [
-            "Parent",
-            "Jaw Joint",
-            "Upper Lip Joint",
-            "Lower Lip Joint",
-        ]
-
-        for object_attribute in object_attributes:
-            return aniseed.widgets.ObjectSelector(component=self)
+        """
+        Returns an object selector for every input.
+        """
+        # -- Note: every input is given an object selector (this previously
+        # -- iterated a list of input names but always returned on the
+        # -- first iteration, regardless of the requirement name)
+        return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
+        """
+        Returns a location selector for the Location option.
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(config=self.config)
 
     def user_functions(self) -> typing.Dict[str, callable]:
+        """
+        Adds a "Create Joints" menu entry when no jaw joint has been set.
+        """
         menu = super(MouthComponent, self).user_functions()
 
         if not self.input("Jaw Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
-            return menu
 
         return menu
 
     def run(self):
-
-        # -- Start by getting our requirements
-        parent = self.input("Parent").get()
+        """
+        Builds the jaw and upper/lower lip controls. StickyLips and LipBias
+        attributes on the jaw control blend the lips between the parent, the
+        jaw and a half-jaw transform. If Use Aim Control is set, the jaw is
+        additionally driven by an aim control (which proxies those attributes).
+        The joints are parent and scale constrained to their controls.
+        """
 
         # -- Get our joints
         jaw_joint = self.input("Jaw Joint").get()
@@ -126,26 +144,24 @@ class MouthComponent(aniseed.RigComponent):
         if prefix:
             prefix += "_"
 
-        jaw_length = aniseed_toolkit.run(
-            "Distance Between",
+        jaw_length = aniseed_toolkit.transformation.distance_between(
             jaw_joint,
             lower_lip_joint,
         )
 
         # -- Create our component org to keep everything together
-        component_org = aniseed_toolkit.run(
-            "Create Basic Transform",
+        component_org = aniseed_toolkit.transforms.create(
             classification=self.config.organisational,
-            description=prefix+"Mouth",
+            description=prefix + "Mouth",
             location=location,
             config=self.config,
-            parent=parent,
+            parent=self.input("Parent").get(),
             match_to=jaw_joint
         )
 
         # -- Start by creating our jaw control
         jaw_control = aniseed_toolkit.control.create(
-            description=prefix+"Jaw",
+            description=prefix + "Jaw",
             location=location,
             parent=component_org,
             shape="core_cube",
@@ -154,8 +170,7 @@ class MouthComponent(aniseed.RigComponent):
         )
         self.output("Jaw Control").set(jaw_control.ctl)
 
-        aniseed_toolkit.run(
-            "Scale Shapes",
+        aniseed_toolkit.shapes.scale(
             jaw_control.ctl,
             scale_by=jaw_length,
             x=0.5,
@@ -163,8 +178,7 @@ class MouthComponent(aniseed.RigComponent):
             z=1,
         )
 
-        aniseed_toolkit.run(
-            "Offset Shapes",
+        aniseed_toolkit.shapes.offset(
             jaw_control.ctl,
             offset_by=jaw_length,
             x=0,
@@ -173,233 +187,58 @@ class MouthComponent(aniseed.RigComponent):
         )
 
         # -- Now add our animation attributes to the jaw control
-        cmds.addAttr(
-            jaw_control.ctl,
-            shortName="StickyLips",
-            attributeType="float",
+        jaw_controller = mref.get(jaw_control.ctl)
+        sticky_lips_attr = jaw_controller.add_attribute(
+            "StickyLips",
+            value=None,
+            attribute_type="float",
             keyable=True,
             defaultValue=0,
             minValue=0,
             maxValue=1,
         )
 
-        cmds.addAttr(
-            jaw_control.ctl,
-            shortName="LipBias",
-            attributeType="float",
+        sticky_bias_attr = jaw_controller.add_attribute(
+            "LipBias",
+            value=None,
+            attribute_type="float",
             keyable=True,
             defaultValue=0.5,
             minValue=0,
             maxValue=1,
         )
-        sticky_lips_attr = f"{jaw_control.ctl}.StickyLips"
-        sticky_bias_attr = f"{jaw_control.ctl}.LipBias"
 
         # -- The half jaw is constrained to both the parent and the
         # -- jaw
-        half_jaw = aniseed_toolkit.run(
-            "Create Basic Transform",
-            classification="rot",
-            description=prefix+"HalfJaw",
-            location=location,
-            config=self.config,
-            parent=component_org,
-            match_to=component_org
-        )
+        half_jaw = self._create_mechanism_transform("HalfJaw", prefix, location, component_org)
 
         # -- Create our sticky lip nodes
-        upper_lip_sticky = aniseed_toolkit.run(
-            "Create Basic Transform",
-            classification="rot",
-            description=prefix+"UpperLipSticky",
-            location=location,
-            config=self.config,
-            parent=component_org,
-            match_to=component_org
-        )
+        upper_lip_sticky = self._create_mechanism_transform("UpperLipSticky", prefix, location, component_org)
+        lower_lip_sticky = self._create_mechanism_transform("LowerLipSticky", prefix, location, component_org)
 
-        lower_lip_sticky = aniseed_toolkit.run(
-            "Create Basic Transform",
-            classification="rot",
-            description=prefix+"LowerLipSticky",
-            location=location,
-            config=self.config,
-            parent=component_org,
-            match_to=component_org
-        )
+        # -- Constrain the half jaw, upper lip and lower lip between
+        # -- their two drivers
+        self._constrain_between(sticky_bias_attr, component_org, jaw_control.ctl, half_jaw)
+        self._constrain_between(sticky_lips_attr, component_org, half_jaw, upper_lip_sticky)
+        self._constrain_between(sticky_lips_attr, jaw_control.ctl, half_jaw, lower_lip_sticky)
 
-        # --------------------------
-        # -- Constraint the half jaw
-        half_jaw_cns = cmds.parentConstraint(
-            component_org,
-            half_jaw,
-        )[0]
-
-        cmds.parentConstraint(
-            jaw_control.ctl,
-            half_jaw,
-        )
-
-        # -- Hook up our constraint driving connections
-        half_jaw_reverse_node = cmds.createNode("reverse")
-
-        cmds.connectAttr(
-            sticky_bias_attr,
-            half_jaw_cns + "." + cmds.parentConstraint(
-                half_jaw_cns,
-                query=True,
-                weightAliasList=True,
-            )[1]
-        )
-
-        cmds.connectAttr(
-            sticky_bias_attr,
-            f"{half_jaw_reverse_node}.inputX",
-        )
-
-        cmds.connectAttr(
-            f"{half_jaw_reverse_node}.outputX",
-            half_jaw_cns + "." + cmds.parentConstraint(
-                half_jaw_cns,
-                query=True,
-                weightAliasList=True,
-            )[0]
-        )
-
-        # --------------------------
-        # -- Constrain the upper lip
-        upper_lip_cns = cmds.parentConstraint(
-            component_org,
-            upper_lip_sticky,
-        )[0]
-
-        cmds.parentConstraint(
-            half_jaw,
-            upper_lip_sticky,
-        )
-
-        # -- Hook up our constraint driving connections
-        upper_lip_reverse_node = cmds.createNode("reverse")
-
-        cmds.connectAttr(
-            sticky_lips_attr,
-            upper_lip_cns + "." + cmds.parentConstraint(
-                upper_lip_cns,
-                query=True,
-                weightAliasList=True,
-            )[1]
-        )
-
-        cmds.connectAttr(
-            sticky_lips_attr,
-            f"{upper_lip_reverse_node}.inputX",
-        )
-
-        cmds.connectAttr(
-            f"{upper_lip_reverse_node}.outputX",
-            upper_lip_cns + "." + cmds.parentConstraint(
-                upper_lip_cns,
-                query=True,
-                weightAliasList=True,
-            )[0]
-        )
-
-        # --------------------------
-        # -- Constrain the lower lip
-        lower_lip_cns = cmds.parentConstraint(
-            jaw_control.ctl,
-            lower_lip_sticky,
-        )[0]
-
-        cmds.parentConstraint(
-            half_jaw,
-            lower_lip_sticky,
-        )
-
-
-
-        # -- Hook up our constraint driving connections
-        lower_lip_reverse_node = cmds.createNode("reverse")
-
-        cmds.connectAttr(
-            sticky_lips_attr,
-            lower_lip_cns + "." + cmds.parentConstraint(
-                lower_lip_cns,
-                query=True,
-                weightAliasList=True,
-            )[1]
-        )
-
-        cmds.connectAttr(
-            sticky_lips_attr,
-            f"{lower_lip_reverse_node}.inputX",
-        )
-
-        cmds.connectAttr(
-            f"{lower_lip_reverse_node}.outputX",
-            lower_lip_cns + "." + cmds.parentConstraint(
-                lower_lip_cns,
-                query=True,
-                weightAliasList=True,
-            )[0]
-        )
-
-        upper_lip_control = aniseed_toolkit.control.create(
-            description=prefix+"UpperLip",
-            location=location,
-            parent=upper_lip_sticky,
-            shape="core_cube",
-            rotate_shape=[0, 90, 0],
-            config=self.config,
-            match_to=upper_lip_joint,
-        )
+        upper_lip_control = self._create_lip_control("UpperLip", prefix, location, upper_lip_sticky, upper_lip_joint, jaw_length)
         self.output("Upper Lip Control").set(upper_lip_control.ctl)
 
-        aniseed_toolkit.run(
-            "Scale Shapes",
-            upper_lip_control.ctl,
-            scale_by=jaw_length * 0.2,
-            x=1,
-            y=0.5,
-            z=0,
-        )
-
-        lower_lip_control = aniseed_toolkit.control.create(
-            description=prefix+"LowerLip",
-            location=location,
-            parent=lower_lip_sticky,
-            shape="core_cube",
-            rotate_shape=[0, 90, 0],
-            config=self.config,
-            match_to=lower_lip_joint,
-        )
+        lower_lip_control = self._create_lip_control("LowerLip", prefix, location, lower_lip_sticky, lower_lip_joint, jaw_length)
         self.output("Lower Lip Control").set(lower_lip_control.ctl)
-
-        aniseed_toolkit.run(
-            "Scale Shapes",
-            lower_lip_control.ctl,
-            scale_by=jaw_length * 0.2,
-            x=1,
-            y=0.5,
-            z=0,
-        )
 
         # -- If we need to create the aim control, set that up now
         if self.option("Use Aim Control").get():
 
-            chain_direction = aniseed_toolkit.run(
-                "Get Chain Facing Direction",
+            chain_direction = aniseed_toolkit.direction.get_chain_facing_direction(
                 jaw_joint,
                 lower_lip_joint,
-                epsilon=aniseed_toolkit.run(
-                    "Distance Between",
-                    jaw_joint,
-                    lower_lip_joint,
-                ) * 0.3,
+                epsilon=jaw_length * 0.3,
             )
 
             aim_control = aniseed_toolkit.control.create(
-                description=prefix+"JawAim",
+                description=prefix + "JawAim",
                 location=location,
                 parent=component_org,
                 shape="core_sphere",
@@ -408,8 +247,7 @@ class MouthComponent(aniseed.RigComponent):
                 match_to=jaw_joint,
             )
 
-            aniseed_toolkit.run(
-                "Scale Shapes",
+            aniseed_toolkit.shapes.scale(
                 aim_control.ctl,
                 scale_by=jaw_length,
                 x=0.25,
@@ -422,99 +260,137 @@ class MouthComponent(aniseed.RigComponent):
                 jaw_control.ctl,
             )
 
-            cmds.setAttr(
-                f"{aim_control.org}.translate{chain_direction.axis.upper()}",
+            mref.get(aim_control.org).attr(f"translate{chain_direction.axis.upper()}").set(
                 jaw_length * self.option("Aim Control Distance Multiplier").get(),
             )
 
-            aim_node = aniseed_toolkit.run(
-                "Create Basic Transform",
+            aim_node = aniseed_toolkit.transforms.create(
                 classification="aim",
-                description=prefix+"JawAimSolver",
+                description=prefix + "JawAimSolver",
                 location=location,
                 config=self.config,
                 parent=component_org,
                 match_to=component_org
             )
 
-            aim_upvector = aniseed_toolkit.run(
-                "Create Basic Transform",
-                classification="aim",
-                description=prefix+"JawAimUpvector",
-                location=location,
-                config=self.config,
-                parent=component_org,
-                match_to=component_org
+            aim_upvector = mref.get(
+                aniseed_toolkit.transforms.create(
+                    classification="aim",
+                    description=prefix + "JawAimUpvector",
+                    location=location,
+                    config=self.config,
+                    parent=component_org,
+                    match_to=component_org
+                ),
             )
+            aim_upvector.attr(f"translate{chain_direction.cross_axis.upper()}").set(10)
 
-            cmds.setAttr(
-                f"{aim_upvector}.translate{chain_direction.cross_axis.upper()}",
-                10,
-            )
-
-            cmds.aimConstraint(
+            mref.aimConstraint(
                 aim_control.ctl,
                 aim_node,
                 aimVector=chain_direction.axis_vector,
-                upVector=aniseed_toolkit.run("Get Direction Class", chain_direction.cross_axis).axis_vector,
+                upVector=aniseed_toolkit.direction.Direction(chain_direction.cross_axis).axis_vector,
                 worldUpType="object",
                 worldUpObject=aim_upvector,
                 maintainOffset=False,
             )
 
             # -- Now constrain the zro of the jaw control
-            cmds.parentConstraint(
+            mref.parentConstraint(
                 aim_node,
                 jaw_control.zero,
                 maintainOffset=True,
             )
 
             # -- Add proxy attributes to the control
-            cmds.addAttr(
-                aim_control.ctl,
-                shortName="StickyLips",
-                proxy=f"{jaw_control.ctl}.StickyLips",
-                keyable=True,
+            aim_controller = mref.get(aim_control.ctl)
+            aim_controller.add_proxy(
+                "StickyLips",
+                sticky_lips_attr,
                 defaultValue=0,
                 minValue=0,
                 maxValue=1,
             )
 
-            cmds.addAttr(
-                aim_control.ctl,
-                shortName="LipBias",
-                proxy=f"{jaw_control.ctl}.LipBias",
-                keyable=True,
+            aim_controller.add_proxy(
+                "LipBias",
+                sticky_bias_attr,
                 defaultValue=0.5,
                 minValue=0,
                 maxValue=1,
             )
 
-        # -- Now we create the actual controls for the lps
         # -- Finally we now create the constraints for the joints
-        for constraint_type in [cmds.parentConstraint, cmds.scaleConstraint]:
-            constraint_type(
-                upper_lip_control.ctl,
-                upper_lip_joint,
-                maintainOffset=True,
-            )
+        for constraint_type in [mref.parentConstraint, mref.scaleConstraint]:
+            for control, joint in [
+                (upper_lip_control, upper_lip_joint),
+                (lower_lip_control, lower_lip_joint),
+                (jaw_control, jaw_joint),
+            ]:
+                constraint_type(
+                    control.ctl,
+                    joint,
+                    maintainOffset=True,
+                )
 
-            constraint_type(
-                lower_lip_control.ctl,
-                lower_lip_joint,
-                maintainOffset=True,
-            )
+    def _create_mechanism_transform(self, description, prefix, location, component_org) -> str:
+        """
+        Creates a mechanical transform under (and matched to) the component org
+        """
+        return aniseed_toolkit.transforms.create(
+            classification="rot",
+            description=prefix + description,
+            location=location,
+            config=self.config,
+            parent=component_org,
+            match_to=component_org
+        )
 
-            constraint_type(
-                jaw_control.ctl,
-                jaw_joint,
-                maintainOffset=True,
-            )
+    @classmethod
+    def _constrain_between(cls, attribute, first_driver, second_driver, driven):
+        """
+        Parent constrains the driven node to both drivers, with the given
+        attribute blending between them (0 being the first driver and 1
+        being the second).
+        """
+        constraint = mref.parentConstraint(first_driver, driven)[0]
+        mref.parentConstraint(second_driver, driven)
+
+        aniseed_toolkit.constraints.blend_weights(attribute, constraint)
+
+    def _create_lip_control(self, description, prefix, location, parent, match_to, jaw_length):
+        """
+        Creates a lip control, scaling its shape relative to the jaw length
+        """
+        lip_control = aniseed_toolkit.control.create(
+            description=prefix + description,
+            location=location,
+            parent=parent,
+            shape="core_cube",
+            rotate_shape=[0, 90, 0],
+            config=self.config,
+            match_to=match_to,
+        )
+
+        aniseed_toolkit.shapes.scale(
+            lip_control.ctl,
+            scale_by=jaw_length * 0.2,
+            x=1,
+            y=0.5,
+            z=0,
+        )
+        return lip_control
 
     def user_func_create_skeleton(self):
+        """
+        Creates a jaw joint with a child lower lip joint (4cm along Z) and an
+        upper lip joint at the lower lip position, then sets the joint inputs.
+        The joints are parented to, and the jaw snapped to, the first selected
+        object if there is one.
+        """
 
         parent = aniseed_toolkit.mutils.first_selected()
-
+        location = self.option("Location").get()
         prefix = self.option("Naming Prefix").get()
 
         if prefix:
@@ -522,20 +398,20 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Create the jaw and the lower lip
         jaw_joint = aniseed_toolkit.joints.create(
-            description=prefix+"Jaw",
-            location=self.option("Location").get(),
+            description=prefix + "Jaw",
+            location=location,
             parent=parent,
             config=self.config,
         )
 
         lower_lip_joint = aniseed_toolkit.joints.create(
-            description=prefix+"LowerLip",
-            location=self.option("Location").get(),
+            description=prefix + "LowerLip",
+            location=location,
             parent=jaw_joint,
             match_to=jaw_joint,
             config=self.config,
         )
-        cmds.setAttr(f"{lower_lip_joint}.tz", aniseed_toolkit.units.from_cm(4))
+        mref.get(lower_lip_joint).translateZ.set(aniseed_toolkit.units.from_cm(4))
 
         # -- If we have a parent, then snap the jaw to the parent position
         if parent:
@@ -543,8 +419,8 @@ class MouthComponent(aniseed.RigComponent):
 
         # -- Now we create the upper lip
         upper_lip_joint = aniseed_toolkit.joints.create(
-            description=prefix+"UpperLip",
-            location=self.option("Location").get(),
+            description=prefix + "UpperLip",
+            location=location,
             match_to=lower_lip_joint,
             parent=parent,
             config=self.config,

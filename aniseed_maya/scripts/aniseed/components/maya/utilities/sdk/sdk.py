@@ -1,8 +1,14 @@
+"""
+Provides the "Utility : Set Driven Key" component, which drives a
+destination attribute from a source attribute through an animCurveUU
+node. The curve shape is stored on the component, captured from the live
+curve with the Store Set Driven Key Data button, so it rebuilds
+identically.
+"""
 import typing
 
 import mref
 import aniseed
-from maya import cmds
 
 
 class SetDrivenKey(aniseed.RigComponent):
@@ -56,6 +62,11 @@ class SetDrivenKey(aniseed.RigComponent):
     }
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the source and destination node and attribute inputs, the Force
+        option, the hidden curve data and curve path storage, and the Store
+        Curve Data button option.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -108,10 +119,18 @@ class SetDrivenKey(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the Source Node and Destination Node
+        inputs.
+        """
         if requirement_name in ["Source Node", "Destination Node"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
+        """
+        Returns a Store Set Driven Key Data button for the Store Curve Data
+        option.
+        """
         if option_name == "Store Curve Data":
             return aniseed.widgets.ButtonWidget(
                 button_name="Store Set Driven Key Data",
@@ -119,11 +138,18 @@ class SetDrivenKey(aniseed.RigComponent):
             )
 
     def user_functions(self) -> typing.Dict[str, callable]:
+        """
+        Exposes the Select Curve menu entry.
+        """
         return {
             "Select Curve": self.user_func_select_curve,
         }
 
     def is_valid(self) -> bool:
+        """
+        Checks that the source and destination nodes and attributes are all
+        given.
+        """
         for input_name in (
             "Source Node",
             "Source Attribute",
@@ -137,6 +163,11 @@ class SetDrivenKey(aniseed.RigComponent):
         return True
 
     def run(self):
+        """
+        Creates an animCurveUU node between the source and destination
+        attributes, shapes it from the stored Curve Data and records its name in
+        Curve Path.
+        """
 
         source_node = mref.get(self.input("Source Node").get())
         source_attribute_name = self.input("Source Attribute").get()
@@ -147,12 +178,14 @@ class SetDrivenKey(aniseed.RigComponent):
         source_attribute = source_node.attr(source_attribute_name)
         destination_attribute = destination_node.attr(destination_attribute_name)
 
-        # -- Hook up the curve node
+        # -- Hook up the curve node. This component has no location option,
+        # -- so the curve is named with the config's middle location.
         curve_node = mref.create(
             "animCurveUU",
             name=self.config.generate_name(
                 classification="mech",
                 description=f"SDK_{destination_attribute_name}",
+                location=self.config.middle,
             ),
         )
         source_attribute.connect(curve_node.attr("input"), force=force)
@@ -168,14 +201,30 @@ class SetDrivenKey(aniseed.RigComponent):
         return True
 
     def user_func_store_curve(self):
-        curve_name = self.option("Curve Path").get()
+        """
+        Stores the shape of the curve created by the last build into Curve Data.
+        """
+        curve = self._curve()
 
-        if curve_name and cmds.objExists(curve_name):
-            curve = mref.get(curve_name)
+        if curve:
             self.option("Curve Data").set(curve.to_dictionary())
 
     def user_func_select_curve(self):
+        """
+        Selects the curve created by the last build, if it exists.
+        """
+        curve = self._curve()
+
+        if curve:
+            curve.select()
+
+    def _curve(self) -> mref.ReferencedItem | None:
+        """
+        Returns the curve node created by the last build, if it still exists
+        """
         curve_name = self.option("Curve Path").get()
 
-        if curve_name and cmds.objExists(curve_name):
-            cmds.select(curve_name)
+        if curve_name and mref.objExists(curve_name):
+            return mref.get(curve_name)
+
+        return None

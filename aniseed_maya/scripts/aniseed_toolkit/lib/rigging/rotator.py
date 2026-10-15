@@ -1,20 +1,25 @@
 import mref
 
+from .. import constraints
 
-def create_rotator(target_a, target_b, match_to, parent, description, location, config) -> mref.ReferencedItem:
+
+def create_rotator(target_a, target_b, match_to, parent, description, location, config) -> str:
     """
-    This will create a transform which blends rotation between two nodes
+    This will create a transform which blends rotation between two nodes. The
+    transform is given a "Blend" attribute, where 0 follows target_a and 1
+    follows target_b.
+
     Args:
-        target_a:
-        target_b:
-        match_to:
-        parent:
-        description:
-        location:
-        config:
+        target_a: The first node to blend between
+        target_b: The second node to blend between
+        match_to: The node to match the transform of the rotator to
+        parent: The node to parent the rotator under
+        description: The description to use when naming the rotator
+        location: The location to use when naming the rotator
+        config: The rig configuration
 
     Returns:
-
+        The name of the rotator transform
     """
     rotator_node = mref.create(
         "transform",
@@ -42,20 +47,13 @@ def create_rotator(target_a, target_b, match_to, parent, description, location, 
         maintainOffset=True,
     )
 
-    constraint = mref.get(
-        mref.parentConstraint(
-            target_b,
-            rotator_node,
-            maintainOffset=True,
-        )[0]
-    )
+    constraint = mref.parentConstraint(
+        target_b,
+        rotator_node,
+        maintainOffset=True,
+    )[0]
     constraint.attr("interpType").set(0)  # No Flip
 
-    weight_attributes = constraint.weight_attributes()
-
-    reverse_node = mref.create("reverse")
-    blend_attribute.connect(reverse_node.attr("inputX"))
-    reverse_node.attr("outputX").connect(weight_attributes[0])
-    blend_attribute.connect(weight_attributes[1])
+    constraints.blend_weights(blend_attribute, constraint)
 
     return rotator_node.name()

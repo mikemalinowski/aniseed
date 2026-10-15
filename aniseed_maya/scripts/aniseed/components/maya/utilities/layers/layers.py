@@ -1,6 +1,24 @@
+"""
+Provides components for populating Maya display layers, creating the layer
+if needed. "Utility : Add Children Of Type To Layer" adds every descendant
+of a root node whose type is in a given list, and "Utility : Add Controls
+To Layer" adds every controller whose name contains a given string.
+"""
 import mref
 import aniseed
-from maya import cmds
+
+
+def _ensure_display_layer(layer_name: str) -> None:
+    """
+    Creates an empty display layer with the given name if it does not
+    already exist. Raises a ValueError if a node of another type
+    already has that name.
+    """
+    if not mref.objExists(layer_name):
+        mref.createDisplayLayer(name=layer_name, empty=True)
+
+    elif mref.get(layer_name).node_type() != "displayLayer":
+        raise ValueError(f"'{layer_name}' exists but is not a displayLayer.")
 
 
 class AddChildrenOfTypeToLayer(aniseed.RigComponent):
@@ -13,6 +31,9 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
     identifier = "Utility : Add Children Of Type To Layer"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Layer Name, Root Node and Node Types inputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -36,6 +57,10 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the Root Node input and a text list for
+        the Node Types input.
+        """
         if requirement_name == "Root Node":
             return aniseed.widgets.ObjectSelector()
 
@@ -43,15 +68,15 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
             return aniseed.widgets.TextList()
 
     def run(self):
+        """
+        Ensures the display layer exists, then adds every descendant of the
+        root node whose node type is in Node Types to it.
+        """
         layer_name = self.input("Layer Name").get()
-        root_node_name = self.input("Root Node").get()
+        root_node = mref.get(self.input("Root Node").get())
         allowable_types = self.input("Node Types").get()
 
-        self.ensure_exists(layer_name)
-        self.add_nodes(layer_name, root_node_name, allowable_types)
-
-    def add_nodes(self, layer_name, root_node_name, allowable_types):
-        root_node = mref.get(root_node_name)
+        _ensure_display_layer(layer_name)
 
         nodes = mref.ReferenceList(
             [
@@ -61,15 +86,6 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
             ]
         )
         mref.editDisplayLayerMembers(layer_name, nodes.names(), noRecurse=True)
-
-    def ensure_exists(self, layer_name: str):
-
-        if cmds.objExists(layer_name):
-            if cmds.nodeType(layer_name) == "displayLayer":
-                return layer_name
-            else:
-                raise ValueError(f"'{layer_name}' exists but is not a displayLayer.")
-        return cmds.createDisplayLayer(name=layer_name, empty=True)
 
 
 class AddControlsToLayer(aniseed.RigComponent):
@@ -82,6 +98,10 @@ class AddControlsToLayer(aniseed.RigComponent):
     identifier = "Utility : Add Controls To Layer"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Layer Name and Root Node inputs and the Test By Full Name
+        option.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -104,31 +124,27 @@ class AddControlsToLayer(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the Root Node input.
+        """
         if requirement_name == "Root Node":
             return aniseed.widgets.ObjectSelector()
 
     def run(self):
+        """
+        Ensures the display layer exists, then adds every controller in the
+        scene whose name (or full name, depending on Test By Full Name) contains
+        the Root Node string to it.
+        """
         layer_name = self.input("Layer Name").get()
         root_node = self.input("Root Node").get()
         test_by_full_name = self.option("Test By Full Name").get()
 
-        self.ensure_exists(layer_name)
-        self.add_nodes(layer_name, root_node, test_by_full_name)
+        _ensure_display_layer(layer_name)
 
-    def add_nodes(self, layer_name, root_node, test_by_full_name):
-        all_controllers = [
+        controls = [
             control.name()
             for control in mref.controller(query=True, allControllers=True)
             if root_node in (control.full_name() if test_by_full_name else control.name())
         ]
-
-        mref.editDisplayLayerMembers(layer_name, all_controllers, noRecurse=True)
-
-    def ensure_exists(self, layer_name: str):
-
-        if cmds.objExists(layer_name):
-            if cmds.nodeType(layer_name) == "displayLayer":
-                return layer_name
-            else:
-                raise ValueError(f"'{layer_name}' exists but is not a displayLayer.")
-        return cmds.createDisplayLayer(name=layer_name, empty=True)
+        mref.editDisplayLayerMembers(layer_name, controls, noRecurse=True)

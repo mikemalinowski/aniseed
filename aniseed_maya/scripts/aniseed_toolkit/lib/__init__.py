@@ -15,8 +15,17 @@ from . import shapes
 from . import rig
 from . import skin
 from . import containts
+from . import constraints
 from . import direction
 from . import sets
 from . import component
 from . import space
 from . import units
+from . import facial_controls
+from . import offset_controls
+from . import stack_joints
+from . import control_mixins
+from . import component_outputs
+from . import matrix_drive
+from . import control_queries
+from . import option_files

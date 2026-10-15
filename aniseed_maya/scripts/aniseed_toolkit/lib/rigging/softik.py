@@ -1,43 +1,49 @@
-import aniseed
+import mref
 import aniseed_toolkit
-import maya.cmds as mc
+
+from .node_math import add, subtract, multiply, divide, exp, matrix_to_translate, length
 
 
 def create_two_bone_soft_ik(root, target, second_joint, third_joint, host=None):
+    """
+    Applies soft ik to a two bone chain by driving the translateX of the
+    second and third joints.
 
-    print(second_joint)
-    print(third_joint)
+    Args:
+        root: A node representing the root of the chain
+        target: A node representing the ik target
+        second_joint: The second joint of the chain
+        third_joint: The third (end) joint of the chain
+        host: The node to add the soft ik attributes to. A network node
+            is created if this is not given.
+    """
     facing_direction = aniseed_toolkit.direction.get_chain_facing_direction(
         second_joint,
         third_joint,
     )
 
     if not host:
-        host = mc.createNode("network")
+        host = mref.create("network").name()
 
     float_attrs = {
         "UpperAddition": 0,
         "LowerAddition": 0,
-        "DefaultUpperLength": abs(mc.getAttr(f"{second_joint}.tx")),
-        "DefaultLowerLength": abs(mc.getAttr(f"{third_joint}.tx")),
+        "DefaultUpperLength": abs(mref.get(f"{second_joint}.tx").get()),
+        "DefaultLowerLength": abs(mref.get(f"{third_joint}.tx").get()),
         "Stretch": 1,
         "SoftDistance": 0,
     }
 
-    matrix_attrs = {
-        "RootMatrix": None,
-        "TargetMatrix": None,
-    }
+    aniseed_toolkit.attributes.add_separator(host)
 
-    aniseed_toolkit.run("Add Separator Attribute", host)
-
+    host_node = mref.get(host)
     for attr, value in float_attrs.items():
-        mc.addAttr(
-            host,
-            shortName=attr,
-            at="float",
-            k=False if "Default" in attr else True,
-            dv=value
+        host_node.add_attribute(
+            attr,
+            value=None,
+            attribute_type="float",
+            keyable="Default" not in attr,
+            defaultValue=value,
         )
 
     default_upper_len_attr = f"{host}.DefaultUpperLength"
@@ -47,340 +53,94 @@ def create_two_bone_soft_ik(root, target, second_joint, third_joint, host=None):
     soft_dist_attr = f"{host}.SoftDistance"
     stretch_attr = f"{host}.Stretch"
 
-    mc.addAttr(
-        host,
-        shortName="root_matrix",
-        at="matrix",
-    )
-    root_matrix = f"{host}.root_matrix"
+    root_matrix = _add_matrix_attribute(host, "root_matrix")
+    target_matrix = _add_matrix_attribute(host, "target_matrix")
 
-    mc.addAttr(
-        host,
-        shortName="target_matrix",
-        at="matrix",
-    )
-    target_matrix = f"{host}.target_matrix"
-
-    mc.connectAttr(
-        f"{root}.worldMatrix[0]",
-        root_matrix,
-    )
-
-    mc.connectAttr(
-        f"{target}.worldMatrix[0]",
-        target_matrix,
-    )
+    mref.get(root).attr("worldMatrix[0]").connect(root_matrix)
+    mref.get(target).attr("worldMatrix[0]").connect(target_matrix)
 
     max_len_attr = add(
         add(add(default_upper_len_attr, upper_addition_attr), lower_addition_attr),
         default_lower_len_attr,
     )
 
-    upper_factor_attr = divide(
-        default_upper_len_attr,
-        max_len_attr
-    )
-
-    lower_factor_attr = divide(
-        default_lower_len_attr,
-        max_len_attr,
-    )
-
-    root_translate_attr = matrix_to_translate(root_matrix)
-    target_translate_attr = matrix_to_translate(target_matrix)
+    # -- These length factors are not used by the network, but the nodes
+    # -- are kept so that the names of every node created after them are
+    # -- unchanged.
+    divide(default_upper_len_attr, max_len_attr)
+    divide(default_lower_len_attr, max_len_attr)
 
     actual_distance_attr = length(
-        root_translate_attr,
-        target_translate_attr,
+        matrix_to_translate(root_matrix),
+        matrix_to_translate(target_matrix),
     )
 
-    # -- DaU
-    overstretch_amount_attr = subtract(
-        max_len_attr,
-        soft_dist_attr,
-    )
+    overstretch_amount_attr = subtract(max_len_attr, soft_dist_attr)
 
-    # -- CONDITION
-    cond = mc.createNode("condition")
+    # -- When the distance is greater than the overstretch amount we take
+    # -- the true (soft) track, otherwise the false (rigid) track
+    condition = mref.create("condition")
+    condition.operation.set(2)  # -- Greater Than
+    mref.get(actual_distance_attr).connect(condition.firstTerm)
+    mref.get(overstretch_amount_attr).connect(condition.secondTerm)
 
-    mc.setAttr(
-        f"{cond}.operation",
-        2,  # -- Greater Than
-    )
-
-    mc.connectAttr(
-        actual_distance_attr,
-        f"{cond}.firstTerm",
-    )
-
-    mc.connectAttr(
-        overstretch_amount_attr,
-        f"{cond}.secondTerm",
-    )
-
-    # -_ FALSE TRACK
-    false_upper_add_attr = add(
-        default_upper_len_attr,
-        upper_addition_attr
-    )
-
-    false_lower_add_attr = add(
-        default_lower_len_attr,
-        lower_addition_attr,
-    )
-
-    mc.connectAttr(
-        false_upper_add_attr,
-        f"{cond}.colorIfFalseR",
-    )
-
-    mc.connectAttr(
-        false_lower_add_attr,
-        f"{cond}.colorIfFalseG",
-    )
+    # -- FALSE TRACK
+    mref.get(add(default_upper_len_attr, upper_addition_attr)).connect(condition.colorIfFalseR)
+    mref.get(add(default_lower_len_attr, lower_addition_attr)).connect(condition.colorIfFalseG)
 
     # -- TRUE TRACK
-    n = subtract(
-        actual_distance_attr,
-        overstretch_amount_attr,
-    )
+    scale = _soft_scale(actual_distance_attr, overstretch_amount_attr, soft_dist_attr)
 
-    n = divide(
-        n,
-        soft_dist_attr,
-    )
-
-    n = multiply(
-        n,
-        -1,
-    )
-
-    n = exp(n)
-
-    n = subtract(
-        1,
-        n,
-    )
-
-    n = multiply(
-        n,
-        soft_dist_attr,
-    )
-
-    n = add(
-        n,
-        overstretch_amount_attr,
-    )
-
-    scale = divide(
-        actual_distance_attr,
-        n,
-    )
-
-    # -- Add it all together
-    upper_attr = multiply(
-        default_upper_len_attr,
-        scale,
-    )
-
-    upper_attr = subtract(
-        upper_attr,
-        default_upper_len_attr
-    )
-
-    upper_attr = multiply(
-        upper_attr,
-        stretch_attr,
-    )
-
-    upper_attr = add(
-        upper_attr,
-        default_upper_len_attr,
-    )
-
-    ##
-    upper_attr = add(
-        upper_attr,
-        upper_addition_attr,
-    )
-
-    lower_attr = multiply(
-        default_lower_len_attr,
-        scale,
-    )
-
-    lower_attr = subtract(
-        lower_attr,
-        default_lower_len_attr,
-    )
-
-    lower_attr = multiply(
-        lower_attr,
-        stretch_attr,
-    )
-
-    lower_attr = add(
-        lower_attr,
-        default_lower_len_attr,
-    )
-
-    ##
-    lower_attr = add(
-        lower_attr,
-        lower_addition_attr,
-    )
+    upper_attr = _stretched_length(default_upper_len_attr, upper_addition_attr, scale, stretch_attr)
+    lower_attr = _stretched_length(default_lower_len_attr, lower_addition_attr, scale, stretch_attr)
 
     if facing_direction == facing_direction.NegativeX:
-        upper_attr = multiply(
-            upper_attr,
-            1, #-1,
-        )
+        # -- These multipliers are deliberately 1 (the -1 was disabled),
+        # -- the nodes are kept to retain the node naming
+        upper_attr = multiply(upper_attr, 1)
+        lower_attr = multiply(lower_attr, 1)
 
-        lower_attr = multiply(
-            lower_attr,
-            1, #-1,
-        )
+    mref.get(upper_attr).connect(condition.colorIfTrueR)
+    mref.get(lower_attr).connect(condition.colorIfTrueG)
 
-    mc.connectAttr(
-        upper_attr,
-        f"{cond}.colorIfTrueR",
-    )
-
-    mc.connectAttr(
-        lower_attr,
-        f"{cond}.colorIfTrueG"
-    )
-
-    # -- Finally, conect the attributes to the joints
-    mc.connectAttr(
-        f"{cond}.outColorR",
-        f"{second_joint}.translateX",
-    )
-
-    mc.connectAttr(
-        f"{cond}.outColorG",
-        f"{third_joint}.translateX",
-    )
-
-    pass
-
-def _float_math(first_term, second_term, operation=0):
-
-    add_node = mc.createNode("floatMath")
-
-    mc.setAttr(
-        f"{add_node}.operation",
-        operation,
-    )
-
-    if isinstance(first_term, str):
-        mc.connectAttr(
-            first_term,
-            f"{add_node}.floatA",
-        )
-
-    else:
-        mc.setAttr(
-            f"{add_node}.floatA",
-            first_term
-        )
-
-    if isinstance(second_term, str):
-        mc.connectAttr(
-            second_term,
-            f"{add_node}.floatB",
-        )
-
-    else:
-        mc.setAttr(
-            f"{add_node}.floatB",
-            second_term
-        )
-
-    return f"{add_node}.outFloat"
-
-def add(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        0,  # -- Add
-    )
+    # -- Finally, connect the attributes to the joints
+    condition.outColorR.connect(f"{second_joint}.translateX")
+    condition.outColorG.connect(f"{third_joint}.translateX")
 
 
-def multiply(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        2,  # -- Multiply
-    )
-
-def divide(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        3,  # -- Add
-    )
+def _add_matrix_attribute(host: str, name: str) -> str:
+    """
+    Adds a matrix attribute (if it does not already exist) and returns
+    its address
+    """
+    address = f"{host}.{name}"
+    if not mref.objExists(address):
+        mref.addAttr(host, shortName=name, attributeType="matrix")
+    return address
 
 
-def subtract(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        1,  # -- Subtract
-    )
+def _soft_scale(actual_distance_attr: str, overstretch_amount_attr: str, soft_dist_attr: str) -> str:
+    """
+    Builds the soft ik falloff, returning the scale factor to apply
+    to the bone lengths
+    """
+    n = subtract(actual_distance_attr, overstretch_amount_attr)
+    n = divide(n, soft_dist_attr)
+    n = multiply(n, -1)
+    n = exp(n)
+    n = subtract(1, n)
+    n = multiply(n, soft_dist_attr)
+    n = add(n, overstretch_amount_attr)
+    return divide(actual_distance_attr, n)
 
 
-def exp(first_term):
-
-    n = mc.createNode("floatMath")
-    mc.setAttr(
-        f"{n}.floatB",
-        0,
-    )
-    mc.expression(s=f"{n}.floatA=exp({first_term})")
-
-    return f"{n}.outFloat"
-
-def matrix_to_translate(matrix_attr):
-
-    decompose_node = mc.createNode("decomposeMatrix")
-
-    mc.connectAttr(
-        matrix_attr,
-        f"{decompose_node}.inputMatrix",
-    )
-
-    return f"{decompose_node}.outputTranslate"
-
-def subtract_vector(first_term, second_term):
-    node = mc.createNode("colorMath")
-
-    mc.connectAttr(
-        first_term,
-        f"{node}.colorA"
-    )
-
-    mc.connectAttr(
-        second_term,
-        f"{node}.colorB",
-    )
-
-    mc.setAttr(
-        f"{node}.operation",
-        1,
-    )
-    return f"{node}.outColor"
-
-def length(first_term, second_term):
-
-    delta_attr = subtract_vector(first_term, second_term)
-
-    len_node = mc.createNode("length")
-
-    mc.connectAttr(
-        delta_attr,
-        f"{len_node}.input"
-    )
-
-    return f"{len_node}.output"
-
+def _stretched_length(default_length_attr, addition_attr, scale: str, stretch_attr: str) -> str:
+    """
+    Returns the length of a bone when scaled by the soft ik, blended by
+    the stretch attribute and including the user addition
+    """
+    result = multiply(default_length_attr, scale)
+    result = subtract(result, default_length_attr)
+    result = multiply(result, stretch_attr)
+    result = add(result, default_length_attr)
+    return add(result, addition_attr)

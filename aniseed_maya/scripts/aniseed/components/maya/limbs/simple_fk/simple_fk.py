@@ -1,8 +1,12 @@
+"""
+Provides the "Limb : Simple Fk" component, which creates an fk control for
+each joint given in Joints To Drive and constrains the joint to it. Controls
+are chained (or flat, if Flat Hierarchy is set) and can optionally have an
+offset control. It is also heavily commented as an example component.
+"""
 import os
-import mref
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
 
 
 class SimpleFkComponent(aniseed.RigComponent):
@@ -14,6 +18,10 @@ class SimpleFkComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Parent and Joints To Drive inputs, the naming, shape and
+        hierarchy/offset control options and the root and tip control outputs.
+        """
         super(SimpleFkComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -52,6 +60,8 @@ class SimpleFkComponent(aniseed.RigComponent):
             group="Visuals",
         )
 
+        # -- Note: this option is not currently used during the build, but
+        # -- is kept as it is serialised into existing rigs
         self.declare_option(
             name="Lock and Hide",
             value=list(),
@@ -77,15 +87,21 @@ class SimpleFkComponent(aniseed.RigComponent):
             pre_expose=True,
         )
 
-
         self.declare_output("Root Control")
         self.declare_output("Tip Control")
 
     def on_enter_stack(self):
+        """
+        Hooks the Parent input to the parent component's default output.
+        """
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
     def option_widget(self, option_name):
+        """
+        Returns a shape selector for Shape, a location selector for Location
+        and a text list for Lock and Hide.
+        """
 
         # -- We can use this function to tailor how we visualise certain options.
         # -- In this case, we want to show a list of shapes to the user for them
@@ -104,6 +120,10 @@ class SimpleFkComponent(aniseed.RigComponent):
             return aniseed.widgets.TextList()
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the Parent and an object list for the
+        Joints To Drive.
+        """
         if requirement_name == "Parent":
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -111,6 +131,9 @@ class SimpleFkComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectList()
 
     def is_valid(self) -> bool:
+        """
+        Checks that at least one joint has been given to drive.
+        """
 
         # -- We can use this function to test that we think the component
         # -- is valid before its built. In this case we're validating that
@@ -126,22 +149,31 @@ class SimpleFkComponent(aniseed.RigComponent):
         return True
 
     def run(self):
+        """
+        Creates an fk control (plus an optional offset control) for each joint
+        to drive, parent and scale constraining the joint to it. Controls are
+        chained unless Flat Hierarchy is set. Sets the root/tip outputs and
+        declares an "Fk Control N" output for every control.
+        """
 
         # -- Here we're accessing the values of the requirements for this
         # -- component. In this case, getting the parent and the joints
         parent = self.input("Parent").get()
         joints_to_drive = self.input("Joints To Drive").get()
 
+        # -- Note that we're accessing the options here too, in order to allow
+        # -- the user to tailor the result
+        label = self.option("Label").get()
+        location = self.option("Location").get()
+
         for idx, joint_to_drive in enumerate(joints_to_drive):
 
             # -- Aniseed gives us a function to create a control but it does not
             # -- force you to use it. Aniseed does not expect a formal control
             # -- to be used, but it is easier.
-            # -- Note that we're accessing the options here too, in order to allow
-            # -- the user to tailor the result
-            control = aniseed_toolkit.run("Create Control",
-                description=self.option("Label").get(),
-                location=self.option("Location").get(),
+            control = aniseed_toolkit.control.create(
+                description=label,
+                location=location,
                 shape=self.option("Shape").get(),
                 config=self.config,
                 parent=parent,
@@ -151,24 +183,15 @@ class SimpleFkComponent(aniseed.RigComponent):
             driver = control.ctl
 
             if self.option("Add Offset Control").get():
-                attribute = mref.get(control.ctl).add_attribute(
-                    "show_offset",
-                    value=False,
-                    attribute_type="bool",
-                    keyable=False,
-                )
-                attribute.set(channelBox=True)
-
-                driving_control = aniseed_toolkit.control.create(
-                    description=self.option("Label").get() + "_offset",
-                    location=self.option("Location").get(),
+                driver = aniseed_toolkit.offset_controls.add_offset_control(
+                    control,
+                    description=label,
+                    location=location,
                     config=self.config,
                     shape="core_cube",
-                    parent=control.ctl,
                     match_to=joint_to_drive,
-                rotate_shape=[0, 0, 90],
-                )
-                driver = driving_control.ctl
+                    rotate_shape=[0, 0, 90],
+                ).ctl
 
             # -- Set our outputs
             if not self.output("Root Control").get():
@@ -179,23 +202,17 @@ class SimpleFkComponent(aniseed.RigComponent):
             # -- There is no smoke and mirrors with how an aniseed rig controls
             # -- a skeleton. Its what-you-see-is-what-you-get. So we're just
             # -- using maya to constrain the joint to the control
-            mc.parentConstraint(
+            aniseed_toolkit.constraints.parent_and_scale(
                 driver,
                 joint_to_drive,
-                maintainOffset=False,
-            )
-
-            mc.scaleConstraint(
-                driver,
-                joint_to_drive,
-                maintainOffset=False,
+                maintain_offset=False,
             )
 
             if not self.option("Flat Hierarchy").get():
                 parent = control.ctl
 
-            # -- Declare the output
-            output_plug = self.declare_output(f"Fk Control {idx}")
+            # -- Declare an output for each control
+            self.declare_output(f"Fk Control {idx}")
             self.output(f"Fk Control {idx}").set(control.ctl)
 
         return True

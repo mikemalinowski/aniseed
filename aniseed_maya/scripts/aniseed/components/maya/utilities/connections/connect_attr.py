@@ -1,6 +1,12 @@
+"""
+Provides the attribute connection components. "Utility : Connect Attribute"
+connects one source attribute into one destination attribute, optionally
+routing it through a reverse node. "Utility : Connect Attribute (Multi)"
+connects one source attribute into the same named attribute on a list of
+nodes. Both expose a Force option to replace existing connections.
+"""
 import mref
 import aniseed
-from maya import cmds
 
 
 class ConnectAttr(aniseed.RigComponent):
@@ -12,6 +18,10 @@ class ConnectAttr(aniseed.RigComponent):
     identifier = "Utility : Connect Attribute"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the source and destination node/attribute inputs, plus the
+        Force and Reverse options.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -44,7 +54,6 @@ class ConnectAttr(aniseed.RigComponent):
             description="If true, an existing connection into the destination attribute is broken before the new one is made.",
         )
 
-
         self.declare_option(
             name="Reverse",
             value=False,
@@ -52,31 +61,36 @@ class ConnectAttr(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the Source Node and Destination Node
+        inputs.
+        """
         if requirement_name in ["Source Node", "Destination Node"]:
             return aniseed.widgets.ObjectSelector()
 
-    def is_valid(self) -> bool:
-        return True
-
     def run(self):
+        """
+        Connects the source attribute into the destination attribute. When
+        Reverse is enabled, a reverse node is created and the connection is
+        routed through its X channel.
+        """
         source_node = mref.get(self.input("Source Node").get())
         destination_node = mref.get(self.input("Destination Node").get())
-        source_attribute = self.input("Source Attribute").get()
-        destination_attribute = self.input("Destination Attribute").get()
-        force = self.option("Force").get()
 
+        source_attribute = source_node.attr(self.input("Source Attribute").get())
+        destination_attribute = destination_node.attr(self.input("Destination Attribute").get())
+
+        # -- When reversing, the reverse node sits between the source
+        # -- and the destination
         if self.option("Reverse").get():
             reverse_node = mref.create("reverse")
-            source_node.attr(source_attribute).connect(reverse_node.attr("inputX"))
-            reverse_node.outputX.connect(
-                destination_node.attr(destination_attribute),
-                force=force,
-            )
-        else:
-            source_node.attr(source_attribute).connect(
-                destination_node.attr(destination_attribute),
-                force=force,
-            )
+            source_attribute.connect(reverse_node.inputX)
+            source_attribute = reverse_node.outputX
+
+        source_attribute.connect(
+            destination_attribute,
+            force=self.option("Force").get(),
+        )
 
 
 class ConnectManyAttr(aniseed.RigComponent):
@@ -88,6 +102,10 @@ class ConnectManyAttr(aniseed.RigComponent):
     identifier = "Utility : Connect Attribute (Multi)"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the source node/attribute inputs, the Destination Nodes list
+        and Destination Attribute inputs, and the Force option.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -121,6 +139,10 @@ class ConnectManyAttr(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for Source Node and an object list for
+        Destination Nodes.
+        """
         if requirement_name in ["Source Node"]:
             return aniseed.widgets.ObjectSelector()
 
@@ -128,17 +150,17 @@ class ConnectManyAttr(aniseed.RigComponent):
             return aniseed.widgets.ObjectList()
 
     def run(self):
+        """
+        Connects the source attribute into the Destination Attribute of
+        every node in Destination Nodes.
+        """
         source_node = mref.get(self.input("Source Node").get())
-        destination_node_names = self.input("Destination Nodes").get()
-        source_attribute = self.input("Source Attribute").get()
+        source_attribute = source_node.attr(self.input("Source Attribute").get())
         destination_attribute = self.input("Destination Attribute").get()
         force = self.option("Force").get()
 
-        source_attr = source_node.attr(source_attribute)
-
-        for destination_node_name in destination_node_names:
-            destination_node = mref.get(destination_node_name)
-            source_attr.connect(
-                destination_node.attr(destination_attribute),
+        for destination_node_name in self.input("Destination Nodes").get():
+            source_attribute.connect(
+                mref.get(destination_node_name).attr(destination_attribute),
                 force=force,
             )

@@ -1,6 +1,11 @@
+"""
+Provides the "Utility : Constraint Organiser" component, which gathers every
+constraint found on the descendants of a hierarchy root and reparents them
+under a single chosen node. This keeps constraints out of the deformation
+hierarchy and tidies the outliner.
+"""
 import aniseed
 import mref
-from maya import cmds
 
 
 class ConstraintOrganiser(aniseed.RigComponent):
@@ -15,6 +20,9 @@ class ConstraintOrganiser(aniseed.RigComponent):
     identifier = "Utility : Constraint Organiser"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Hierarchy Root and Constraint Parent inputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -30,20 +38,30 @@ class ConstraintOrganiser(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for both inputs.
+        """
         if requirement_name in ["Constraint Parent", "Hierarchy Root"]:
             return aniseed.widgets.ObjectSelector()
 
     def run(self):
+        """
+        Gathers the constraints on every descendant of the hierarchy root
+        and reparents them under the constraint parent. Errors if a
+        constraint is already parented there.
+        """
 
         node = mref.get(self.input("Hierarchy Root").get())
         constraint_parent = self.input("Constraint Parent").get()
-        constraints = []
 
+        # -- Gather everything before reparenting, so that moving the
+        # -- constraints does not alter the hierarchy being walked
+        constraints = []
         for child in node.children(recursive=True, include_shapes=False):
             constraints.extend(child.constraints())
 
+        # -- mref.parent (cmds passthrough) rather than set_parent, as
+        # -- set_parent would silently skip, rather than error on, a
+        # -- constraint which is already under the constraint parent
         for constraint in constraints:
-            cmds.parent(
-                constraint.full_name(),
-                constraint_parent,
-            )
+            mref.parent(constraint, constraint_parent)

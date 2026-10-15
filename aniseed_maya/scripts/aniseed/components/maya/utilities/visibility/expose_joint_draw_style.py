@@ -1,6 +1,11 @@
+"""
+Provides the "Utility : Expose Joint Draw Style" component, which adds a
+channel box integer attribute to a host node and connects it to the
+drawStyle of every joint in a hierarchy, so the joints can be shown or
+hidden from a single control.
+"""
 import mref
 import aniseed
-from maya import cmds
 
 
 class ExposeJointDrawStyle(aniseed.RigComponent):
@@ -14,6 +19,10 @@ class ExposeJointDrawStyle(aniseed.RigComponent):
     identifier = "Utility : Expose Joint Draw Style"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Attribute Host and Joint Root inputs and the Attribute Name
+        and Default Value options.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -48,32 +57,36 @@ class ExposeJointDrawStyle(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the Attribute Host and Joint Root inputs,
+        and None for anything else.
+        """
         if requirement_name in ("Attribute Host", "Joint Root"):
             return aniseed.widgets.ObjectSelector()
 
         return None
 
     def run(self):
-        host_name = self.input("Attribute Host").get()
-        joint_root = self.input("Joint Root").get()
-        attribute_name = self.option("Attribute Name").get()
-        default_value = self.option("Default Value").get()
+        """
+        Adds the integer attribute to the host (shown in the channel box but not
+        keyable) and force connects it to the drawStyle of the joint root and
+        every joint beneath it.
+        """
+        joint_root = mref.get(self.input("Joint Root").get())
 
-        attribute = mref.get(host_name).add_attribute(
-            attribute_name,
-            value=default_value,
+        attribute = mref.get(self.input("Attribute Host").get()).add_attribute(
+            self.option("Attribute Name").get(),
+            value=self.option("Default Value").get(),
             attribute_type="long",
             keyable=False,
         )
         attribute.set(channelBox=True)
 
         joints = [joint_root]
-        joints.extend(
-            cmds.listRelatives(joint_root, allDescendents=True, type="joint") or []
-        )
+        joints.extend(joint_root.children(recursive=True, node_type="joint"))
 
         for joint in joints:
             attribute.connect(
-                mref.get(joint).attr("drawStyle"),
+                joint.attr("drawStyle"),
                 force=True,
             )

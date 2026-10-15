@@ -1,3 +1,11 @@
+"""
+Provides the "Limb : Face" component, which generates a face skeleton from
+skeleton.json and builds a bone driven face rig. It reuses the mouth and eyes
+components, creates direct controls for every face bone, drives them through
+a transform mixer of poses (which behave like blendshapes) and adds a high
+level animator control rig. It also defines the FacialTools widget and
+MixerTools helpers used to edit, mirror, save and load the pose data.
+"""
 import os
 import json
 import mref
@@ -6,7 +14,6 @@ import qtility
 import functools
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 from Qt import QtWidgets
 
 
@@ -118,6 +125,13 @@ class FaceComponent(aniseed.RigComponent):
     ]
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent and attribute host inputs, one joint input per
+        bone in skeleton.json, and control/parent/guide/shape inputs for each
+        high level control group. Options store the mixer data and mixer name
+        and pass settings through to the mouth and eyes sub components. The
+        single output is the FaceRig org.
+        """
         super(FaceComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -153,8 +167,8 @@ class FaceComponent(aniseed.RigComponent):
             hidden=False,
         )
 
-        # -- Store the name of the mixer so that our tools can easily interact
-        # -- with it
+        # -- If set, the mixer targets are deleted once their pose data has
+        # -- been applied
         self.declare_option(
             name="Optimise",
             value="",
@@ -211,9 +225,10 @@ class FaceComponent(aniseed.RigComponent):
         """
         When this component is added we will generate the face bones
         """
-        # -- Get he selection, if there is no selection then we just build
+        # -- Get the selection, if there is no selection then we just build
         # -- at world space
-        joint_parent = mref.selected()[0]
+        selected = mref.selected()
+        joint_parent = selected[0] if selected else None
 
         # -- Within the labelling of the face we use the terms left, right and middle
         # -- but we need to ensure we're always building with the config designated names
@@ -229,7 +244,6 @@ class FaceComponent(aniseed.RigComponent):
         # -- up the expected parent joints
         created_joints = dict()
 
-
         for bone_description in self.face_bones:
 
             # -- Create label - this mimic's the input plug so we can auto
@@ -238,16 +252,16 @@ class FaceComponent(aniseed.RigComponent):
 
             # -- Create the joint and set its matrix based on the data
             # -- in the face_bones.json file
+            bone_parent = created_joints.get(bone_description["parent"], joint_parent)
             bone = mref.get(
                 aniseed_toolkit.joints.create(
                     description=bone_description["name"],
                     location=sides[bone_description["location"]],
-                    parent=created_joints.get(bone_description["parent"], joint_parent).name(),
+                    parent=bone_parent.name() if bone_parent is not None else None,
                     config=self.config,
                 )
             )
-            bone_matrix = bone_description["matrix"]
-            bone.set_matrix(bone_matrix)
+            bone.set_matrix(bone_description["matrix"])
 
             # -- Set the bone as an input
             self.input(bone_label).set(bone.name())
@@ -303,7 +317,8 @@ class FaceComponent(aniseed.RigComponent):
             )
         )
 
-        # -- The attribute host is where we store all of the user facing attributes
+        # -- The attribute host is where we store all of the user facing attributes.
+        # -- If none is given we fall back to the org.
         attribute_host = mref.get(self.input("Attribute Host").get() or org)
         visibility_attribute = attribute_host.add_attribute(
             name="direct_control_visibility",
@@ -347,8 +362,6 @@ class FaceComponent(aniseed.RigComponent):
         # -- us off.
         created_controls = dict(
             jaw_middle=mouth_component.output("Jaw Control").get(),
-            # upper_lip_middle=mouth_component.output("Upper Lip Control").get(),
-            # lower_lip_middle=mouth_component.output("Lower Lip Control").get(),
             eye_left=eyes_component.output("Left Eye Control").get(),
             eye_right=eyes_component.output("Right Eye Control").get(),
             eye_upper_lid_left=eyes_component.output("Left Upper Eye Lid Control").get(),
@@ -387,21 +400,20 @@ class FaceComponent(aniseed.RigComponent):
             if data["component"]:
                 continue
 
-            # -- Get teh joint we need to drive
+            # -- Get the joint we need to drive
             joint = mref.get(input_plug.get())
 
             # -- As a safety measure lets just make sure its not being
             # -- driven by anything else
             for constraint in joint.constraints():
-                cmds.delete(constraint.name())
+                constraint.delete()
 
             # -- Create a control to drive the joint
-            parent_label = data["parent"]
             control = aniseed_toolkit.control.create(
                 description="direct_" + data["name"],
                 location=data["location"],
                 parent=created_controls.get(
-                    parent_label,
+                    data["parent"],
                     direct_controls.get(data["parent"], org.name()),
                 ),
                 shape="core_cube",
@@ -411,31 +423,24 @@ class FaceComponent(aniseed.RigComponent):
 
             # -- Hook up the constraints between the control
             # -- and the joint
-            cmds.parentConstraint(
+            aniseed_toolkit.constraints.parent_and_scale(
                 control.ctl,
-                joint.name(),
-                maintainOffset=True,
-            )
-            cmds.scaleConstraint(
-                control.ctl,
-                joint.name(),
-                maintainOffset=True,
+                joint,
+                maintain_offset=True,
             )
 
             # -- If a joint is declared as being "always on" then we will
             # -- not hook up its visibility overrides.
-            is_always_on = data.get("is_always_on", False)
-            if not is_always_on:
-                for shape in mref.get(control.ctl).shapes():
-                    visibility_attribute.connect(shape.visibility)
+            if not data.get("is_always_on", False):
+                self.drive_shape_visibility(control.ctl, visibility_attribute)
 
-            # -- Store the offset node for the control
+            # -- Store the control
             direct_controls[input_plug.name()] = control.ctl
 
-        cmds.parent(
-            eyes_component.output("org").get(),
+        mref.get(eyes_component.output("org").get()).set_parent(
             direct_controls["upper_head_middle"],
         )
+
         # -- Create the bespoke inserted controls
         for label, created_control in created_controls.items():
 
@@ -444,39 +449,33 @@ class FaceComponent(aniseed.RigComponent):
                 continue
 
             # -- Create a control which we will insert into the hierarchy
+            # -- above the control created by the sub component
             created_control = aniseed_toolkit.control.get(created_control)
+            created_control_org = mref.get(created_control.org)
 
-            # MARKER: These are not direct, they are something else
             control = aniseed_toolkit.control.create(
                 description="direct_" + data["name"],
                 location=data["location"],
-                parent=mref.get(created_control.org).parent().name(),
+                parent=created_control_org.parent().name(),
                 shape="core_cube",
                 config=self.config,
                 match_to=created_control.ctl,
             )
-            cmds.parent(
-                created_control.org,
-                # created_control.off,
-                control.ctl,
-            )
+            created_control_org.set_parent(control.ctl)
 
             # -- If a joint is declared as being "always on" then we will
             # -- not hook up its visibility overrides.
-            is_always_on = data.get("is_always_on", False)
-            if not is_always_on:
-                for shape in mref.get(control.ctl).shapes():
-                    visibility_attribute.connect(shape.visibility)
+            if not data.get("is_always_on", False):
+                self.drive_shape_visibility(control.ctl, visibility_attribute)
 
             direct_controls[label] = control.ctl
 
+        # -- Place the lip controls under the mouth component's lip controls
         for section in ["upper", "lower"]:
-            for control_label in direct_controls.keys():
+            lip_control = mouth_component.output(f"{section.title()} Lip Control").get()
+            for control_label, control in direct_controls.items():
                 if f"{section}_lip_" in control_label:
-                    cmds.parent(
-                        aniseed_toolkit.control.get(direct_controls[control_label]).org,
-                        mouth_component.output(f"{section.title()} Lip Control").get(),
-                    )
+                    mref.get(aniseed_toolkit.control.get(control).org).set_parent(lip_control)
 
         # ----------------------------------------------------
         # -- Get the jaw as an mref object
@@ -487,6 +486,7 @@ class FaceComponent(aniseed.RigComponent):
             direct_controls,
             m_jaw,
             org,
+            attribute_host,
         )
 
         # ----------------------------------------------------
@@ -519,18 +519,17 @@ class FaceComponent(aniseed.RigComponent):
             mixer_deformer.parent().match_to(control_offset)
 
             # -- Add a link to the controller
-            mixer_deformer.add_attribute(
+            control_link = mixer_deformer.add_attribute(
                 "control_link",
                 attribute_type="message",
                 value=None,
             )
-            controller.message.connect(mixer_deformer.control_link)
+            controller.attr("message").connect(control_link)
 
             # -- Finally we drive the control offsets local values through the mixers
             # -- deformer node.
-            mixer_deformer.translate.connect(control_offset.translate)
-            mixer_deformer.rotate.connect(control_offset.rotate)
-            mixer_deformer.scale.connect(control_offset.scale)
+            for channel in ["translate", "rotate", "scale"]:
+                mixer_deformer.attr(channel).connect(control_offset.attr(channel))
 
         # -- Now we need to add each pose as defined in this components
         # -- pose list.
@@ -539,15 +538,14 @@ class FaceComponent(aniseed.RigComponent):
 
         # -- Finally, using the stored data, we set the matrices of each
         # -- target. This is a little time consuming sadly, as its a LOT
-        # -- of data!
+        # -- of data! When optimising, each target is deleted once its
+        # -- matrix has been applied.
         optimise = self.option("Optimise").get()
 
         if mixer_data:
             for pose in mixer_data["poses"]:
                 for target_data in pose["targets"]:
-                    deformer_name = target_data["name"]
-                    pose_name = pose["name"]
-                    target = mixer.get_target(pose_name, deformer_name)
+                    target = mixer.get_target(pose["name"], target_data["name"])
 
                     if target:
                         target.set_matrix(target_data["transform"])
@@ -556,12 +554,15 @@ class FaceComponent(aniseed.RigComponent):
                             target.delete()
 
         # -- Create the high level control rig which drives everything.
-        high_level_control_rig = HighLevelControlRig(component=self)
+        high_level_control_rig = HighLevelControlRig(
+            component=self,
+            attribute_host=attribute_host,
+        )
         high_level_control_rig.create(m_jaw)
 
         # -- Finally, we expose some attributes to show/hide the tongue and teeth. This will be
         # -- driven by an attribute on the jaw
-        attribute = mref.get(mouth_component.output("Jaw Control").get()).add_attribute(
+        attribute = m_jaw.add_attribute(
             "show_teeth_and_tongue",
             attribute_type="bool",
             value=False,
@@ -569,38 +570,49 @@ class FaceComponent(aniseed.RigComponent):
         )
         attribute.set(channelBox=True)
 
-        for control in direct_controls.keys():
-            if "teeth" in control or "tongue" in control:
-                for shape in mref.get(direct_controls[control]).shapes():
-                    attribute.connect(shape.visibility, force=True)
+        # -- These controls already have their visibility driven by the direct
+        # -- control visibility, so we force the connection to take over.
+        for label, control in direct_controls.items():
+            if "teeth" in label or "tongue" in label:
+                self.drive_shape_visibility(control, attribute, force=True)
 
-        # -- Push mouth and eye keyables into the attribute host
-        attribute_host = mref.get(self.input("Attribute Host").get())
-        left_eye_control = mref.get(eyes_component.output("Left Eye Control").get())
-        right_eye_control = mref.get(eyes_component.output("Right Eye Control").get())
+        # -- Push the eye keyables into the attribute host
+        for side in ["left", "right"]:
+            eye_control = mref.get(eyes_component.output(f"{side.title()} Eye Control").get())
 
-        attribute_host.add_separator_attribute()
-        for attr in left_eye_control.attributes(userDefined=True):
-            if not attr.name(include_node=False).replace("_", ""):
-                continue
-            try:
-                attribute_host.add_proxy("left_" + attr.name(include_node=False), attr)
-            except Exception:
-                pass
+            attribute_host.add_separator_attribute()
+            for attr in eye_control.attributes(userDefined=True):
 
-        attribute_host.add_separator_attribute()
-        for attr in right_eye_control.attributes(userDefined=True):
-            if not attr.name(include_node=False).replace("_", ""):
-                continue
-            try:
-                attribute_host.add_proxy("right_" + attr.name(include_node=False), attr)
-            except Exception:
-                pass
+                # -- Skip separator attributes
+                if not attr.name(include_node=False).replace("_", ""):
+                    continue
+
+                try:
+                    attribute_host.add_proxy(f"{side}_" + attr.name(include_node=False), attr)
+                except Exception:
+                    pass
 
         # -- Set the outputs
         self.output("FaceRig").set(org.name())
 
-    def setup_jaw_behaviour(self, upper_lip_control, lower_lip_control, direct_controls, jaw_control, org):
+    @staticmethod
+    def drive_shape_visibility(control, attribute, force=False):
+        """
+        Connects the given attribute to the visibility of every shape
+        of the given control.
+        """
+        for shape in mref.get(control).shapes():
+            attribute.connect(shape.attr("visibility"), force=force)
+
+    def setup_jaw_behaviour(
+            self,
+            upper_lip_control,
+            lower_lip_control,
+            direct_controls,
+            jaw_control,
+            org,
+            attribute_host,
+    ):
         """
         The jaw behaviour is a bespoke constraint setup which ensures the lips
         work together when the jaw opens. We cannot simply use a pose for this, as the
@@ -608,126 +620,40 @@ class FaceComponent(aniseed.RigComponent):
         Instead we constrain the outer lips and mid lips progressively, but allow the
         animator to dial it in and out.
 
+        :param upper_lip_control: The upper lip control of the mouth component
+        :param lower_lip_control: The lower lip control of the mouth component
         :param direct_controls: A dictionary of all the created direct controls
         :param jaw_control: The jaw control
         :param org: This will be the parent of all the created nodes
+        :param attribute_host: The node to expose the smoothing attributes on
         """
-        attribute_host = mref.get(self.input('Attribute Host').get())
         # -- Add our smooth attributes - the animator can use these
         # -- to dial this behaviour in and out
         attribute_host.add_separator_attribute()
-        left_attr = jaw_control.add_attribute("smooth_lips_left", attribute_type="float", keyable=True, value=1)
-        right_attr = jaw_control.add_attribute("smooth_lips_right", attribute_type="float", keyable=True, value=1)
-        attribute_host.add_proxy(left_attr.name(include_node=False), source_attribute=left_attr)
-        attribute_host.add_proxy(right_attr.name(include_node=False), source_attribute=right_attr)
+        for side in ["left", "right"]:
+            smooth_attribute = jaw_control.add_attribute(
+                f"smooth_lips_{side}",
+                attribute_type="float",
+                keyable=True,
+                value=1,
+            )
+            attribute_host.add_proxy(
+                smooth_attribute.name(include_node=False),
+                source_attribute=smooth_attribute,
+            )
 
         # -- Now build up the data structure. This determines what is constrained
-        # -- to what and with what weights etc. It just means we only have to code
-        # -- the actual logic once, and cycle over the data. The only reason this is
-        # -- not in a data file (json) is because we're using variables within it.
-        # upper_lip_control = direct_controls["upper_lip_middle"]
-        # lower_lip_control = direct_controls["lower_lip_middle"]
-
+        # -- to what and with what weights. Each row is applied to the left and
+        # -- then the right control (in that order, as it decides node names):
+        # -- (control label, constrain to, parent space, weights)
         mouth_constraint_data = [
-            {
-                "constrain_this": direct_controls["upper_lip_outer_left"],
-                "to_this": jaw_control.name(),
-                "parent_space": upper_lip_control,
-                "weights": [0.6, 0.4],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["upper_lip_outer_right"],
-                "to_this": jaw_control.name(),
-                "parent_space": upper_lip_control,
-                "weights": [0.6, 0.4],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_outer_left"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0.4, 0.6],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_outer_right"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0.4, 0.6],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["upper_lip_mid_left"],
-                "to_this": jaw_control,
-                "parent_space": upper_lip_control,
-                "weights": [0.8, 0.2],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["upper_lip_mid_right"],
-                "to_this": jaw_control,
-                "parent_space": upper_lip_control,
-                "weights": [0.8, 0.2],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_mid_left"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0.2, 0.8],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_mid_right"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0.2, 0.8],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["upper_lip_inner_left"],
-                "to_this": jaw_control.name(),
-                "parent_space": upper_lip_control,
-                "weights": [1, 0],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["upper_lip_inner_right"],
-                "to_this": jaw_control.name(),
-                "parent_space": upper_lip_control,
-                "weights": [1, 0],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_inner_left"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0, 1],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["lower_lip_inner_right"],
-                "to_this": lower_lip_control,
-                "parent_space": org.name(),
-                "weights": [0, 1],
-                "location": "right",
-            },
-            {
-                "constrain_this": direct_controls["dimple_left"],
-                "to_this": jaw_control,
-                "parent_space": org.name(),
-                "weights": [0.5, 0.5],
-                "location": "left",
-            },
-            {
-                "constrain_this": direct_controls["dimple_right"],
-                "to_this": jaw_control,
-                "parent_space": org.name(),
-                "weights": [0.5, 0.5],
-                "location": "right",
-            },
-
+            ("upper_lip_outer", jaw_control, upper_lip_control, [0.6, 0.4]),
+            ("lower_lip_outer", lower_lip_control, org, [0.4, 0.6]),
+            ("upper_lip_mid", jaw_control, upper_lip_control, [0.8, 0.2]),
+            ("lower_lip_mid", lower_lip_control, org, [0.2, 0.8]),
+            ("upper_lip_inner", jaw_control, upper_lip_control, [1, 0]),
+            ("lower_lip_inner", lower_lip_control, org, [0, 1]),
+            ("dimple", jaw_control, org, [0.5, 0.5]),
         ]
 
         # -- This setup will create a variety of proxy/buffer nodes. To keep the
@@ -744,71 +670,63 @@ class FaceComponent(aniseed.RigComponent):
         )
         proxy_org.match_to(org)
 
-        for constraint_data in mouth_constraint_data:
+        for label, to_this, parent_space, weights in mouth_constraint_data:
+            for location in ["left", "right"]:
 
-            # -- From the control get the control instance class and
-            # -- access the offset, zero and org
-            control_instance = aniseed_toolkit.control.get(constraint_data["constrain_this"])
-            control_offset = control_instance.off
-            control_zero = control_instance.zero
-            control_org = control_instance.org
+                # -- From the control get the control instance class and
+                # -- access the offset, zero and org
+                control_name = direct_controls[f"{label}_{location}"]
+                control_instance = aniseed_toolkit.control.get(control_name)
 
-            # -- Get the control offset as an mref object
-            constrain_this = mref.get(control_offset)
+                # -- Create the proxy node. This is the node that has the constraints
+                # -- on which represents the behaviour.
+                proxy = mref.create(
+                    "transform",
+                    name=self.config.generate_name(
+                        classification=self.config.mechanical,
+                        description=control_name + "_smooth_proxy",
+                        location=self.config.middle,
+                    ),
+                    parent=proxy_org,
+                )
+                proxy.match_to(mref.get(control_instance.off))
 
-            # -- Create the proxy node. This is the node that has the constraints
-            # -- on which represents the behaviour.
-            proxy = mref.create(
-                "transform",
-                name=self.config.generate_name(
-                    classification=self.config.mechanical,
-                    description=constraint_data["constrain_this"] + "_smooth_proxy",
-                    location=self.config.middle,
-                ),
-                parent=proxy_org,
-            )
-            proxy.match_to(constrain_this)
-
-            # -- Set up the two constraints on the proxy
-            cmds.parentConstraint(
-                constraint_data["parent_space"],
-                proxy.name(),
-                maintainOffset=True,
-            )
-            cns = mref.get(
+                # -- Set up the two constraints on the proxy
                 mref.parentConstraint(
-                    constraint_data["to_this"],
-                    proxy.name(),
+                    parent_space,
+                    proxy,
+                    maintainOffset=True,
+                )
+                cns = mref.parentConstraint(
+                    to_this,
+                    proxy,
                     maintainOffset=True,
                 )[0]
-            )
-            # -- Ensure the constraint is set to shortest as it
-            # -- gives the best and most predictable result
-            cns.interpType.set(2) # -- Shortest
 
-            # -- Set the weights of that data based on the data
-            for idx, weight in enumerate(constraint_data["weights"]):
-                cns.weight_attributes()[idx].set(weight)
+                # -- Ensure the constraint is set to shortest as it
+                # -- gives the best and most predictable result
+                cns.interpType.set(2)  # -- Shortest
 
-            # -- We now constrain the the control's zero to the proxy
-            mref.parentConstraint(control_org, control_zero, maintainOffset=True)
-            cns = mref.parentConstraint(proxy, control_zero, maintainOffset=True)[0]
-            cns.interpType.set(2) # -- Shortest
+                # -- Set the weights of that data based on the data
+                for idx, weight in enumerate(weights):
+                    cns.weight_attributes()[idx].set(weight)
 
-            # -- Finally we drive the weight of that constraint based on the
-            # -- attributes we expose to the user.
+                # -- We now constrain the control's zero to the proxy
+                mref.parentConstraint(control_instance.org, control_instance.zero, maintainOffset=True)
+                cns = mref.parentConstraint(proxy, control_instance.zero, maintainOffset=True)[0]
+                cns.interpType.set(2)  # -- Shortest
 
-
-            attr = jaw_control.attr(f"smooth_lips_{constraint_data['location']}")
-            reverse = mref.create("reverse")
-            attr.connect(reverse.inputX)
-            reverse.outputX.connect(cns.weight_attributes()[0])
-            attr.connect(cns.weight_attributes()[-1])
+                # -- Finally we drive the weight of that constraint based on the
+                # -- attributes we expose to the user.
+                aniseed_toolkit.constraints.blend_weights(
+                    jaw_control.attr(f"smooth_lips_{location}"),
+                    cns,
+                )
 
     def get_data_by_label(self, label: str):
         """
         The data inside the face_bones.json uses a key of name_location, and the
-        lobael is considered to be those two elements jointed together. This
+        label is considered to be those two elements jointed together. This
         function is a convenience function for returning the dictionary of data
         for that given label.
 
@@ -830,31 +748,51 @@ class FaceComponent(aniseed.RigComponent):
         # -- If the mixer does not exist then we cannot do anything. Providing
         # -- we're not asked to return it silently we should inform the user that
         # -- the mixer is not there.
-        if not mixer_name or not cmds.objExists(mixer_name):
+        if not mixer_name or not mref.objExists(mixer_name):
             if not silent:
                 qtility.request.message(
                     title="Cannot Snapshot Data",
                     message="You must build the rig before using the snapshot"
                 )
-            return
+            return None
 
         # -- Instance the mixer object and return it
-        mixer = aniseed_toolkit.transformation.TransformMixer(node=mixer_name)
-        return mixer
+        return aniseed_toolkit.transformation.TransformMixer(node=mixer_name)
 
 
-class HighLevelControlRig:
+class HighLevelControlRig(aniseed_toolkit.facial_controls.FacialControlRig):
     """
-    The high level control rig is a set of controls which utlimately drives
+    The high level control rig is a set of controls which ultimately drives
     the transformation mixer. This makes for a much nicer animator-friendly
     interface.
+
+    The control settings are read from the component's inputs, every animator
+    facing attribute is proxied onto the attribute host and the sneer fixup
+    multiplies (rather than averages) the sneers.
     """
 
-    def __init__(self, component):
+    def __init__(self, component, attribute_host):
+        """
+        Args:
+            component: The face component whose inputs provide the control
+                settings
+            attribute_host: The node to proxy the animator facing attributes onto
+        """
+        super(HighLevelControlRig, self).__init__(
+            config=component.config,
+            read_setting=lambda name: component.input(name).get(),
+            attribute_host=attribute_host,
+            description_prefix="Facial",
+            multiply_sneers=True,
+        )
         self.component = component
 
     def create(self, jaw):
+        """
+        Builds all the high level controls
 
+        :param jaw: The jaw control, used to blend the lip corner push in
+        """
         # -- This will give us a dictionary where the key is the name
         # -- of the pose and the values are the attributes driving that
         # -- pose.
@@ -865,57 +803,57 @@ class HighLevelControlRig:
         # -- know that attribute we need to connect to is an array attribute.
         addition_nodes = self.initialise_driving_adds(attribute_dictionary)
 
+        parent = self.component.input("Parent").get()
+
+        # -- Note: the order of these calls decides the array indices on the
+        # -- plusMinusAverage nodes, so it must be preserved.
+
         # -- Outer Lip Pullers
-        attribute_host = mref.get(self.component.input("Attribute Host").get())
-        attribute_host.add_separator_attribute()
+        self.attribute_host.add_separator_attribute()
 
         for side in ["left", "right"]:
             self.setup_lip_puller(
                 location=side,
                 guide=self.component.input(f"{side}_lip_corner_guide").get(),
-                jaw=jaw,
-                parent=self.component.input("Parent").get(),
+                parent=parent,
                 connection_map=addition_nodes,
+                jaw=jaw,
             )
 
         # -- Top and Bottom Central Lips
-        attribute_host = mref.get(self.component.input("Attribute Host").get())
-        attribute_host.add_separator_attribute()
+        self.attribute_host.add_separator_attribute()
 
         for location in ["upper", "lower"]:
             self.setup_central_lip(
                 section=location,
                 guide=self.component.input(f"{location}_lip_guide").get(),
-                parent=self.component.input("Parent").get(),
+                parent=parent,
                 connection_map=addition_nodes,
             )
 
         # -- Nose
-        attribute_host = mref.get(self.component.input("Attribute Host").get())
-        attribute_host.add_separator_attribute()
+        self.attribute_host.add_separator_attribute()
 
         self.setup_nose(
             guide=self.component.input("nose_guide").get(),
-            parent=self.component.input("Parent").get(),
+            parent=parent,
             connection_map=addition_nodes,
         )
 
-        # -- Inner & Outer Brows
+        # -- Inner & Outer Brows and the eyes
         for side in ["left", "right"]:
-            attribute_host = mref.get(self.component.input("Attribute Host").get())
-            attribute_host.add_separator_attribute()
+            self.attribute_host.add_separator_attribute()
 
             self.setup_inner_brow(
                 location=side,
                 guide=self.component.input(f"{side}_brow_inner_guide").get(),
-                parent=self.component.input("Parent").get(),
+                parent=parent,
                 connection_map=addition_nodes,
             )
-
             self.setup_outer_brow(
                 location=side,
                 guide=self.component.input(f"{side}_brow_outer_guide").get(),
-                parent=self.component.input("Parent").get(),
+                parent=parent,
                 connection_map=addition_nodes,
             )
             self.setup_eye(
@@ -924,23 +862,6 @@ class HighLevelControlRig:
                 connection_map=addition_nodes,
             )
 
-    def initialise_driving_adds(self, attribute_dictionary):
-        """
-        Each pose can have multiple inputs. To ensure that we can reliably
-        drive each pose by multiple mechanical approaches we add a
-        plusMinusAverage node which drives the attribute. We then
-        update the dictionary such that the plus minue average attribute
-        is the value instead of the pose attribute itself.
-        """
-        driving_additions = dict()
-
-        for label, attribute in attribute_dictionary.items():
-            node = mref.create("plusMinusAverage")
-            node.attr("output1D").connect(attribute)
-
-            driving_additions[label] = node.attr("input1D")
-        return driving_additions
-
     def construct_attribute_dictionary(self):
         """
         This will cycle the pose list and create a dictionary where the key
@@ -948,515 +869,10 @@ class HighLevelControlRig:
         drive that pose with.
         """
         mixer = self.component.mixer(silent=True)
-        attribute_dictionary = dict()
-        for pose in self.component.pose_list:
-            attribute_dictionary[pose] = mixer.node.attr(pose)
-
-        return attribute_dictionary
-
-    def resolve_control(
-            self,
-            description,
-            identity_label,
-            location,
-            parent,
-            guide,
-            lock_and_hide=None
-    ):
-        """
-        We allow the user to specify a control directly, or to allow us to create
-        it as part of the rig build. This function will return the existing control
-        if one has been specified, otherwise it will generate a new one.
-        """
-        # -- Read the input value If it is not blank then we return that
-        # -- node rather than create one.
-        control_name = self.component.input(f"{identity_label}_control").get()
-        if control_name:
-            return mref.get(control_name)
-
-        # -- To reach here we need to construct a new control
-        new_control_setup = aniseed_toolkit.control.create(
-            description="Facial" + description,
-            location=location,
-            parent=self.component.input(f"{identity_label}_parent").get() or parent,
-            shape=self.component.input(f"{identity_label}_shape").get() or "core_cube",
-            config=self.component.config,
-            match_to=guide or None,
-        )
-
-        # -- Lock and hide any attributes that should not be animatable.
-        if lock_and_hide:
-            aniseed_toolkit.attributes.lock_and_hide(
-                [new_control_setup.ctl],
-                lock_and_hide,
-                lock=True,
-                hide=True,
-            )
-
-        # -- Start by creating the control
-        return mref.get(new_control_setup.ctl)
-
-    def clamped_connection(
-            self,
-            driving_attribute,
-            destination_attribute,
-            clamp_min=0,
-            clamp_max=1,
-    ):
-        """
-        This will connect the driving attribute to the destination attribute
-        but with a clamp in between set to the given values.
-        """
-        # -- Create and setup the clamp node
-        clamp = mref.create("clamp")
-        clamp.attr(f"maxR").set(clamp_max)
-        clamp.attr(f"minR").set(clamp_min)
-
-        # -- Hook up the connections
-        driving_attribute.connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-        # -- Return a dictionary. We do this because we have a variety of different
-        # -- connection methods, some of which return mutliple objects, therefore this
-        # -- just creates a consistent return type for them all.
         return {
-            "clamp": clamp,
+            pose: mixer.node.attr(pose)
+            for pose in self.component.pose_list
         }
-
-    def clamped_reversal(
-            self,
-            driving_attribute,
-            destination_attribute,
-            clamp_min=0,
-            clamp_max=1,
-    ):
-        """
-        This will connect the driving attribute to the destination attribute
-        but with a reversal (*-1) and then clamping that result to the given
-        clamp values.
-        """
-        # -- Push In Behaviour
-        clamp = mref.create("clamp")
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-
-        # -- Setup the inversion node
-        inverse = mref.create("floatMath")
-        inverse.attr("operation").set(2)  # -- Multiply
-        inverse.attr("floatB").set(-1)
-
-        # -- Hook up the connections
-        driving_attribute.connect(inverse.attr("floatA"))
-        inverse.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-        return {
-            "clamp": clamp,
-            "multiplier": inverse,
-        }
-
-    def expose_reversal_direct(
-            self,
-            control: mref.ReferencedItem,
-            label,
-            destination_attribute,
-            clamp_min=0,
-            clamp_max=1,
-            proxy_prefix="",
-    ):
-        """
-        This will expose the given destination attribute up to the control
-        but it will also reverse the value and clamp it.
-        """
-        attribute_host = mref.get(self.component.input("Attribute Host").get())
-        if proxy_prefix:
-            proxy_prefix += "_"
-        # -- Create the attribute if it does not already exist
-        if control.has_attribute(label):
-            attribute = control.attr(label)
-        else:
-            attribute = control.add_attribute(
-                label,
-                value=0,
-                attribute_type="float",
-                keyable=True,
-            )
-            attribute_host.add_proxy(proxy_prefix + attribute.name(include_node=False), attribute)
-
-        # -- Setup the clamp
-        clamp = mref.create("clamp")
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-
-        # -- Set up the inversion
-        inverse = mref.create("floatMath")
-        inverse.attr("operation").set(2)  # -- Multiply
-        inverse.attr("floatB").set(-1)
-
-        # -- Hook up the connections
-        attribute.connect(inverse.attr("floatA"))
-        inverse.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-    def expose_direct(
-            self,
-            control: mref.ReferencedItem,
-            label, destination_attribute,
-            clamp_min=0,
-            clamp_max=1,
-            do_next=True,
-            proxy_prefix="",
-            do_proxy=True,
-    ):
-        """
-        This will expose the attribute on the control, allowing the animator to drive
-        it directly.
-        """
-        attribute_host = mref.get(self.component.input("Attribute Host").get())
-        if proxy_prefix:
-            proxy_prefix += "_"
-
-        # -- Create the attribute if it does not already exist
-        if control.has_attribute(label):
-            attribute = control.attr(label)
-        else:
-            attribute = control.add_attribute(
-                label,
-                value=0,
-                attribute_type="float",
-                keyable=True,
-            )
-            attribute_host.add_proxy(proxy_prefix + attribute.name(include_node=False), attribute)
-
-        # -- Setup the clamp
-        clamp = mref.create("clamp")
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-
-        # -- Have the animator facing attribute drive the clamp
-        attribute.connect(clamp.attr("inputR"))
-
-        # -- Hook up the clamp to the destination
-        if do_next:
-            clamp.attr("outputR").connect_next(destination_attribute)
-        else:
-            clamp.attr("outputR").connect(destination_attribute)
-
-        return {
-            "clamp": clamp,
-        }
-
-    def setup_eye(self, location, control, connection_map):
-        """
-        Sets up the blinks
-        """
-        self.expose_direct(
-            control=control,
-            label=f"blink",
-            destination_attribute=connection_map[f"{location}_blink"],
-            proxy_prefix=location,
-            do_proxy=False,
-        )
-
-    def setup_inner_brow(self, location, guide, parent, connection_map):
-        """
-        This sets up the control connections for the inner eye
-        brow.
-        """
-        # -- Create the control
-        control = self.resolve_control(
-            description="brow_inner",
-            identity_label=f"{location}_brow_inner",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tz"],
-        )
-
-        # -- Hook up the transformation connections
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_inner_up"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_inner_down"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_brow_inner_in"],
-            clamp_min=-1,
-        )
-
-        # -- Hook up the animator-facing direct controls
-        self.expose_direct(
-            control=control,
-            label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_up"],
-            proxy_prefix=location,
-        )
-        self.expose_reversal_direct(
-            control=control,
-            label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_down"],
-            proxy_prefix=location,
-        )
-
-    def setup_nose(self, guide, parent, connection_map):
-        """
-        This sets up the control connections for the nose control
-        """
-        # -- Create the control
-        control = self.resolve_control(
-            description="nose",
-            identity_label="nose",
-            location=self.component.config.middle,
-            parent=parent,
-            guide=guide,
-        )
-
-        # -- Expose the direct animator facing controls
-        self.expose_direct(
-            control=control,
-            label=f"left_nose_flare",
-            destination_attribute=connection_map[f"left_nose_flare"],
-        )
-        self.expose_direct(
-            control=control,
-            label=f"right_nose_flare",
-            destination_attribute=connection_map[f"right_nose_flare"],
-        )
-
-    def setup_central_lip(self, section, guide, parent, connection_map):
-        """
-        This sets up the control connections for the central lip (either upper
-        or lower)
-
-        :param section: lower or upper
-        :param guide: guide to denote the location/transformation of the control
-        :param parent: parent for the control
-        :param connection_map: A dictionary of labels where the value is the
-            attribute it represents.
-        """
-
-        # -- Create our control
-        control = self.resolve_control(
-            description=f"{section}_lip",
-            identity_label=f"{section}_lip",
-            location=self.component.config.middle,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tx"],
-        )
-
-        # -- Hook up out transformation connections
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{section}_lip_pull"],
-        )
-
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{section}_lip_compress"],
-        )
-
-        self.clamped_connection(
-            driving_attribute=control.attr("translateZ"),
-            destination_attribute=connection_map[f"{section}_lip_curl_out"],
-        )
-
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateZ"),
-            destination_attribute=connection_map[f"{section}_lip_curl_in"],
-        )
-
-        # -- Hook up our animator facing attributes
-        self.expose_direct(
-            control=control,
-            label=f"right_sneer",
-            destination_attribute=connection_map[f"right_lip_sneer_{section}"],
-            clamp_min=-1,
-            proxy_prefix=section,
-        )
-        self.expose_direct(
-            control=control,
-            label=f"left_sneer",
-            destination_attribute=connection_map[f"left_lip_sneer_{section}"],
-            clamp_min=-1,
-            proxy_prefix=section,
-        )
-        #
-        # # -- Set up the sneering fixer - this resolves the middle of the lips
-        # # -- when both sneers are dialed in
-        # add_sneers = mref.create("floatMath")
-        # control.attr("right_sneer").connect(add_sneers.attr("floatA"))
-        # control.attr("left_sneer").connect(add_sneers.attr("floatB"))
-        #
-        # # -- As we're blending two float tracks we divide it in two.
-        # divide_by_two = mref.create("floatMath")
-        # divide_by_two.attr("operation").set(2)  # -- Multiply
-        # divide_by_two.attr("floatB").set(0.5)
-        # add_sneers.attr("outFloat").connect(divide_by_two.attr("floatA"))
-        #
-        # # -- As well as dialing it in automatically we also want to expose
-        # # -- it as a direct animatable attribute.
-        # add_direct = mref.create("floatMath")
-        # divide_by_two.attr("outFloat").connect(add_direct.attr("floatA"))
-
-        # -- Set up the sneering fixer - this resolves the middle of the lips
-        # -- when both sneers are dialed in
-        multiply_sneers = mref.create("floatMath")
-        multiply_sneers.attr("operation").set(2)  # -- Multiply
-        control.attr("right_sneer").connect(multiply_sneers.attr("floatA"))
-        control.attr("left_sneer").connect(multiply_sneers.attr("floatB"))
-
-        # # -- As we're blending two float tracks we divide it in two.
-        # divide_by_two = mref.create("floatMath")
-        # divide_by_two.attr("operation").set(2)  # -- Multiply
-        # divide_by_two.attr("floatB").set(0.5)
-        # add_sneers.attr("outFloat").connect(divide_by_two.attr("floatA"))
-
-        # -- As well as dialing it in automatically we also want to expose
-        # -- it as a direct animatable attribute.
-        add_direct = mref.create("floatMath")
-        multiply_sneers.attr("outFloat").connect(add_direct.attr("floatA"))
-
-        self.expose_direct(
-            control=control,
-            label="sneer_fixup",
-            destination_attribute=add_direct.attr("floatB"),
-            clamp_min=-1,
-            clamp_max=1,
-            do_next=False,
-            proxy_prefix=section,
-        )
-
-        # -- Ensure the result is always clamped.
-        clamp = mref.create("clamp")
-        clamp.attr("minR").set(-1)
-        clamp.attr("maxR").set(1)
-        add_direct.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(connection_map[f"{section}_sneer"])
-
-    def setup_lip_puller(self, location, guide, jaw, parent, connection_map):
-        """
-        This will create the control for the lip pullers (left and right)
-        """
-
-        control = self.resolve_control(
-            description=f"lip_puller",
-            identity_label=f"{location}_lip_corner",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tz"],
-        )
-        # -- Multiply the jaw x against the pull in and drive the right_lip_corner_push_in_jaw_open
-        multiply_jaw = mref.create("floatMath")
-        multiply_jaw.operation.set(2)  # - multiply
-        multiply_jaw.floatB.set(1.0 / 25)
-        jaw.rotateX.connect(multiply_jaw.floatA)
-
-        multiply_inverter = mref.create("floatMath")
-        multiply_inverter.operation.set(2)
-        multiply_inverter.floatA.set(-1.0)
-        control.translateX.connect(multiply_inverter.floatB)
-
-        multiply_mix = mref.create("floatMath")
-        multiply_mix.operation.set(2)  # - Multiply
-        multiply_jaw.outFloat.connect(multiply_mix.floatA)
-        multiply_inverter.outFloat.connect(multiply_mix.floatB)
-
-        self.clamped_connection(
-            driving_attribute=multiply_mix.outFloat,
-            destination_attribute=connection_map[f"{location}_lip_corner_push_in_jaw_open"],
-        )
-
-        # -- Pull Out Behaviour
-        self.clamped_connection(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_out"],
-        )
-
-        # -- Push In Behaviour
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_lip_corner_push_in"],
-        )
-
-        # -- Pull Down In Behaviour
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_down"],
-        )
-
-        # -- Push Up Behaviour
-        corner_pull_up_setup = self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_up"],
-        )
-
-        # -- Now add the squint
-        remap_node = mref.create("remapValue")
-        corner_pull_up_setup["clamp"].attr("outputR").connect(
-            remap_node.attr("inputValue"))
-        remap_node.attr("inputMax").set(1)
-        remap_node.attr("value[0].value_Position").set(0.25)
-        remap_node.attr("value[0].value_FloatValue").set(0)
-        remap_node.attr("value[0].value_Interp").set(2)  # Smooth
-        remap_node.attr("value[1].value_Position").set(1)
-        remap_node.attr("value[1].value_FloatValue").set(0.25)
-        remap_node.attr("outValue").connect_next(
-            connection_map[f"{location}_squint_outer"])
-
-        # -- Set up our direct connections
-        self.expose_direct(
-            control=control,
-            label="Blow",
-            destination_attribute=connection_map[f"{location}_cheek_blow"],
-            proxy_prefix=location,
-        )
-        self.expose_reversal_direct(
-            control=control,
-            label="Blow",
-            destination_attribute=connection_map[f"{location}_cheek_suck"],
-            proxy_prefix=location,
-        )
-
-    def setup_outer_brow(self, location, guide, parent, connection_map):
-        """
-        This will create the control for the outer brows (left and right)
-        """
-        control = self.resolve_control(
-            description="brow_outer",
-            identity_label=f"{location}_brow_outer",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tx", "tz"],
-        )
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_outer_up"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_outer_down"],
-        )
-
-        self.expose_direct(
-            control=control,
-            label="squint_inner",
-            destination_attribute=connection_map[f"{location}_squint_inner"],
-            proxy_prefix=location,
-        )
-
-        self.expose_direct(
-            control=control,
-            label="squint_outer",
-            destination_attribute=connection_map[f"{location}_squint_outer"],
-            proxy_prefix=location,
-        )
 
 
 class FacialTools(QtWidgets.QWidget):
@@ -1484,6 +900,14 @@ class FacialTools(QtWidgets.QWidget):
     }
 
     def __init__(self, component, parent=None):
+        """
+        Builds a vertical list of buttons, one per entry in button_mapping,
+        each calling the matching MixerTools method.
+
+        Args:
+            component: The face component the tools operate on
+            parent: Optional parent widget
+        """
         super(FacialTools, self).__init__(parent=parent)
 
         # -- Store a reference to the component
@@ -1515,6 +939,10 @@ class MixerTools:
     """
 
     def __init__(self, component):
+        """
+        Args:
+            component: The face component whose mixer the tools operate on
+        """
         self.component = component
 
     def mirror_pose(self):
@@ -1605,46 +1033,60 @@ class MixerTools:
         """
         self.set_pose_visibility(False)
 
+    @staticmethod
+    def pose_targets(mixer, pose_name):
+        """
+        Returns a list of (deformer, target) pairs for the given pose
+        """
+        return [
+            (deformer, mixer.get_target(pose_name, deformer.deformer_name.get()))
+            for deformer in mixer.deformers()
+        ]
+
+    @staticmethod
+    def zero_transform(node):
+        """
+        Resets the translation, rotation and scale of the given node, skipping
+        any channels which cannot be set (such as locked channels).
+        """
+        for axis in ["X", "Y", "Z"]:
+            for channel, value in [("translate", 0), ("rotate", 0), ("scale", 1)]:
+                try:
+                    node.attr(f"{channel}{axis}").set(value)
+                except Exception:
+                    pass
+
     def snap_pose(self):
         """
-        This will snap the targets of the given pose to the controls.
+        This will snap the targets of the selected poses to the current
+        (world space) transforms of their controls, and then zero the controls.
         """
         mixer = self.component.mixer()
         if not mixer:
             return
 
-        matrices = dict()
-
         for pose in mref.selected():
-            source_pose_name = pose.pose_name.get()
-            deformers = mixer.deformers()
+            pose_targets = self.pose_targets(mixer, pose.pose_name.get())
 
-            for deformer in deformers:
-                target = mixer.get_target(source_pose_name, deformer.deformer_name.get())
+            # -- Store the world matrix of each deformer's control and
+            # -- then zero that control
+            matrices = dict()
+            for deformer, target in pose_targets:
                 controller = deformer.control_link.inputs()[0].node()
 
                 matrices[target] = controller.get_matrix(space="world")
+                self.zero_transform(controller)
 
-                for axis in ["X", "Y", "Z"]:
-                    try: controller.attr(f"translate{axis}").set(0)
-                    except: pass
-                    try: controller.attr(f"rotate{axis}").set(0)
-                    except: pass
-                    try: controller.attr(f"scale{axis}").set(1)
-                    except: pass
-
-                if "deformer_upper_lip_inner_left" in target.name():
-                    print(deformer.name())
-            print(matrices)
-            for i in range(len(deformers)):
+            # -- Setting one target can move others which sit below it, so the
+            # -- matrices are applied once per deformer to let them settle.
+            for _ in range(len(pose_targets)):
                 for target, matrix in matrices.items():
-                    n = mref.create("transform", name="exampl_" + target.name())
-                    n.set_matrix(matrix, space="world")
-                    cmds.xform(target.name(), matrix=matrix, worldSpace=True)
-                    #target__deformer_upper_lip_inner_left__pose_upper_lip_curl_out
-                    # target.set_matrix(matrix, space="world")
+                    target.set_matrix(matrix, space="world")
 
     def select_pose(self):
+        """
+        Selects all the targets of the selected poses
+        """
         mixer = self.component.mixer()
         if not mixer:
             return
@@ -1652,25 +1094,21 @@ class MixerTools:
         targets = []
 
         for pose in mref.selected():
-            source_pose_name = pose.pose_name.get()
-
-            for deformer in mixer.deformers():
-                targets.append(mixer.get_target(source_pose_name, deformer.deformer_name.get()))
+            targets.extend(
+                target
+                for _, target in self.pose_targets(mixer, pose.pose_name.get())
+            )
 
         mref.select(targets)
 
     def snapshot_data(self, silent=False):
-        mixer_name = self.component.option("Mixer").get()
-        # mixer_name = "transformMixer"
-        if not mixer_name or not cmds.objExists(mixer_name):
-            if not silent:
-                qtility.request.message(
-                    title="Cannot Snapshot Data",
-                    message="You must build the rig before using the snapshot"
-                )
+        """
+        Stores the current state of the mixer into the Mixer Data option
+        """
+        mixer = self.component.mixer(silent=silent)
+        if not mixer:
             return
 
-        mixer = aniseed_toolkit.transformation.TransformMixer(node=mixer_name)
         self.component.option("Mixer Data").set(mixer.serialise())
 
         if not silent:
@@ -1679,9 +1117,13 @@ class MixerTools:
                 message="The snapshot has been made",
             )
 
-        return
-
     def save_data(self, filepath=None):
+        """
+        Saves the current state of the mixer to a json file
+        """
+        mixer = self.component.mixer()
+        if not mixer:
+            return
 
         if not filepath:
             filepath = qtility.request.filepath(
@@ -1692,7 +1134,7 @@ class MixerTools:
                 return
 
         with open(filepath, "w") as f:
-            json.dump(self.component.mixer().serialise(), f, indent=4)
+            json.dump(mixer.serialise(), f, indent=4)
 
         qtility.request.message(
             title="Save Complete",
@@ -1700,7 +1142,9 @@ class MixerTools:
         )
 
     def load_data(self, filepath=None):
-
+        """
+        Loads mixer data from a json file into the Mixer Data option
+        """
         if not filepath:
             filepath = qtility.request.filepath(
                 title="Load Data",
@@ -1718,6 +1162,9 @@ class MixerTools:
         )
 
     def clear_data(self):
+        """
+        Clears the stored mixer data
+        """
         confirmation = qtility.request.confirmation(
             title="Clear Data",
             message="Are you sure you want to clear the data?",
@@ -1728,43 +1175,45 @@ class MixerTools:
         self.component.option("Mixer Data").set([])
 
     def select_mixer(self):
+        """
+        Selects the mixer node
+        """
         mixer = self.component.mixer()
         if mixer:
-            cmds.select(mixer.node.name())
+            mref.select(mixer.node)
 
     def select_active_poses(self):
+        """
+        Selects all the poses which are currently active
+        """
         mixer = self.component.mixer()
         if not mixer:
-            print("no mixer")
             return
 
         active_poses = []
         for pose_attribute in mixer.pose_attributes():
             if pose_attribute.get() > 0.0001:
                 pose_name = pose_attribute.name(include_node=False)
-                pose_node = mixer.get_pose(pose_name)
-                active_poses.append(pose_node)
+                active_poses.append(mixer.get_pose(pose_name))
 
         mref.select(active_poses)
 
     def reset_pose(self):
+        """
+        Resets all the targets of the selected poses
+        """
         mixer = self.component.mixer()
-
         if not mixer:
             return
 
         confirmation = qtility.request.confirmation(
             title="Reset Pose",
-            message=f"Are you sure you want to reset the selected poses?",
+            message="Are you sure you want to reset the selected poses?",
         )
         if not confirmation:
             return
 
-        identify_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
         for pose in mref.selected():
-            pose_name = pose.pose_name.get()
-            deformers = mixer.deformers()
-
-            for deformer in deformers:
-                target = mixer.get_target(pose_name, deformer.deformer_name.get())
-                target.set_matrix(identify_matrix)
+            for _, target in self.pose_targets(mixer, pose.pose_name.get()):
+                target.set_matrix(identity_matrix)

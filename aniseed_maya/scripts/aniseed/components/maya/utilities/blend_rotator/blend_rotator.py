@@ -1,7 +1,13 @@
+"""
+Provides the "Utility : Blend Rotator" component, which builds a cube
+control whose offset is parent constrained between Target A and Target B,
+with a keyable Blend attribute on the control driving the weighting. The
+control then drives a joint, which can optionally be created on stack entry
+under the current selection.
+"""
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class BlendedConstraint(aniseed.RigComponent):
@@ -15,6 +21,10 @@ class BlendedConstraint(aniseed.RigComponent):
     identifier = "Utility : Blend Rotator"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Parent, Joint, Target A and Target B inputs, the naming
+        and Create Joint options, and the Control output.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -74,9 +84,18 @@ class BlendedConstraint(aniseed.RigComponent):
         )
 
     def suggested_label(self):
+        """
+        Returns the Description option as the component label.
+        """
         return self.option("Description").get()
 
     def on_enter_stack(self):
+        """
+        Hides the Create Joint option and, if it is enabled, creates a named
+        joint under (and matched to) the first selected node, binding it to
+        the Joint input. Relies on the current selection; with nothing
+        selected the joint is created at the world root.
+        """
 
         self.option("Create Joint").set_hidden(True)
 
@@ -103,15 +122,28 @@ class BlendedConstraint(aniseed.RigComponent):
         self.input("Joint").set(joint.name())
 
     def option_widget(self, option_name):
+        """
+        Returns a location selector for the Location option.
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the Parent, Joint, Target A and
+        Target B inputs.
+        """
         if requirement_name in ["Parent", "Joint", "Target A", "Target B"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
-
     def run(self) -> bool:
+        """
+        Builds a cube control matched to the joint, adds a keyable Blend
+        attribute (default 0.5) to it, and parent constrains the control's
+        offset to both targets with Blend driving the weights (no-flip
+        interpolation). The control then parent and scale constrains the
+        joint, and is written to the Control output.
+        """
 
         joint = self.input("Joint").get()
         target_a = self.input("Target A").get()
@@ -136,38 +168,28 @@ class BlendedConstraint(aniseed.RigComponent):
             keyable=True,
         )
 
-        cmds.parentConstraint(
+        # -- Constrain the control's offset to both targets, with the
+        # -- blend attribute driving the weighting between them
+        mref.parentConstraint(
             target_a,
             rotator_control.off,
             maintainOffset=True,
         )
 
-        constraint = mref.get(
-            cmds.parentConstraint(
-                target_b,
-                rotator_control.off,
-                maintainOffset=True,
-            )[0]
-        )
+        constraint = mref.parentConstraint(
+            target_b,
+            rotator_control.off,
+            maintainOffset=True,
+        )[0]
         constraint.attr("interpType").set(0)  # No Flip
 
-        weight_attributes = constraint.weight_attributes()
+        aniseed_toolkit.constraints.blend_weights(blend_attribute, constraint)
 
-        reverse_node = mref.create("reverse")
-        blend_attribute.connect(reverse_node.attr("inputX"))
-        reverse_node.attr("outputX").connect(weight_attributes[0])
-        blend_attribute.connect(weight_attributes[1])
-
-        cmds.parentConstraint(
+        # -- The control then drives the joint
+        aniseed_toolkit.constraints.parent_and_scale(
             rotator_control.ctl,
             joint,
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            rotator_control.ctl,
-            joint,
-            maintainOffset=True,
+            maintain_offset=True,
         )
 
         self.output("Control").set(rotator_control.ctl)

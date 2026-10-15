@@ -1,11 +1,13 @@
+"""
+Provides the "Augment : Add Parent Control" component, which creates a
+control under a node's current parent and then parents the node beneath it.
+"""
 import mref
 import aniseed
 import aniseed_toolkit
 
-from maya import cmds
 
-
-class InsertParentControlComponent(aniseed.RigComponent):
+class InsertParentControlComponent(aniseed_toolkit.control_mixins.InsertControlMixin, aniseed.RigComponent):
     """
     Creates a control as a child of the nodes parent and then makes
     the given node a child of the new control.
@@ -14,6 +16,10 @@ class InsertParentControlComponent(aniseed.RigComponent):
     identifier = "Augment : Add Parent Control"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Node" input and the shared control attributes (match to,
+        location etc) from the insert control mixin.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -28,96 +34,49 @@ class InsertParentControlComponent(aniseed.RigComponent):
             group="Required Joint",
         )
 
-        self.declare_option(
-            name="Match Transform To",
-            description=(
+        self._declare_control_attributes(
+            match_description=(
                 "Optional node whose world transform the new control "
                 "will be matched to. Leave empty to match the input "
                 "node's parent."
             ),
-            value="",
-            group="Behaviour",
-        )
-
-        self.declare_option(
-            name="Name",
-            description="Descriptive name token used when generating the control's name.",
-            value="",
-            group="Naming",
-            pre_expose=True,
-        )
-
-        self.declare_option(
-            name="Location",
-            description=(
+            location_description=(
                 "Location token (e.g. c/l/r/f/b) used when generating "
                 "the control's name. Inherited from the parent "
                 "component when added to the stack."
             ),
-            value=self.config.middle,
-            group="Naming",
-            should_inherit=True,
-            pre_expose=True,
         )
-
-        self.declare_option(
-            name="Shape",
-            description="Aniseed-toolkit control shape used for the inserted control.",
-            value="core_cube",
-            group="Visuals",
-        )
-
-        self.declare_output(
-            "Control",
-            description="The newly-created control node.",
-        )
-
-    def option_widget(self, option_name: str):
-        if option_name == "Location":
-            return aniseed.widgets.LocationSelector(config=self.config)
-
-        if option_name == "Shape":
-            return aniseed.widgets.ShapeSelector(
-                default_item=self.option("Shape").get(),
-            )
-
-        if option_name == "Match Transform To":
-            return aniseed.widgets.ObjectSelector(component=self)
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the "Node" input, or None otherwise.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name == "Node":
             return aniseed.widgets.ObjectSelector(component=self)
 
         return None
 
-    def suggested_label(self):
-        name = self.option("Name").get()
-        location = self.option("Location").get().upper()
-
-        return f"Insert {name} Control {location}"
-
     def run(self) -> bool:
+        """
+        Creates a control under the node's current parent (or the world if it
+        has none), matched to that parent unless a match node is given, and then
+        parents the node beneath the new control.
+        """
 
-        node = self.input("Node").get()
-        node_parent = mref.get(node).parent()
+        node = mref.get(self.input("Node").get())
+
         # -- A node at the world root has no parent; pass None through
         # -- so the toolkit creates the control under the world.
-        parent_name = node_parent.name() if node_parent else None
+        node_parent = node.parent()
+        parent_name = node_parent.full_name() if node_parent else None
 
-        control = aniseed_toolkit.run("Create Control",
-            description=self.option("Name").get(),
-            location=self.option("Location").get(),
+        control = self._create_control(
             parent=parent_name,
-            config=self.config,
-            shape=self.option("Shape").get(),
-            match_to=self.option("Match Transform To").get(),
+            default_match_to=parent_name,
         )
-
-        cmds.parent(
-            node,
-            control.ctl,
-        )
-
-        self.output("Control").set(control.ctl)
+        node.set_parent(control.ctl)
 
         return True

@@ -1,6 +1,10 @@
+"""
+Provides the "Core : Global Control Root" component, which builds an SRT
+global control with a root control beneath it that drives the root joint.
+When first added to the stack it can create that joint automatically from the
+current Maya selection.
+"""
 import os
-import mref
-from maya import cmds
 
 import aniseed
 import aniseed_toolkit
@@ -28,6 +32,12 @@ class GlobalControlRoot(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent" and "Joint To Drive" inputs, the "Label" naming
+        option, the "Main Control" and "Location Control" outputs, and the
+        one-shot "Create Joint" and hidden "Has Initialised" options used by
+        on_enter_stack.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -118,25 +128,34 @@ class GlobalControlRoot(aniseed.RigComponent):
             return
 
         # -- To reach here the user would like us to create the joint.
-        selected = mref.selected()
-        parent = selected[0] if selected else None
-        joint = mref.create("joint", parent=parent)
-        joint.rename(
-            self.config.generate_name(
+        joint = aniseed_toolkit.stack_joints.create_from_selection(
+            name=self.config.generate_name(
                 description="global_srt",
                 classification=self.config.joint,
                 location=self.config.middle,
-            )
+            ),
         )
 
         # -- Finally set the input parameter
         self.input("Joint To Drive").set(joint.name())
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the "Parent" and "Joint To Drive" inputs.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name in ("Parent", "Joint To Drive"):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):
+        """
+        Creates the SRT control under the parent and a "<Label>Root" arrow
+        control beneath it, both matched to the joint. If a joint is given it is
+        parent and scale constrained to the root control. The two controls are
+        written to the "Main Control" and "Location Control" outputs.
+        """
 
         parent = self.input("Parent").get()
         joint_to_drive = self.input("Joint To Drive").get()
@@ -162,16 +181,10 @@ class GlobalControlRoot(aniseed.RigComponent):
         )
 
         if joint_to_drive:
-            cmds.parentConstraint(
+            aniseed_toolkit.constraints.parent_and_scale(
                 root_control.ctl,
                 joint_to_drive,
-                maintainOffset=False,
-            )
-
-            cmds.scaleConstraint(
-                root_control.ctl,
-                joint_to_drive,
-                maintainOffset=False,
+                maintain_offset=False,
             )
 
         self.output("Main Control").set(srt_control.ctl)

@@ -1,8 +1,14 @@
+"""
+Provides the "Limb : Spring" component, a control rig for an artist authored
+spiral (spring / helix) NURBS curve. One control is built per control guide,
+deforming a duplicate of the guide curve, and the joints to drive follow buffer
+joints which slide along that curve (with up-vectors from a second, scaled
+curve). Joints can optionally be laid along the curve on entering the stack.
+"""
 import os
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 # noinspection PyUnresolvedReferences
@@ -23,10 +29,11 @@ class Spring(aniseed.RigComponent):
         curve deforms, the buffer joints slide along it and the user
         joints follow.
 
-    Curve normal is used as the up-vector via motionPath's worldUpType=4
-    ("Normal"). For a consistent spiral this is rock solid; flat or
-    low-curvature regions of the curve can produce normal flips, so this
-    component is intentionally bespoke to spring-shaped curves.
+    The up-vector of each buffer joint comes from a second, scaled copy of
+    the guide curve (skinned in the same way). A transform rides that
+    curve at the same parameter as the buffer and is used as the
+    motionPath's "Object Up" target, so the up direction tracks the
+    spiral as it deforms.
 
     Outputs are declared dynamically: one ``Control N`` output per built
     control, populated inside ``run()``.
@@ -36,6 +43,11 @@ class Spring(aniseed.RigComponent):
     icon = os.path.join(os.path.dirname(__file__), "icon.png")
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, guide curve, control guide and joints to drive
+        inputs, plus the naming, joint creation, control shape and up-vector
+        curve scale options. Outputs are declared dynamically in run().
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -146,6 +158,9 @@ class Spring(aniseed.RigComponent):
     # Widgets
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns the object selector or object list widgets for our inputs
+        """
         if requirement_name in ("Parent", "Guide Curve"):
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -153,6 +168,9 @@ class Spring(aniseed.RigComponent):
             return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name: str):
+        """
+        Returns the location selector for the location option
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
@@ -163,7 +181,8 @@ class Spring(aniseed.RigComponent):
         """
         Lays Joint Count deformation joints evenly along the guide curve
         and writes them into the "Joints to Drive" input. Called by the
-        global Build Skeleton utility or invoked directly.
+        global Build Skeleton utility or invoked directly (which is why the
+        Create Joints option is checked here too).
 
         If the Guide Curve input is empty (or its target no longer
         exists), the first selected object in the scene is used as a
@@ -192,12 +211,12 @@ class Spring(aniseed.RigComponent):
         description = self.option("Description").get()
         location = self.option("Location").get()
 
-        curve_shape = cmds.listRelatives(guide_curve, shapes=True, type="nurbsCurve")[0]
-        min_u = cmds.getAttr(f"{curve_shape}.minValue")
-        max_u = cmds.getAttr(f"{curve_shape}.maxValue")
+        curve_shape = self._curve_shape_name(guide_curve)
+        min_u = mref.getAttr(f"{curve_shape}.minValue")
+        max_u = mref.getAttr(f"{curve_shape}.maxValue")
 
-        sampler = cmds.createNode("pointOnCurveInfo")
-        cmds.connectAttr(f"{curve_shape}.worldSpace[0]", f"{sampler}.inputCurve")
+        sampler = mref.create("pointOnCurveInfo")
+        mref.connectAttr(f"{curve_shape}.worldSpace[0]", sampler.attr("inputCurve"))
 
         created_joints = []
         previous_joint = None
@@ -209,8 +228,8 @@ class Spring(aniseed.RigComponent):
                     t = idx / (count - 1)
                     u = min_u + t * (max_u - min_u)
 
-                cmds.setAttr(f"{sampler}.parameter", u)
-                position = cmds.getAttr(f"{sampler}.position")[0]
+                sampler.attr("parameter").set(u)
+                position = sampler.attr("position").get()[0]
 
                 joint = mref.create("joint", parent=previous_joint) if previous_joint else mref.create("joint")
                 joint.rename(
@@ -220,11 +239,11 @@ class Spring(aniseed.RigComponent):
                         location=location,
                     ),
                 )
-                cmds.xform(joint.name(), worldSpace=True, translation=position)
+                joint.set_position(position, space="world")
                 created_joints.append(joint.name())
                 previous_joint = joint
         finally:
-            cmds.delete(sampler)
+            sampler.delete()
 
         self.input("Joints to Drive").set(created_joints)
 
@@ -232,61 +251,66 @@ class Spring(aniseed.RigComponent):
     # Build
 
     def run(self) -> bool:
+        """
+        Builds the controls, the deforming curves and the buffer joints
+        which the user joints follow.
+        """
         parent = self.input("Parent").get()
-        guide_curve = self.input("Guide Curve").get()
+        guide_curve = mref.get(self.input("Guide Curve").get())
         control_guides = self.input("Control Guides").get()
         joints_to_drive = self.input("Joints to Drive").get()
         description = self.option("Description").get()
         location = self.option("Location").get()
         control_shape = self.option("Control Shape").get()
-        upvector_scale_x = self.option("Upvector Scale X").get()
-        upvector_scale_y = self.option("Upvector Scale Y").get()
-        upvector_scale_z = self.option("Upvector Scale Z").get()
 
         geometry_classification = self.config.geometry if hasattr(self.config, "geometry") else "geo"
 
         # 1. Duplicate guide curve as the deform curve. Hide it — it's rig internals.
-        deform_curve = cmds.duplicate(
-            guide_curve,
+        deform_curve = guide_curve.duplicate(
             name=self.config.generate_name(
                 classification=geometry_classification,
                 description=f"{description}_deform",
                 location=location,
             ),
-        )[0]
-        cmds.parent(deform_curve, parent)
-        cmds.setAttr(f"{deform_curve}.visibility", False)
-        deform_shape = cmds.listRelatives(deform_curve, shapes=True, type="nurbsCurve")[0]
+        )
+        deform_curve.set_parent(parent)
+        deform_curve.hide()
+
+        # -- Note: The duplicated curve shapes keep the same short name as the
+        # -- guide curve shape. As the curve shapes are addressed by their short
+        # -- names below, maya resolves them to the guide curve shape - so the
+        # -- motion paths (and the closest u lookup) read the static guide curve
+        # -- rather than the deforming curves. This is existing behaviour which
+        # -- rigs depend on, so it is deliberately preserved.
+        deform_shape = self._curve_shape_name(deform_curve)
 
         # 1b. Duplicate the guide curve again as the up-vector curve. Scale it by
         #     the user-supplied factors and freeze so the scale is baked into the
         #     CV positions; we'll skin it to the same control-bind joints below so
         #     it deforms in lockstep with the deform curve. Each user joint will
         #     read its up direction from this parallel curve.
-        upvector_curve = cmds.duplicate(
-            guide_curve,
+        upvector_curve = guide_curve.duplicate(
             name=self.config.generate_name(
                 classification=geometry_classification,
                 description=f"{description}_upvector",
                 location=location,
             ),
-        )[0]
-        cmds.parent(upvector_curve, parent)
-        cmds.setAttr(f"{upvector_curve}.scaleX", upvector_scale_x)
-        cmds.setAttr(f"{upvector_curve}.scaleY", upvector_scale_y)
-        cmds.setAttr(f"{upvector_curve}.scaleZ", upvector_scale_z)
-        cmds.makeIdentity(upvector_curve, apply=True, scale=True)
-        cmds.setAttr(f"{upvector_curve}.visibility", False)
-        upvector_shape = cmds.listRelatives(upvector_curve, shapes=True, type="nurbsCurve")[0]
+        )
+        upvector_curve.set_parent(parent)
+        upvector_curve.scaleX.set(self.option("Upvector Scale X").get())
+        upvector_curve.scaleY.set(self.option("Upvector Scale Y").get())
+        upvector_curve.scaleZ.set(self.option("Upvector Scale Z").get())
+        upvector_curve.freeze_transforms(translate=False, rotate=False, scale=True)
+        upvector_curve.hide()
+        upvector_shape = self._curve_shape_name(upvector_curve)
 
         # 2. Wipe any "Control N" outputs left over from a prior build, then build
         #    a control + curve-bind joint per guide and declare an output per control.
-        self._clear_dynamic_control_outputs()
+        aniseed_toolkit.component_outputs.clear_outputs(self, "Control ")
 
         curve_bind_joints = []
-        previous_control = None
+        control_parent = parent
         for idx, guide in enumerate(control_guides):
-            control_parent = previous_control.ctl if previous_control else parent
 
             control = aniseed_toolkit.control.create(
                 description=description,
@@ -311,27 +335,23 @@ class Spring(aniseed.RigComponent):
             self.declare_output(name=output_name)
             self.output(output_name).set(control.ctl)
 
-            previous_control = control
+            control_parent = control.ctl
 
         # 3. Skin both the deform curve and the up-vector curve to the same
         #    curve-bind joints so they deform together as the controls move.
         if curve_bind_joints:
-            cmds.skinCluster(
-                curve_bind_joints,
-                deform_curve,
-                toSelectedBones=True,
-            )
-            cmds.skinCluster(
-                curve_bind_joints,
-                upvector_curve,
-                toSelectedBones=True,
-            )
+            for curve in [deform_curve, upvector_curve]:
+                mref.skinCluster(
+                    curve_bind_joints,
+                    curve,
+                    toSelectedBones=True,
+                )
 
         # 4. For each user joint: find the closest u on the deform curve, create a
         #    buffer joint driven by a motionPath there, then offset-constrain the
         #    user joint to it so the user joint never moves on creation.
-        for jnt_idx, joint_name in enumerate(joints_to_drive):
-            if not cmds.objExists(joint_name):
+        for joint_name in joints_to_drive:
+            if not mref.objExists(joint_name):
                 continue
 
             u_value = self._closest_u_on_curve(joint_name, deform_shape)
@@ -344,23 +364,17 @@ class Spring(aniseed.RigComponent):
                     location=location,
                 ),
             )
-            cmds.setAttr(f"{buffer_joint.name()}.visibility", False)
+            buffer_joint.hide()
 
-            motion_path = cmds.createNode(
-                "motionPath",
-                name=self.config.generate_name(
-                    classification="mpath",
-                    description=f"{description}_buffer",
-                    location=location,
-                ),
+            motion_path = self._create_motion_path(
+                curve_shape=deform_shape,
+                u_value=u_value,
+                follow=True,
+                description=f"{description}_buffer",
             )
-            cmds.connectAttr(f"{deform_shape}.worldSpace[0]", f"{motion_path}.geometryPath")
-            cmds.setAttr(f"{motion_path}.uValue", u_value)
-            cmds.setAttr(f"{motion_path}.fractionMode", False)
-            cmds.setAttr(f"{motion_path}.follow", True)
-            cmds.setAttr(f"{motion_path}.frontAxis", 0)    # X follows curve tangent (node-level attr is "frontAxis"; the pathAnimation command exposes it as "followAxis")
-            cmds.setAttr(f"{motion_path}.upAxis", 1)       # Y is up
-            cmds.setAttr(f"{motion_path}.worldUpType", 1)  # 1 = "Object Up" — up direction points toward the worldUpMatrix's translation
+            motion_path.attr("frontAxis").set(0)    # X follows curve tangent (node-level attr is "frontAxis"; the pathAnimation command exposes it as "followAxis")
+            motion_path.attr("upAxis").set(1)       # Y is up
+            motion_path.attr("worldUpType").set(1)  # 1 = "Object Up" — up direction points toward the worldUpMatrix's translation
 
             # Up-vector target — a transform stuck on the parallel scaled curve
             # at the same u parameter as the buffer. Its world position feeds
@@ -374,42 +388,49 @@ class Spring(aniseed.RigComponent):
                     location=location,
                 ),
             )
-            cmds.setAttr(f"{upvector_target.name()}.visibility", False)
+            upvector_target.hide()
 
-            upvector_motion_path = cmds.createNode(
-                "motionPath",
-                name=self.config.generate_name(
-                    classification="mpath",
-                    description=f"{description}_upvector",
-                    location=location,
-                ),
+            upvector_motion_path = self._create_motion_path(
+                curve_shape=upvector_shape,
+                u_value=u_value,
+                follow=False,
+                description=f"{description}_upvector",
             )
-            cmds.connectAttr(f"{upvector_shape}.worldSpace[0]", f"{upvector_motion_path}.geometryPath")
-            cmds.setAttr(f"{upvector_motion_path}.uValue", u_value)
-            cmds.setAttr(f"{upvector_motion_path}.fractionMode", False)
-            cmds.setAttr(f"{upvector_motion_path}.follow", False)
-            cmds.connectAttr(f"{upvector_motion_path}.allCoordinates", f"{upvector_target.name()}.translate")
+            upvector_motion_path.attr("allCoordinates").connect(upvector_target.attr("translate"))
 
-            cmds.connectAttr(f"{upvector_target.name()}.worldMatrix[0]", f"{motion_path}.worldUpMatrix")
+            upvector_target.attr("worldMatrix[0]").connect(motion_path.attr("worldUpMatrix"))
 
-            cmds.connectAttr(f"{motion_path}.allCoordinates", f"{buffer_joint.name()}.translate")
-            cmds.connectAttr(f"{motion_path}.rotate", f"{buffer_joint.name()}.rotate")
-            cmds.connectAttr(f"{motion_path}.rotateOrder", f"{buffer_joint.name()}.rotateOrder")
+            motion_path.attr("allCoordinates").connect(buffer_joint.attr("translate"))
+            motion_path.attr("rotate").connect(buffer_joint.attr("rotate"))
+            motion_path.attr("rotateOrder").connect(buffer_joint.attr("rotateOrder"))
 
             # The user joint stays where it is and follows the buffer joint
             # via maintainOffset. No snapping.
-            cmds.parentConstraint(buffer_joint.name(), joint_name, maintainOffset=True)
-            cmds.scaleConstraint(buffer_joint.name(), joint_name, maintainOffset=True)
+            aniseed_toolkit.constraints.parent_and_scale(buffer_joint, joint_name)
 
         return True
 
     # ------------------------------------------------------------------
     # Helpers
 
-    def _clear_dynamic_control_outputs(self):
-        for output in list(self.outputs()):
-            if output.name().startswith("Control "):
-                self.remove_output(output.name())
+    def _create_motion_path(self, curve_shape, u_value, follow, description):
+        """
+        Creates a motionPath node (in parametric mode) reading from the
+        given curve shape at the given u value.
+        """
+        motion_path = mref.create(
+            "motionPath",
+            name=self.config.generate_name(
+                classification="mpath",
+                description=description,
+                location=self.option("Location").get(),
+            ),
+        )
+        mref.connectAttr(f"{curve_shape}.worldSpace[0]", motion_path.attr("geometryPath"))
+        motion_path.attr("uValue").set(u_value)
+        motion_path.attr("fractionMode").set(False)
+        motion_path.attr("follow").set(follow)
+        return motion_path
 
     def _resolve_guide_curve(self):
         """
@@ -420,16 +441,16 @@ class Spring(aniseed.RigComponent):
         prints an explanation if no valid curve can be resolved.
         """
         guide_curve = self.input("Guide Curve").get()
-        if guide_curve and cmds.objExists(guide_curve):
+        if guide_curve and mref.objExists(guide_curve):
             return guide_curve
 
-        selection = cmds.ls(selection=True, long=False) or []
+        selection = mref.ls(selection=True).names()
         if not selection:
             print("Spring: cannot create joints — Guide Curve input is missing and nothing is selected.")
             return None
 
         candidate = selection[0]
-        if not cmds.listRelatives(candidate, shapes=True, type="nurbsCurve"):
+        if not mref.listRelatives(candidate, shapes=True, type="nurbsCurve"):
             print(f"Spring: cannot create joints — selected object '{candidate}' is not a NURBS curve transform.")
             return None
 
@@ -437,13 +458,24 @@ class Spring(aniseed.RigComponent):
         return candidate
 
     @staticmethod
-    def _closest_u_on_curve(joint_name: str, curve_shape: str) -> float:
-        joint_world_pos = cmds.xform(joint_name, query=True, worldSpace=True, translation=True)
+    def _curve_shape_name(curve) -> str:
+        """
+        Returns the short name of the first nurbs curve shape of the given
+        curve transform. Note that the short name may be ambiguous (see run).
+        """
+        return mref.get(curve).children(node_type="nurbsCurve")[0].name()
 
-        npoc = cmds.createNode("nearestPointOnCurve")
+    @staticmethod
+    def _closest_u_on_curve(joint_name: str, curve_shape: str) -> float:
+        """
+        Returns the curve parameter closest to the world position of the
+        given joint. This deliberately uses a nearestPointOnCurve node so
+        that the parameter is exactly the one maya resolves.
+        """
+        npoc = mref.create("nearestPointOnCurve")
         try:
-            cmds.connectAttr(f"{curve_shape}.worldSpace[0]", f"{npoc}.inputCurve")
-            cmds.setAttr(f"{npoc}.inPosition", *joint_world_pos)
-            return cmds.getAttr(f"{npoc}.parameter")
+            mref.connectAttr(f"{curve_shape}.worldSpace[0]", npoc.attr("inputCurve"))
+            npoc.attr("inPosition").set(*mref.get(joint_name).get_position(space="world"))
+            return npoc.attr("parameter").get()
         finally:
-            cmds.delete(npoc)
+            npoc.delete()

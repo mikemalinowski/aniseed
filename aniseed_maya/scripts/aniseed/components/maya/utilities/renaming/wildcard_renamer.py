@@ -1,13 +1,26 @@
+"""
+Provides the "Utility : Wildcard Renamer" component, which finds every node
+matching a wildcard search string (optionally only those under a given
+node) and replaces a substring in their names.
+"""
 import aniseed
 import mref
 
 
 class WildCardRenamer(aniseed.RigComponent):
+    """
+    Finds every node matching the wildcard search string (optionally only
+    those under a given node) and replaces part of their names.
+    """
 
     identifier = "Utility : Wildcard Renamer"
 
     def __init__(self, *args, **kwargs):
-        aniseed.RigComponent.__init__(self, *args, **kwargs)
+        """
+        Declares the Search Under, Search String, Replace This and With This
+        inputs.
+        """
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Search Under",
@@ -30,10 +43,18 @@ class WildCardRenamer(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str) -> "PySide6.QWidget":
+        """
+        Returns an object selector for the Search Under input.
+        """
         if requirement_name == "Search Under":
             return aniseed.widgets.ObjectSelector()
 
     def run(self) -> bool:
+        """
+        Renames every node matching the Search String (and whose full name
+        contains Search Under, if given) by replacing Replace This with With
+        This in its name.
+        """
         search_string = self.input("Search String").get()
         replace_this = self.input("Replace This").get()
         with_this = self.input("With This").get()

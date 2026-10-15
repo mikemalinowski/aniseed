@@ -17,7 +17,6 @@ import qtility
 import aniseed_toolkit
 from PySide6 import QtWidgets
 
-from maya import cmds
 import maya.api.OpenMaya as om
 
 
@@ -31,7 +30,16 @@ class SplineSpine(aniseed.RigComponent):
         "icon.png",
     )
 
+    # -- The default size of the controls
+    control_scale = 10
+
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, master transform and root/tip joint inputs, the
+        naming, visual and behavioural options (including the pre-exposed joint
+        and control counts) and the transform/control outputs. Per-joint outputs
+        are rebuilt whenever the root or tip joint input changes.
+        """
         super(SplineSpine, self).__init__(*args, **kwargs)
 
         # -- Object Inputs
@@ -62,7 +70,6 @@ class SplineSpine(aniseed.RigComponent):
         # -- Hidden Option (data storage)
         self.declare_option(name="GuideData", value=None, hidden=True)
         self.declare_option(name="Joint Count", value=8, hidden=False, pre_expose=True)
-        # self.declare_option(name="PreInitialised", value=False, hidden=True)
 
         # -- Outputs
         self.declare_output(name="Root Transform")
@@ -98,8 +105,7 @@ class SplineSpine(aniseed.RigComponent):
         lets automatically generate the joints and build the guide
         """
         # -- Now that we have used the joint count option we dont want
-        # -- the user to see it again so we hide it. We also mark the
-        # -- initialisation step as having run (so it never gets run again).
+        # -- the user to see it again so we hide it.
         self.option("Joint Count").set_hidden(True)
 
         # -- Providing the number of joints was not zero then we build
@@ -124,8 +130,8 @@ class SplineSpine(aniseed.RigComponent):
         new_parent = mref.get(self.input("Root Joint").get()).parent()
         aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
 
-        # -- Now delete our leg chain and joints
-        cmds.delete(self.input("Root Joint").get())
+        # -- Now delete our joint chain
+        mref.delete(self.input("Root Joint").get())
 
     def input_widget(self, requirement_name: str) -> QtWidgets.QWidget:
         """
@@ -144,9 +150,6 @@ class SplineSpine(aniseed.RigComponent):
         if option_name == "Shape":
             return aniseed.widgets.ShapeSelector(self.option("Shape").get())
 
-        if option_name == "Upvector Axis":
-            return aniseed.widgets.AxisSelector()
-
     def user_functions(self) -> typing.Dict[str, callable]:
         """
         This needs to return a dictionary which is used to generate
@@ -158,18 +161,15 @@ class SplineSpine(aniseed.RigComponent):
         # -- If we have no joints declared then we only expose the functionality
         # -- to create joints
         root_joint = self.input("Root Joint").get()
-        if not root_joint or not cmds.objExists(root_joint):
+        if not root_joint or not mref.objExists(root_joint):
             menu["Create Joints"] = self.user_func_create_skeleton
             return menu
 
         # -- To reach here we definitely have joints, so then we need to check
-        # -- whether there is a guide in the scene or not.
-        guide_data = self.guide_data()
-        linked_guide = guide_data.get("LinkedGuide", "")
-
-        # -- If there is a guide we give the ability to remove it, otherwise
-        # -- we give the ability to create it.
-        if linked_guide and cmds.objExists(linked_guide):
+        # -- whether there is a guide in the scene or not. If there is a guide
+        # -- we give the ability to remove it, otherwise we give the ability
+        # -- to create it.
+        if self.has_guide():
             menu["Remove Guide"] = self.user_func_remove_guide
         else:
             menu["Create Guide"] = self.user_func_create_guide
@@ -182,7 +182,7 @@ class SplineSpine(aniseed.RigComponent):
         """
         # -- Resolve the parent from the argument or the selection
         if not parent:
-            selection = cmds.ls(selection=True)
+            selection = mref.selected()
             parent = selection[0] if selection else None
 
         # -- If we're not given a joint count then we need to
@@ -193,7 +193,6 @@ class SplineSpine(aniseed.RigComponent):
                 message="How many joints do you want?"
             ),
         )
-        joints = []
         if not joint_count or joint_count < 2:
             return
 
@@ -201,10 +200,11 @@ class SplineSpine(aniseed.RigComponent):
         # -- on the expected guide data
         guide_height = self.guide_data()["control_transforms"][-1][-3]
         increment = guide_height / (joint_count - 1)
-        running_parent = None
 
         # -- Now we cycle the joint count, creating each joint
         # -- in turn
+        joints = []
+        running_parent = None
         for idx in range(joint_count):
             joint = aniseed_toolkit.run(
                 "Create Joint",
@@ -217,7 +217,7 @@ class SplineSpine(aniseed.RigComponent):
 
             # -- If this is not the first joint in the hierarchy
             # -- then we move it up in Y by the increment amount
-            cmds.setAttr(f"{joint}.translateY", increment * (min(idx, 1)))
+            mref.get(joint).translateY.set(increment * (min(idx, 1)))
 
             # -- Store the joint and make this joint the parent
             # -- for the next joint to be made
@@ -226,12 +226,9 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Parent the joint chain under the parent node
         if parent:
-            cmds.parent(
-                joints[0],
-                parent,
-            )
+            mref.get(joints[0]).set_parent(parent)
 
-        # -- Set our outputs
+        # -- Set our inputs
         self.input("Root Joint").set(joints[0])
         self.input("Tip Joint").set(joints[-1])
 
@@ -239,13 +236,15 @@ class SplineSpine(aniseed.RigComponent):
         # -- via a guide, lets create the guide now
         guides = self.user_func_create_guide()
 
-        # -- If we have a parent, then match the translation to it, this
-        # -- just makes the riggers life a little easier as the component
-        # -- will show in a contextually relevant locaiton.
-        cmds.xform(
+        # -- Match the translation of the guide to the parent, this just
+        # -- makes the riggers life a little easier as the component will
+        # -- show in a contextually relevant location. Note that if there is
+        # -- no parent, xform queries the selection instead (which is the
+        # -- first guide), leaving the guide where it is.
+        mref.xform(
             guides[0],
-            translation=cmds.xform(
-            parent,
+            translation=mref.xform(
+                parent,
                 query=True,
                 translation=True,
                 worldSpace=True,
@@ -262,11 +261,11 @@ class SplineSpine(aniseed.RigComponent):
         root_joint = self.input("Root Joint").get()
         tip_joint = self.input("Tip Joint").get()
 
-        if not root_joint or not cmds.objExists(root_joint):
+        if not root_joint or not mref.objExists(root_joint):
             print("No root joint specified")
             return False
 
-        if not tip_joint or not cmds.objExists(tip_joint):
+        if not tip_joint or not mref.objExists(tip_joint):
             print("No tip joint specified")
             return False
 
@@ -277,12 +276,9 @@ class SplineSpine(aniseed.RigComponent):
         This is where we build the actual rig
         """
         # -- Get our inputs
-        start_joint = self.input("Root Joint").get()
-        end_joint = self.input("Tip Joint").get()
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
         orient_to_world = self.option("Orient Controls To World").get()
-        control_scale = 10
 
         # -- Read the joints between
         joints = self.all_joints()
@@ -291,14 +287,14 @@ class SplineSpine(aniseed.RigComponent):
         # -- of everything
         org = aniseed_toolkit.transforms.create(
             classification="org",
-            description=self.option("Descriptive Prefix").get(),
-            location=self.option("Location").get(),
+            description=descriptive,
+            location=location,
             config=self.config,
             parent=self.input("Parent").get(),
             match_to=self.input("Parent").get(),
         )
 
-        # -- Construct the spline setup. This returns a special splin       e
+        # -- Construct the spline setup. This returns a special spline
         # -- class we can use to get access to all the different objects.
         spline_setup = self._create_spline_setup(joints, parent=org, constrain=False)
 
@@ -309,7 +305,7 @@ class SplineSpine(aniseed.RigComponent):
             location=location,
             parent=org,
             shape="core_rounded_square",
-            shape_scale=control_scale * 1.25,
+            shape_scale=self.control_scale * 1.25,
             config=self.config,
             match_to=spine_master_transform or spline_setup.out_controls[0].full_name(),
         )
@@ -317,14 +313,11 @@ class SplineSpine(aniseed.RigComponent):
         # -- If we need to orient it to the world then we do so by
         # -- adjusting the rotation of the org node
         if orient_to_world:
-            cmds.xform(
-                master_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            mref.get(master_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Add the FK and Ik Visibility Attributes
-        ik_visibility = mref.get(master_control.ctl).add_attribute(
+        master_control_node = mref.get(master_control.ctl)
+        ik_visibility = master_control_node.add_attribute(
             "ik_visibility",
             attribute_type="bool",
             value=True,
@@ -332,7 +325,7 @@ class SplineSpine(aniseed.RigComponent):
         )
         ik_visibility.set(channelBox=True)
 
-        fk_visibility = mref.get(master_control.ctl).add_attribute(
+        fk_visibility = master_control_node.add_attribute(
             "fk_visibility",
             attribute_type="bool",
             value=False,
@@ -348,29 +341,31 @@ class SplineSpine(aniseed.RigComponent):
         )
 
         # -- Now create the Fk control setup
-        fk_controls = self.create_fk(org, spline_setup)
+        fk_controls = self.create_fk(spline_setup)
 
         # -- Constrain the joints to the Fk controls. This is because the fk
         # -- setup is designed to follow the ik setup all the time.
         fk_tweaks = []
-        for idx in range(len(fk_controls)):
+        for idx, fk_control in enumerate(fk_controls):
 
-            fk_control = mref.get(fk_controls[idx].ctl)
+            fk_control = mref.get(fk_control.ctl)
             joint = mref.get(joints[idx])
 
+            # -- Create the tweaker
             offset_control = aniseed_toolkit.control.create(
                 description=f"{descriptive}FkOffset",
                 location=location,
                 parent=fk_control.full_name(),
                 shape="core_circle",
-                shape_scale=control_scale,
+                shape_scale=self.control_scale,
                 config=self.config,
                 match_to=fk_control.full_name(),
             )
-            # -- Create the tweaker
             fk_tweak = mref.get(offset_control.ctl)
             fk_tweaks.append(fk_tweak)
 
+            # -- If requested, the first fk control is turned into a
+            # -- mechanical node which the animator cannot interact with
             if self.option("Invalidate First Fk Control").get() and not idx:
                 fk_control.rename(
                     self.config.generate_name(
@@ -384,47 +379,38 @@ class SplineSpine(aniseed.RigComponent):
                 for shape in fk_control.shapes():
                     mref.delete(shape)
 
-            user_pref_setting = self.option("Show First Fk Offset Control").get()
+            # -- The offset control is visible when both the fk visibility
+            # -- and the controls own show_offset attribute are on.
             show_offset_attribute = fk_control.add_attribute(
                 "show_offset",
                 attribute_type="bool",
                 keyable=True,
-                value=False if idx else user_pref_setting,
+                value=False if idx else self.option("Show First Fk Offset Control").get(),
             )
             show_offset_multiplier = mref.create("floatMath")
-            show_offset_multiplier.operation.set(2)  # -- Mutliply
+            show_offset_multiplier.operation.set(2)  # -- Multiply
             fk_visibility.connect(show_offset_multiplier.floatA)
             show_offset_attribute.connect(show_offset_multiplier.floatB)
 
             if self.option("Align Offsets To Bone").get():
                 mref.get(offset_control.org).match_to(joint)
 
-            cmds.parentConstraint(
-                fk_tweak.full_name(),
-                joint.full_name(),
-                maintainOffset=True,
-            )
-            cmds.scaleConstraint(
-                fk_tweak.full_name(),
-                joint.full_name(),
-                maintainOffset=True,
-            )
+            aniseed_toolkit.constraints.parent_and_scale(fk_tweak, joint)
 
             # -- Hook up the visibility
             for nurbs_shape in fk_control.shapes():
-                fk_visibility.connect(f"{nurbs_shape.full_name()}.visibility")
+                fk_visibility.connect(nurbs_shape.attr("visibility"))
 
             for nurbs_shape in fk_tweak.shapes():
-                show_offset_multiplier.outFloat.connect(
-                    f"{nurbs_shape.full_name()}.visibility",
-                )
+                show_offset_multiplier.outFloat.connect(nurbs_shape.attr("visibility"))
 
+        # -- Hook the ik visibility up to the ik control shapes. Note that the
+        # -- tweaker shape visibilities are already driven by their show_tweak
+        # -- attribute, so for those this connection fails (silently, by
+        # -- design of connect) and the show_tweak connection is kept.
         for ik_control in ik_controls:
-            ik_control = mref.get(ik_control.ctl)
-            for nurbs_shape in ik_control.shapes():
-                try:
-                    ik_visibility.connect(f"{nurbs_shape.full_name()}.visibility")
-                except: pass
+            for nurbs_shape in mref.get(ik_control.ctl).shapes():
+                ik_visibility.connect(nurbs_shape.attr("visibility"))
 
         # -- Finally we set our output variables
         self.output("Root Transform").set(spline_setup.out_trace_joints[0].name())
@@ -435,25 +421,17 @@ class SplineSpine(aniseed.RigComponent):
 
     def setup_ik_controls(self, master_control, spline_setup, no_transform_node):
         """
-        This will construct the IK controls for the rig
+        This will construct the IK controls for the rig. The no transform
+        node is not used here, but is required by the Tri variant.
         """
         # -- Read out the option data we will need
         number_of_controls = self.option("Number Of Controls").get()
         descriptive = self.option("Descriptive Prefix").get()
-        location = self.option("Location").get()
-        orient_to_world = self.option("Orient Controls To World").get()
-        control_scale = 10
 
         # -- Define our running parent
         parent = master_control.ctl
 
-        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
-            "tweaker_visibility",
-            value=False,
-            attribute_type="bool",
-            keyable=False,
-        )
-        tweaker_vis_attribute.set(channelBox=True)
+        tweaker_vis_attribute = self._add_tweaker_visibility_attribute(master_control)
 
         # -- We need to keep track of the ik controls we build
         ik_controls = []
@@ -464,27 +442,18 @@ class SplineSpine(aniseed.RigComponent):
             # -- a child control - but it never acts as a parent. Its a nice
             # -- way to allow an animator to be able to adjust a single control
             # -- without affecting any of its children.
-            base_control, base_control_tweaker = self.create_doubled_control(
-                descriptive=descriptive,
-                location=location,
+            base_control, base_control_tweaker = self._create_spline_point_control(
+                description=descriptive,
                 parent=parent,
-                shape_scale=control_scale,
-                match_to=spline_setup.out_controls[idx].full_name(),
-                orient_to_world=orient_to_world,
-                drive_this=spline_setup.out_controls[idx].full_name(),
+                shape_scale=self.control_scale,
+                spline_point=spline_setup.out_controls[idx],
             )
 
+            # -- Note: The tweaker shape visibilities are already driven by
+            # -- the show_tweak attribute, so this connection fails (silently,
+            # -- by design of connect) and the show_tweak connection is kept.
             for shape in mref.get(base_control_tweaker.ctl).shapes():
-                tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility")
-
-            # -- If we need to orient to world then we do that by adjusting
-            # -- the rotation of the control org.
-            if orient_to_world:
-                cmds.xform(
-                    base_control.org,
-                    rotation=(0, 0, 0),
-                    worldSpace=True,
-                )
+                tweaker_vis_attribute.connect(shape.attr("visibility"))
 
             # -- Store these controls as a pair
             ik_controls.extend([base_control, base_control_tweaker])
@@ -501,19 +470,13 @@ class SplineSpine(aniseed.RigComponent):
 
         return ik_controls
 
-    def create_fk(self, parent, spline_setup, invalidate_first_control=False):
+    def create_fk(self, spline_setup):
         """
         Creates our FK controllers
         """
         # -- Read out our option data
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
-        orient_to_world = self.option("Orient Controls To World").get()
-
-        # -- Determine our default control size (maybe we can get this
-        # -- dynamically by reading the length of the chain and dividing
-        # -- it by the joint count?)
-        control_scale = 10
 
         # -- We want our hierarchy to be fk - so we need to track the
         # -- parent on each iteration
@@ -524,13 +487,13 @@ class SplineSpine(aniseed.RigComponent):
 
         for idx, trace_joint in enumerate(spline_setup.out_anchor_points):
 
-            # -- Create the actual control hierarcy
+            # -- Create the actual control hierarchy
             fk_control = aniseed_toolkit.control.create(
                 description=f"{descriptive}Fk",
                 location=location,
-                parent=next_parent,#aligner.name(),
+                parent=next_parent,
                 shape=self.option("Shape").get(),
-                shape_scale=control_scale,
+                shape_scale=self.control_scale,
                 config=self.config,
                 match_to=trace_joint.full_name(),
             )
@@ -538,28 +501,19 @@ class SplineSpine(aniseed.RigComponent):
             # -- We need the automated FK setup in the spline rig to
             # -- drive our FK controls. This is because the FK controls
             # -- in the spline rig auto-follow the IK.
-            decompose_node = cmds.createNode("decomposeMatrix")
-            cmds.connectAttr(f"{trace_joint.full_name()}.matrix", f"{decompose_node}.inputMatrix")
-            cmds.connectAttr(f"{decompose_node}.outputTranslate", f"{fk_control.org}.translate")
-            cmds.connectAttr(f"{decompose_node}.outputRotate", f"{fk_control.org}.rotate")
-            cmds.connectAttr(f"{decompose_node}.outputScale", f"{fk_control.org}.scale")
+            aniseed_toolkit.matrix_drive.drive_from_local_matrix(trace_joint, fk_control.org)
 
             if self.option("Orient FK Controls To World").get():
-                cmds.xform(
-                    fk_control.zero,
-                    rotation=(0, 0, 0),
-                    worldSpace=True,
-                )
+                mref.get(fk_control.zero).set_rotation([0, 0, 0], space="world")
 
             # -- Set the corresponding output plug
-            tag = "FK Control %s" % idx
-            self.output(tag).set(fk_control.ctl)
+            self.output(f"FK Control {idx}").set(fk_control.ctl)
 
-            # -- Store the fk control and make this fk control the parent
-            # -- of the next fk control.
+            # -- Store the fk control
             fk_controls.append(fk_control)
 
-
+            # -- The next fk control is parented under a realigner, which
+            # -- is a child of this fk control matched to the trace joint.
             realigner = mref.get(
                 aniseed_toolkit.transforms.create(
                     classification="mech",
@@ -571,8 +525,7 @@ class SplineSpine(aniseed.RigComponent):
             )
             realigner.match_to(trace_joint)
 
-            next_parent = realigner.name()#fk_control.ctl
-            # next_parent = fk_control.ctl
+            next_parent = realigner.name()
 
         return fk_controls
 
@@ -601,15 +554,10 @@ class SplineSpine(aniseed.RigComponent):
             match_to=match_to,
         )
         if orient_to_world:
-            cmds.xform(
-                main_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            mref.get(main_control.org).set_rotation([0, 0, 0], space="world")
 
-        # -- if we're given something to drive, then we constrain that item
-        # -- to the tweaker
-        cmds.parentConstraint(
+        # -- The item we're given to drive is constrained to the tweaker
+        mref.parentConstraint(
             tweak_control.ctl,
             drive_this,
             maintainOffset=True,
@@ -625,7 +573,7 @@ class SplineSpine(aniseed.RigComponent):
         show_tweak.set(channelBox=True)
 
         for shape in mref.get(tweak_control.ctl).shapes():
-            show_tweak.connect(shape.visibility, force=True)
+            show_tweak.connect(shape.attr("visibility"), force=True)
 
         # -- As we're made up of a pair of controls, we return
         # -- a list of them both.
@@ -634,14 +582,41 @@ class SplineSpine(aniseed.RigComponent):
             tweak_control,
         ]
 
+    def _create_spline_point_control(self, description, parent, shape_scale, spline_point):
+        """
+        Creates a doubled control which is matched to (and drives) the
+        given spline point.
+        """
+        return self.create_doubled_control(
+            descriptive=description,
+            location=self.option("Location").get(),
+            parent=parent,
+            shape_scale=shape_scale,
+            match_to=spline_point.full_name(),
+            orient_to_world=self.option("Orient Controls To World").get(),
+            drive_this=spline_point.full_name(),
+        )
+
+    def _add_tweaker_visibility_attribute(self, master_control):
+        """
+        Adds the (non keyable, channel box visible) tweaker_visibility
+        attribute to the master control and returns it.
+        """
+        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
+            "tweaker_visibility",
+            value=False,
+            attribute_type="bool",
+            keyable=False,
+        )
+        tweaker_vis_attribute.set(channelBox=True)
+        return tweaker_vis_attribute
+
     def user_func_create_guide(self):
         """
         This function will create the guide setup
         """
-
         # -- Check if the guide already exists first
-        guide = self.guide_data().get("LinkedGuide")
-        if guide and cmds.objExists(guide):
+        if self.has_guide():
             return []
 
         # -- Read the joint chain
@@ -652,8 +627,10 @@ class SplineSpine(aniseed.RigComponent):
         # -- and the rig are the same
         spline_setup = self._create_spline_setup(joints=joints)
 
-        # -- Create a node to parent everything under.
-        guide_org = cmds.createNode(
+        # -- Create a node to parent everything under. Note that this uses
+        # -- maya's naming (via the createNode passthrough) as mref.create
+        # -- would uniquify the name differently.
+        guide_org = mref.createNode(
             "transform",
             name="splineGuide",
         )
@@ -661,7 +638,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- We now need to build actual guide objects to drive our
         # -- spline spine. These guides will be FK
-        guides = self.create_guide_controls(guide_org, spline_setup)
+        guides = self.create_guide_controls(guide_org.name(), spline_setup)
 
         for guide in guides:
             aniseed_toolkit.run("Tag Node", guide, "ControlGuide")
@@ -669,20 +646,20 @@ class SplineSpine(aniseed.RigComponent):
         # -- Now that we have built the guide we need to store
         # -- the reference to the guide node in the guide data.
         guide_data = self.guide_data()
-        guide_data["LinkedGuide"] = guide_org
+        guide_data["LinkedGuide"] = guide_org.name()
         self.option("GuideData").set(guide_data)
 
         # -- If there is a parent of the root then we constrain our
         # -- setup to that
-        root_joint = mref.get(joints[0])
-        if root_joint.parent():
-            cmds.parentConstraint(
-                root_joint.parent().full_name(),
+        root_parent = mref.get(joints[0]).parent()
+        if root_parent:
+            mref.parentConstraint(
+                root_parent,
                 guide_org,
                 maintainOffset=True,
             )
 
-        cmds.select(guides[0])
+        mref.select(guides[0])
         return guides
 
     def create_guide_controls(self, guide_org, spline_setup):
@@ -700,9 +677,8 @@ class SplineSpine(aniseed.RigComponent):
                     parent=parent,
                 ),
             )
-            parent=guides[-1]
+            parent = guides[-1]
         return guides
-
 
     def user_func_remove_guide(self):
         """
@@ -716,7 +692,6 @@ class SplineSpine(aniseed.RigComponent):
         joints = self.all_joints()
         aniseed_toolkit.joints.unreference(joints)
 
-        # -- Mark this as not having an active guide
         guide_data = self.guide_data()
 
         # -- Validation check for legacy or broken guide data
@@ -746,13 +721,13 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Now delete the spline setup
         with aniseed_toolkit.joints.HeldTransforms(joints):
-            cmds.delete(str(guide_data["LinkedGuide"]))
+            mref.delete(str(guide_data["LinkedGuide"]))
 
-        # -- Finally we remove the entry for the linked guide and we
-        # -- store the updated guide information.
+        # -- Finally we remove the entry for the linked guide (marking this
+        # -- as not having an active guide) and we store the updated guide
+        # -- information.
         guide_data["LinkedGuide"] = ""
         self.option("GuideData").set(guide_data)
-
 
     def _create_spline_setup(self, joints, parent=None, constrain=True):
         """
@@ -763,93 +738,41 @@ class SplineSpine(aniseed.RigComponent):
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
 
-        # -- Read out the guide data
-        guide_data = self.guide_data()
-
-        # -- We need to give the spline builder the general parent transform
-        # -- for all the local matrices - so for us, this is our root joint
-        # -- transform
-        root_matrix = cmds.xform(
-            self.input("Root Joint").get(),
-            matrix=True,
-            worldSpace=True,
-            query=True,
-        )
-
         # -- Build the spline setup. This returns a SplineSetup class which
-        # -- gives us access to all the items it has built for us.
+        # -- gives us access to all the items it has built for us. We need to
+        # -- give the spline builder the general parent transform for all the
+        # -- local matrices - so for us, this is our root joint transform
         spline_setup = aniseed_toolkit.run(
             "Create Spline Setup",
             parent=parent,
             joints=joints,
-            org_transform=root_matrix,
-            control_transforms=guide_data["control_transforms"],
+            org_transform=mref.get(self.input("Root Joint").get()).get_matrix(space="world"),
+            control_transforms=self.guide_data()["control_transforms"],
             constrain=constrain,
             lock_end_orientations=self.option("Lock End Orientations To Controls").get(),
         )
 
         # -- Now we just need to name all the items in the spline setup
         # -- based upon our rigging config.
-        spline_setup.out_org.rename(
-            self.config.generate_name(
-                classification="org",
-                description=f"{descriptive}SplineSolve",
-                location=location,
-            )
-        )
-
-        # -- Name all the control elements
-        for control in spline_setup.out_controls:
-            control.rename(
-                self.config.generate_name(
-                    classification="loc",
-                    description=f"{descriptive}PointTransform",
-                    location=location,
+        naming = [
+            ([spline_setup.out_org], "org", "SplineSolve"),
+            (spline_setup.out_controls, "loc", "PointTransform"),
+            (spline_setup.out_upvectors, "loc", "UpvectorTransform"),
+            (spline_setup.out_clusters, "cls", "ClusterTransform"),
+            (spline_setup.out_trace_joints, "jnt", "Tracer"),
+            (spline_setup.out_anchor_points, "jnt", "Anchor"),
+            ([spline_setup.out_no_xform_org], "org", "NoTransform"),
+        ]
+        for nodes, classification, description in naming:
+            for node in nodes:
+                node.rename(
+                    self.config.generate_name(
+                        classification=classification,
+                        description=f"{descriptive}{description}",
+                        location=location,
+                    )
                 )
-            )
 
-        for upvector in spline_setup.out_upvectors:
-            upvector.rename(
-                self.config.generate_name(
-                    classification="loc",
-                    description=f"{descriptive}UpvectorTransform",
-                    location=location,
-                )
-            )
-        for cluster in spline_setup.out_clusters:
-            cluster.rename(
-                self.config.generate_name(
-                    classification="cls",
-                    description=f"{descriptive}ClusterTransform",
-                    location=location,
-                )
-            )
-
-        for joint in spline_setup.out_trace_joints:
-            joint.rename(
-                self.config.generate_name(
-                    classification="jnt",
-                    description=f"{descriptive}Tracer",
-                    location=location,
-                )
-            )
-
-        for joint in spline_setup.out_anchor_points:
-            joint.rename(
-                self.config.generate_name(
-                    classification="jnt",
-                    description=f"{descriptive}Anchor",
-                    location=location,
-                )
-            )
-
-        spline_setup.out_no_xform_org.rename(
-            self.config.generate_name(
-                classification="org",
-                description=f"{descriptive}NoTransform",
-                location=location,
-            )
-        )
         return spline_setup
 
     def guide_data(self):
@@ -867,7 +790,6 @@ class SplineSpine(aniseed.RigComponent):
         guide data. This ensures our code paths can always assume they have access
         to guide data.
         """
-        # --
         base_number = aniseed_toolkit.units.from_cm(50.0)
         identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
@@ -886,6 +808,9 @@ class SplineSpine(aniseed.RigComponent):
         return data
 
     def all_joints(self):
+        """
+        Returns all the joints between the root and the tip joint
+        """
         return aniseed_toolkit.joints.get_between(
             self.input("Root Joint").get(),
             self.input("Tip Joint").get(),
@@ -895,12 +820,8 @@ class SplineSpine(aniseed.RigComponent):
         """
         Checks whether this has a valid guide or not
         """
-        # -- Check if the guide already exists first
         guide = self.guide_data().get("LinkedGuide")
-        if guide and cmds.objExists(guide):
-            return True
-
-        return False
+        return bool(guide and mref.objExists(guide))
 
     def update_outputs(self) -> None:
         """
@@ -910,26 +831,13 @@ class SplineSpine(aniseed.RigComponent):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        # -- Start by removing all our output attributes
-        for output_plug in self.outputs()[:]:
-            if output_plug.name().startswith("FK Control"):
-                self.remove_output(output_plug.name())
+        aniseed_toolkit.component_outputs.declare_joint_outputs(
+            self,
+            "FK Control",
+            self.input("Root Joint").get(),
+            self.input("Tip Joint").get(),
+        )
 
-        # -- Attempt to get the joints. Note that this is wrapped in an exception
-        # -- statement, as its possible one or more of these attributes are blank.
-        try:
-            joints = aniseed_toolkit.run(
-                "Get Joints Between",
-                self.input("Root Joint").get(),
-                self.input("Tip Joint").get(),
-            )
-        except:
-            joints = []
-
-        # -- We now cycle the joints and declare a new output attribute
-        # -- to represent it
-        for idx, joint in enumerate(joints):
-            self.declare_output(name="FK Control %s" % idx)
 
 class QuadSplineSpine(SplineSpine):
     """
@@ -944,6 +852,10 @@ class QuadSplineSpine(SplineSpine):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Locks the component to four controls, hiding the Number Of Controls
+        and FK Interaction Mode options.
+        """
         super(QuadSplineSpine, self).__init__(*args, **kwargs)
 
         # -- In the quad setup we're locked specifically to four
@@ -959,62 +871,37 @@ class QuadSplineSpine(SplineSpine):
         """
         # -- Read our option data
         descriptive = self.option("Descriptive Prefix").get()
-        location = self.option("Location").get()
-        orient_to_world = self.option("Orient Controls To World").get()
-        control_scale = 10
 
         # -- We need to return the list of controls we create, so we
         # -- define a variable for that
         ik_controls = []
 
-        # -- Create the hip
-        base_control, base_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}Hip",
-            location=location,
-            parent=master_control.ctl,
-            shape_scale=control_scale * 1.1,
-            match_to=spline_setup.out_controls[0].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[0].full_name(),
-        )
-        ik_controls.extend([base_control, base_control_tweaker])
+        # -- Create the hip, lower mid, chest and upper mid controls
+        # -- in that order.
+        control_definitions = [
+            (f"{descriptive}Hip", master_control.ctl, 1.1, 0),
+            (descriptive, None, 1.0, 1),
+            (f"{descriptive}Chest", master_control.ctl, 1.0, 3),
+            (descriptive, None, 1.0, 2),
+        ]
+        for description, parent, scale, point_index in control_definitions:
 
-        lower_mid_control, lower_mid_control_tweaker = self.create_doubled_control(
-            descriptive=descriptive,
-            location=location,
-            parent=base_control.ctl,
-            shape_scale=control_scale,
-            match_to=spline_setup.out_controls[1].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[1].full_name(),
-        )
-        ik_controls.extend([lower_mid_control, lower_mid_control_tweaker])
+            # -- The mid controls are children of the control before them
+            parent = parent or ik_controls[-2].ctl
 
-        chest_control, chest_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}Chest",
-            location=location,
-            parent=master_control.ctl,
-            shape_scale=control_scale,
-            match_to=spline_setup.out_controls[3].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[3].full_name(),
-        )
-        ik_controls.extend([chest_control, chest_control_tweaker])
+            ik_controls.extend(
+                self._create_spline_point_control(
+                    description=description,
+                    parent=parent,
+                    shape_scale=self.control_scale * scale,
+                    spline_point=spline_setup.out_controls[point_index],
+                ),
+            )
 
-        upper_mid_control, upper_mid_control_tweaker = self.create_doubled_control(
-            descriptive=descriptive,
-            location=location,
-            parent=chest_control.ctl,
-            shape_scale=control_scale,
-            match_to=spline_setup.out_controls[2].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[2].full_name(),
-        )
-        ik_controls.extend([upper_mid_control, upper_mid_control_tweaker])
-
-        # -- Now our controls are created we can set our outputs
-        self.output("Root Control").set(base_control_tweaker.ctl)
-        self.output("Tip Control").set(chest_control_tweaker.ctl)
+        # -- Now our controls are created we can set our outputs. These
+        # -- are the hip tweaker and the chest tweaker.
+        self.output("Root Control").set(ik_controls[1].ctl)
+        self.output("Tip Control").set(ik_controls[5].ctl)
 
         return ik_controls
 
@@ -1033,6 +920,10 @@ class TriSplineSpine(SplineSpine):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Adds the Ribbon Cross Vector option and locks the component to five
+        (hidden) controls - three primary and two bezier style.
+        """
         super(TriSplineSpine, self).__init__(*args, **kwargs)
 
         # -- This component as a new option to define the cross vector
@@ -1042,8 +933,8 @@ class TriSplineSpine(SplineSpine):
             value=[1, 0, 0],
         )
 
-        # -- Force this component to use three controls and do
-        # -- not expose it to the user
+        # -- Force this component to use five controls (three primary and
+        # -- two bezier style) and do not expose it to the user
         self.option("Number Of Controls").set(5)
         self.option("Number Of Controls").set_hidden(True)
 
@@ -1059,13 +950,14 @@ class TriSplineSpine(SplineSpine):
         """
         We want a more bespoke guide hierarchy for our tri component
         """
-        # -- Check if the guide already exists first
+        # -- Check if the guide already exists first (the base class would
+        # -- return no guides, which we cannot re-parent)
         if self.has_guide():
             return []
 
         guides = super(TriSplineSpine, self).user_func_create_guide()
-        cmds.parent(guides[2], guides[0])
-        cmds.parent(guides[-1], guides[0])
+        mref.get(guides[2]).set_parent(guides[0])
+        mref.get(guides[-1]).set_parent(guides[0])
         return guides
 
     def setup_ik_controls(self, master_control, spline_setup, no_transform_node):
@@ -1073,90 +965,59 @@ class TriSplineSpine(SplineSpine):
         This is where the main difference is between the tri component and the
         standard component.
         """
-        # -- We need to return the controls we create - so start by defining
-        # -- that variable
-        ik_controls = []
-
         # -- Read our options and inputs.
         descriptive = self.option("Descriptive Prefix").get()
-        location = self.option("Location").get()
-        orient_to_world = self.option("Orient Controls To World").get()
-        control_scale = 10.0
+        control_scale = float(self.control_scale)
 
-        tweaker_vis_attribute = mref.get(master_control.ctl).add_attribute(
-            "tweaker_visibility",
-            value=False,
-            attribute_type="bool",
-            keyable=False,
-        )
-        tweaker_vis_attribute.set(channelBox=True)
+        tweaker_vis_attribute = self._add_tweaker_visibility_attribute(master_control)
 
         # -- Now we can start building our actual controls.
-        hip_control, hip_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}Hip",
-            location=location,
+        hip_control, hip_control_tweaker = self._create_spline_point_control(
+            description=f"{descriptive}Hip",
             parent=master_control.ctl,
             shape_scale=control_scale * 1.1,
-            match_to=spline_setup.out_controls[0].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[0].full_name(),
+            spline_point=spline_setup.out_controls[0],
         )
-        ik_controls.extend([hip_control, hip_control_tweaker])
 
-        mid_control, mid_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}Mid",
-            location=location,
+        mid_control, mid_control_tweaker = self._create_spline_point_control(
+            description=f"{descriptive}Mid",
             parent=master_control.ctl,
             shape_scale=control_scale * 0.9,
-            match_to=spline_setup.out_controls[2].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[2].full_name(),
+            spline_point=spline_setup.out_controls[2],
         )
-        cmds.addAttr(
-            mid_control.ctl,
-            shortName="ShowMidPointControls",
-            attributeType="bool",
+        show_mid_point_controls = mref.get(mid_control.ctl).add_attribute(
+            "ShowMidPointControls",
+            value=None,
+            attribute_type="bool",
             defaultValue=False,
             keyable=True,
         )
-        ik_controls.extend([mid_control, mid_control_tweaker])
 
-        upper_mid_control, upper_mid_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}UpperMid",
-            location=location,
+        upper_mid_control, upper_mid_control_tweaker = self._create_spline_point_control(
+            description=f"{descriptive}UpperMid",
             parent=mid_control_tweaker.ctl,
             shape_scale=control_scale * 0.9,
-            match_to=spline_setup.out_controls[3].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[3].full_name(),
+            spline_point=spline_setup.out_controls[3],
         )
-        cmds.connectAttr(f"{mid_control.ctl}.ShowMidPointControls", f"{upper_mid_control.org}.visibility")
-        ik_controls.extend([upper_mid_control, upper_mid_control_tweaker])
+        show_mid_point_controls.connect(mref.get(upper_mid_control.org).attr("visibility"))
 
-        lower_mid_control, lower_mid_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}LowerMid",
-            location=location,
+        lower_mid_control, lower_mid_control_tweaker = self._create_spline_point_control(
+            description=f"{descriptive}LowerMid",
             parent=mid_control_tweaker.ctl,
             shape_scale=control_scale * 0.9,
-            match_to=spline_setup.out_controls[1].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[1].full_name(),
+            spline_point=spline_setup.out_controls[1],
         )
-        cmds.connectAttr(f"{mid_control.ctl}.ShowMidPointControls", f"{lower_mid_control.org}.visibility")
-        ik_controls.extend([lower_mid_control, lower_mid_control_tweaker])
+        show_mid_point_controls.connect(mref.get(lower_mid_control.org).attr("visibility"))
 
-        chest_control, chest_control_tweaker = self.create_doubled_control(
-            descriptive=f"{descriptive}Chest",
-            location=location,
+        chest_control, chest_control_tweaker = self._create_spline_point_control(
+            description=f"{descriptive}Chest",
             parent=master_control.ctl,
             shape_scale=control_scale * 1.1,
-            match_to=spline_setup.out_controls[4].full_name(),
-            orient_to_world=orient_to_world,
-            drive_this=spline_setup.out_controls[4].full_name(),
+            spline_point=spline_setup.out_controls[4],
         )
-        ik_controls.extend([chest_control, chest_control_tweaker])
 
-
+        # -- Unlike the base component, the tweaker visibility attribute is
+        # -- forced in, replacing the show_tweak connections.
         tweakers = [
             hip_control_tweaker,
             chest_control_tweaker,
@@ -1166,14 +1027,7 @@ class TriSplineSpine(SplineSpine):
         ]
         for tweaker in tweakers:
             for shape in mref.get(tweaker.ctl).shapes():
-
-                # cmds.connectAttr(
-                #     tweaker_vis_attribute.path(),
-                #     f"{shape.full_name()}.visibility", force=True
-                # )
-                try:
-                    tweaker_vis_attribute.connect(f"{shape.full_name()}.visibility", force=True)
-                except: pass
+                tweaker_vis_attribute.connect(shape.attr("visibility"), force=True)
 
         # -- We use a skinned mesh to automate the movement of the
         # -- central control, so lets build that now.
@@ -1186,15 +1040,28 @@ class TriSplineSpine(SplineSpine):
 
         # -- Finally we set the outputs to our new controls and return
         # -- the created controls.
-        self.output("Root Control").set(ik_controls[1].ctl)
-        self.output("Tip Control").set(ik_controls[-1].ctl)
-        return ik_controls
+        self.output("Root Control").set(hip_control_tweaker.ctl)
+        self.output("Tip Control").set(chest_control_tweaker.ctl)
+        return [
+            hip_control,
+            hip_control_tweaker,
+            mid_control,
+            mid_control_tweaker,
+            upper_mid_control,
+            upper_mid_control_tweaker,
+            lower_mid_control,
+            lower_mid_control_tweaker,
+            chest_control,
+            chest_control_tweaker,
+        ]
 
     def setup_auto_ribbon(self, bottom_control, mid_control, top_control, no_transform_node):
         """
         This will generate a ribbon mesh and have the mid control follow that
         newly created mesh.
         """
+        location = self.option("Location").get()
+
         # -- We need to start by creating a specific set of joints which we will
         # -- skin our ribbon to.
         top_joint = mref.create("joint", parent=top_control)
@@ -1202,10 +1069,10 @@ class TriSplineSpine(SplineSpine):
             self.config.generate_name(
                 classification=self.config.mechanical,
                 description="AutoRibbonTop",
-                location=self.option("Location").get(),
+                location=location,
             )
         )
-        top_joint.match_to(mref.get(top_control))
+        top_joint.match_to(top_control)
 
         # -- Now create the second joint. At this point we have a joint to
         # -- follow the top control and a joint to follow the bottom control.
@@ -1214,23 +1081,23 @@ class TriSplineSpine(SplineSpine):
             self.config.generate_name(
                 classification=self.config.mechanical,
                 description="AutoRibbonBottom",
-                location=self.option("Location").get(),
+                location=location,
             )
         )
-        bottom_joint.match_to(mref.get(bottom_control))
+        bottom_joint.match_to(bottom_control)
 
         # -- Now we can build the actual geometry. As we will skin this mesh it
         # -- is important that it does not get transformed - so we place it under the
         # -- no transform node.
         mesh = self.generate_ribbon_mesh(bottom_control, mid_control, top_control)
-        cmds.parent(mesh, no_transform_node.full_name())
+        mesh.set_parent(no_transform_node)
 
         # -- Skin the mesh to the two joints we created.
-        skin = cmds.skinCluster(
+        skin = mref.skinCluster(
             [
                 top_joint.full_name(),
                 bottom_joint.full_name(),
-                mesh,
+                mesh.full_name(),
             ],
             bindMethod=0,
             skinMethod=0,
@@ -1240,9 +1107,13 @@ class TriSplineSpine(SplineSpine):
         # -- Now we need to be specific about the weighting. We want the
         # -- weighting of the end-point verticed to be 100% to their respective
         # -- bones, but the mid point vertices to be 50/50 between the two.
-        cmds.skinPercent(skin, f"{mesh}.vtx[0:1]", transformValue=[(bottom_joint.full_name(), 1.0)])
-        cmds.skinPercent(skin, f"{mesh}.vtx[2:5]", transformValue=[(bottom_joint.full_name(), 0.5), (top_joint.full_name(), 0.5)])
-        cmds.skinPercent(skin, f"{mesh}.vtx[6:7]", transformValue=[(top_joint.full_name(), 1.0)])
+        weights = [
+            ("vtx[0:1]", [(bottom_joint.full_name(), 1.0)]),
+            ("vtx[2:5]", [(bottom_joint.full_name(), 0.5), (top_joint.full_name(), 0.5)]),
+            ("vtx[6:7]", [(top_joint.full_name(), 1.0)]),
+        ]
+        for vertices, transform_values in weights:
+            mref.skinPercent(skin, f"{mesh.full_name()}.{vertices}", transformValue=transform_values)
 
         # -- Finally we need to setup the constraint for the mid control such
         # -- that it follows the ribbon.
@@ -1257,8 +1128,11 @@ class TriSplineSpine(SplineSpine):
         Bottom edge = t1
         Middle edge = t2
         Top edge = t3
-        
-        Width is measured across each transform's local X axis.
+
+        Width is measured across each transform's cross vector axis.
+
+        Returns:
+            The mesh transform
         """
         name = self.config.generate_name(
             classification=self.config.mechanical,
@@ -1269,36 +1143,29 @@ class TriSplineSpine(SplineSpine):
         # -- Read our option data
         cross_vector = self.option("Ribbon Cross Vector").get()
 
-        # -- Construct a list of out three transforms
-        transforms = [top, middle, bottom]
-
         # -- Determine the half width of the mesh
         half_width = width * 0.5
 
         # -- We will use the constructed points to build
         # -- the faces, so track them here
         points = []
-    
-        for transform in transforms:
+
+        for transform in [top, middle, bottom]:
 
             # -- Get the world matrix of the object
-            m = om.MMatrix(cmds.xform(transform, query=True, worldSpace=True, matrix=True))
+            m = om.MMatrix(mref.get(transform).get_matrix(space="world"))
             tm = om.MTransformationMatrix(m)
-    
+
             # -- Extract the world position
             pos = tm.translation(om.MSpace.kWorld)
-    
+
             # -- Get the cross axis
             axis = om.MVector(*cross_vector) * m
             axis.normalize()
 
-            # -- Calculate the left and right position
-            left = pos - (axis * half_width)
-            right = pos + (axis * half_width)
-
-            # -- Store the two points.
-            points.append(left)
-            points.append(right)
+            # -- Calculate and store the left and right position
+            points.append(pos - (axis * half_width))
+            points.append(pos + (axis * half_width))
 
         # -- Now we construct the vertex array
         verts = [(p.x, p.y, p.z) for p in points]
@@ -1311,14 +1178,14 @@ class TriSplineSpine(SplineSpine):
 
         # -- With all this information we can construct our two
         # -- polygons.
-        mesh = cmds.polyCreateFacet(point=[verts[i] for i in faces[0]], name=name)[0]
-        cmds.polyAppendVertex(mesh, append=[verts[i] for i in faces[1]])
+        mesh = mref.polyCreateFacet(point=[verts[i] for i in faces[0]], name=name)[0]
+        mref.polyAppendVertex(mesh, append=[verts[i] for i in faces[1]])
 
         return mesh
 
     def constrain_to_midpoint_vertex(self, mesh, transform):
         """
-        Here we need to make the given trasnform follow the vertices in the middle
+        Here we need to make the given transform follow the vertices in the middle
         of the ribbon mesh
         """
         # -- Get the transform as a reference object
@@ -1335,63 +1202,33 @@ class TriSplineSpine(SplineSpine):
         )
         buffer.set_parent(transform.parent())
 
-        # -- Set up the geometry contraint
-        u_value = self.get_surface_u_from_vertex(f"{mesh}.vtx[5]")
-        constraint = cmds.pointOnPolyConstraint(mesh, buffer.full_name(), maintainOffset=False)[0]
-        cmds.setAttr(f"{constraint}.{mesh}U0", 1)
-        cmds.setAttr(f"{constraint}.{mesh}V0", 0.5)
+        # -- Set up the geometry contraint, pinning it to the middle of the
+        # -- far edge of the ribbon
+        constraint = mref.pointOnPolyConstraint(mesh, buffer, maintainOffset=False)[0]
+        constraint.attr(f"{mesh.name()}U0").set(1)
+        constraint.attr(f"{mesh.name()}V0").set(0.5)
 
         # -- Finally we need the transform node to now be a child
         # -- of our created buffer.
         transform.set_parent(buffer)
         return constraint
 
-    def get_surface_u_from_vertex(self, vertex):
-        """
-        Returns the pointOnPoly-style (u, v) for a vertex
-        relative to its closest face.
-        """
-        # -- Read out the mesh name
-        mesh = vertex.split('.')[0]
-
-        # -- Get the position of the vertex in worldspace
-        pos = cmds.pointPosition(vertex, world=True)
-
-        # -- Use the closestPointOnMesh node to calculate the u value. Note
-        # -- that this will then be deleted after we read the value we need
-        cpm = cmds.createNode("closestPointOnMesh")
-        cmds.connectAttr(mesh + ".worldMesh[0]", cpm + ".inMesh", force=True)
-        cmds.setAttr(cpm + ".inPosition", pos[0], pos[1], pos[2], type="double3")
-
-        # -- Read the u value
-        face_index = cmds.getAttr(cpm + ".closestFaceIndex")
-        u = cmds.getAttr(cpm + ".parameterU")
-
-        # -- Clean up by removing the node
-        cmds.delete(cpm)
-
-        return u
-
     def create_guide_controls(self, guide_org, spline_setup):
         """
-        We want our guides to be in a flat hierarcy
+        We want our guides to be in a flat hierarchy
         """
-        # -- We need to return a list of created guides
-        # -- so declare that now
-        guides = []
-
         # -- Cycle the transformable nodes and create a guide
         # -- for each one
-        for control_transform in spline_setup.out_controls:
-            guides.append(
-                aniseed_toolkit.run(
-                    "Create Guide",
-                    joint=control_transform.name(),
-                    parent=guide_org,
-                ),
+        guides = [
+            aniseed_toolkit.run(
+                "Create Guide",
+                joint=control_transform.name(),
+                parent=guide_org,
             )
+            for control_transform in spline_setup.out_controls
+        ]
 
         # -- Set the parenting for the guides
-        cmds.parent(guides[1], guides[2])
-        cmds.parent(guides[3], guides[2])
+        mref.get(guides[1]).set_parent(guides[2])
+        mref.get(guides[3]).set_parent(guides[2])
         return guides

@@ -1,6 +1,12 @@
+"""
+Provides the "Utility : Constrain Between" component, which constrains a
+node between two targets using a pair of constraints of a chosen type
+(parent, point, orient or scale). If an Attribute Host is given, a float
+blend attribute is created on it to drive the weighting between the targets.
+"""
 import mref
 import aniseed
-from maya import cmds
+import aniseed_toolkit
 
 
 class ConstrainBetween(aniseed.RigComponent):
@@ -14,6 +20,11 @@ class ConstrainBetween(aniseed.RigComponent):
     identifier = "Utility : Constrain Between"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the node and two target inputs, the optional Attribute Host
+        input, and options for the constraint type, offset and blend
+        attribute.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -80,6 +91,12 @@ class ConstrainBetween(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self):
+        """
+        Constrains the node to both targets using the mref command named by
+        Constraint Type. If an Attribute Host is given, a float blend
+        attribute is added to it and drives the constraint weights;
+        otherwise the weights are left at their defaults.
+        """
         node_to_constrain = mref.get(self.input("Node To Constrain").get())
         target_a = mref.get(self.input("First Constraint Target").get())
         target_b = mref.get(self.input("Second Constraint Target").get())
@@ -90,34 +107,28 @@ class ConstrainBetween(aniseed.RigComponent):
         default_blend = self.option("Default Blend").get()
         attribute_label = self.option("Attribute Label").get()
 
-        constraint_func = getattr(cmds, constraint_type)
+        # -- The constraint type is the name of a maya constraint command,
+        # -- which mref passes through to maya.cmds
+        constraint_func = getattr(mref, constraint_type)
 
         constraint_func(
-            target_a.full_name(),
-            node_to_constrain.full_name(),
+            target_a,
+            node_to_constrain,
             maintainOffset=maintain_offset,
         )
 
-        constraint = mref.get(
-            constraint_func(
-                target_b.full_name(),
-                node_to_constrain.full_name(),
-                maintainOffset=maintain_offset,
-            )[0],
-        )
+        constraint = constraint_func(
+            target_b,
+            node_to_constrain,
+            maintainOffset=maintain_offset,
+        )[0]
 
         if not attribute_host:
             return
-
-        weight_attributes = constraint.weight_attributes()
 
         attribute = mref.get(attribute_host).add_attribute(
             attribute_label,
             value=default_blend,
             attribute_type="float",
         )
-        reverse_node = mref.create("reverse")
-
-        attribute.connect(reverse_node.attr("inputX"))
-        reverse_node.attr("outputX").connect(weight_attributes[0])
-        attribute.connect(weight_attributes[1])
+        aniseed_toolkit.constraints.blend_weights(attribute, constraint)

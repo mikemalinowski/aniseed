@@ -1,3 +1,9 @@
+"""
+Provides the "Utility : Add Sub Structure" component, which creates named
+organisational nodes beneath a parent and exposes each one as an output, and
+the "Utility : Delete Children" component, which deletes the children of a
+node and optionally the node itself.
+"""
 import os
 import crosswalk
 import aniseed
@@ -26,6 +32,10 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent" input and the "Sub Nodes" option listing the names
+        of the organisational nodes to create.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -48,16 +58,35 @@ class AddSubStructureComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name):
+        """
+        Returns a text list widget for the "Sub Nodes" option.
+
+        Args:
+            option_name: The name of the option to return a widget for.
+        """
         if option_name == "Sub Nodes":
             return aniseed.widgets.TextList()
 
     # ----------------------------------------------------------------------------------
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the "Parent" input.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name == "Parent":
             return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self):
+        """
+        Removes all previously declared outputs, then for each entry in
+        "Sub Nodes" generates a (non-unique) organisational name, declares an
+        output of the same name holding it and creates the node under the parent.
+        Nodes that already exist as children of the parent are reused rather
+        than recreated.
+        """
 
         for output in self.outputs():
             self.remove_output(output.name())
@@ -103,6 +132,9 @@ class DeleteChildren(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Node" input and the "Include Self" option.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -123,11 +155,23 @@ class DeleteChildren(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the "Node" input.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name == "Node":
             return aniseed.widgets.ObjectSelector(component=self)
 
     # ----------------------------------------------------------------------------------
     def run(self) -> bool:
+        """
+        Deletes each immediate child of the node, re-checking existence before
+        each delete since deleting one child can cascade-delete others. The node
+        itself is also deleted if "Include Self" is enabled. Returns True without
+        doing anything if the node does not exist.
+        """
 
         node = self.input("Node").get()
 

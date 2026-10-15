@@ -1,6 +1,7 @@
 import mref
 import aniseed_toolkit
-from maya import cmds
+
+from . import ik
 
 
 def create_two_bone_ikfk(
@@ -30,7 +31,15 @@ def create_two_bone_ikfk(
     instance.create()
     return instance
 
+
 class TwoBoneIKFK:
+    """
+    Builds an ik chain, an fk chain and a chain which blends between the
+    two (driven by the given attribute, where 0 is ik and 1 is fk). The
+    blend chain optionally constrains the joints it was built from.
+
+    The ik target, upvector and fk chain are left for the caller to drive.
+    """
 
     def __init__(
             self,
@@ -84,58 +93,36 @@ class TwoBoneIKFK:
 
     def create_ik(self):
 
-        # -- Create the ik chain and move the rotations
-        # -- to the orients
+        # -- Create the ik chain with the rotations moved to the orients
         self.ik_chain = mref.get(
-            aniseed_toolkit.joints.replicate_chain(
-                from_this=self.root_joint.full_name(),
-                to_this=self.end_joint.full_name(),
+            ik.create_ik_chain(
+                from_joint=self.root_joint.full_name(),
+                to_joint=self.end_joint.full_name(),
                 parent=self.org.full_name(),
+                name=lambda _: unique_name("ik"),
             )
-        )
-        aniseed_toolkit.joints.move_rotations_to_orients(
-            [
-                joint.full_name()
-                for joint in self.ik_chain
-            ]
         )
 
         # -- Create our ik targets
-        self.ik_target = mref.create("transform", name=self.unique_name("ik_target"), parent=self.org)
-        self.ik_upvector = mref.create("transform", name=self.unique_name("ik_upvector"), parent=self.org)
+        self.ik_target = mref.create("transform", name=unique_name("ik_target"), parent=self.org)
+        self.ik_upvector = mref.create("transform", name=unique_name("ik_upvector"), parent=self.org)
 
-        match_target = self.ik_target_transform_override or self.ik_chain[-1]
-        print(f"match target : {match_target}")
-        self.ik_target.match_to(match_target)
+        self.ik_target.match_to(self.ik_target_transform_override or self.ik_chain[-1])
         self.ik_upvector.match_to(self.ik_chain[1])
-        print(self.ik_target.get_matrix(space="world"))
-        for joint in self.ik_chain:
-            joint.rename(self.unique_name("ik"))
 
         # -- Setup the ik
-        handle, _ = mref.get(
-            cmds.ikHandle(
-                startJoint=self.ik_chain[0].full_name(),
-                endEffector=self.ik_chain[-1].full_name(),
-                solver="ikRPsolver",
-                priority=1,
-            ),
-        )
-        handle.attr("visibility").set(False)
-        handle.set_parent(self.ik_target)
-
-        # -- Apply the pole vector
-        cmds.poleVectorConstraint(
-            self.ik_upvector.full_name(),
-            handle.full_name(),
-            weight=1,
+        ik.create_rp_handle(
+            start_joint=self.ik_chain[0].full_name(),
+            end_joint=self.ik_chain[-1].full_name(),
+            parent=self.ik_target,
+            pole_vector=self.ik_upvector,
         )
 
         # -- Constrain the rotation of the last joint
         if self.constrain_endpoint_rotation:
-            cmds.parentConstraint(
-                self.ik_target.full_name(),
-                self.ik_chain[-1].full_name(),
+            mref.parentConstraint(
+                self.ik_target,
+                self.ik_chain[-1],
                 maintainOffset=True,
                 skipTranslate=["x", "y", "z"],
             )
@@ -143,7 +130,6 @@ class TwoBoneIKFK:
         if self.apply_soft_ik:
             self.apply_soft_ik_behaviour()
 
-        print(self.ik_target.get_matrix(space="world"))
     def create_fk(self):
 
         self.fk_chain = mref.get(
@@ -154,7 +140,7 @@ class TwoBoneIKFK:
             ),
         )
         for joint in self.fk_chain:
-            joint.rename(self.unique_name("fk"))
+            joint.rename(unique_name("fk"))
 
     def create_blend(self):
         self.blend_chain = mref.get(
@@ -169,9 +155,9 @@ class TwoBoneIKFK:
         )
 
         for driven_joint, blend_joint in zip(self.driven_joints, self.blend_chain):
-            blend_joint.rename(self.unique_name("nk"))
+            blend_joint.rename(unique_name("nk"))
             if self.constrain:
-                cmds.parentConstraint(
+                mref.parentConstraint(
                     blend_joint.name(),
                     driven_joint,
                     maintainOffset=True,
@@ -181,14 +167,14 @@ class TwoBoneIKFK:
 
         self.soft_ik_root = mref.create(
             "transform",
-            name=self.unique_name("soft_ik_root"),
+            name=unique_name("soft_ik_root"),
             parent=self.org.full_name(),
         )
         self.soft_ik_root.match_to(self.ik_chain[0])
 
         self.soft_ik_target = mref.create(
             "transform",
-            name=self.unique_name("soft_ik_target"),
+            name=unique_name("soft_ik_target"),
             parent=self.ik_target.full_name(),
         )
         self.soft_ik_target.match_to(self.ik_chain[-1].full_name())
@@ -199,21 +185,29 @@ class TwoBoneIKFK:
             target=self.soft_ik_target.full_name(),
             second_joint=self.ik_chain[-2].full_name(),
             third_joint=self.ik_chain[-1].full_name(),
-            host=self.soft_ik_host.full_name(),
+            host=self.soft_ik_host.full_name() if self.soft_ik_host else None,
         )
 
     def unique_name(self, name):
-        counter = 1
-        proposed_name = name
-
-        while cmds.objExists(proposed_name):
-            counter += 1
-            proposed_name = f"{name}{counter}"
-
-        return proposed_name
+        return unique_name(name)
 
     def all_nodes(self):
         return [
             self.ik_target,
             self.ik_upvector
         ] + self.fk_chain + self.ik_chain + self.blend_chain
+
+
+def unique_name(name: str) -> str:
+    """
+    Returns the given name, or if it is already in use, the name with the
+    lowest available counter suffix - starting from 2.
+    """
+    counter = 1
+    proposed_name = name
+
+    while mref.objExists(proposed_name):
+        counter += 1
+        proposed_name = f"{name}{counter}"
+
+    return proposed_name

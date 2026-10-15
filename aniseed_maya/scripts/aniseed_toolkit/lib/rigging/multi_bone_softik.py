@@ -2,8 +2,11 @@
 This is an implementation of Soft IK which works for n-bone
 chains and does not require a custom node implementation.
 """
+import mref
 import aniseed_toolkit
-import maya.cmds as mc
+
+from .node_math import add, multiply, subtract, matrix_to_translate, length
+from .softik import _add_matrix_attribute, _soft_scale
 
 
 def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, host=None):
@@ -21,350 +24,96 @@ def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, ho
     Returns:
         None
     """
-    facing_direction = aniseed_toolkit.run(
-        "Get Chain Facing Direction",
+    facing_direction = aniseed_toolkit.direction.get_chain_facing_direction(
         root_joint,
         end_joint,
     )
 
-    full_chain = aniseed_toolkit.run(
-        "Get Joints Between",
+    full_chain = aniseed_toolkit.joints.get_between(
         root_joint,
         end_joint,
     )
 
     if not host:
-        host = mc.createNode("network")
+        host = mref.create("network").name()
 
     float_attrs = {
         "Stretch": 1,
         "SoftDistance": 0,
     }
 
+    # -- Note that the default lengths are baked into the network as values
+    # -- rather than being read from these attributes
+    default_lengths = []
     for idx, joint in enumerate(full_chain[1:]):
-        float_attrs["Joint%sAddition" % idx] = 0
-        float_attrs["Joint%sDefaultLength" % idx] = abs(mc.getAttr(f"{joint}.tx"))
+        default_length = abs(mref.get(f"{joint}.tx").get())
+        float_attrs[f"Joint{idx}Addition"] = 0
+        float_attrs[f"Joint{idx}DefaultLength"] = default_length
+        default_lengths.append(default_length)
 
-    matrix_attrs = {
-        "RootMatrix": None,
-        "TargetMatrix": None,
-    }
+    aniseed_toolkit.attributes.add_separator(host)
 
-    aniseed_toolkit.run("Add Separator Attribute", host)
-
+    host_node = mref.get(host)
     for attr, value in float_attrs.items():
-        if not mc.objExists(f"{host}.{attr}"):
-            mc.addAttr(
-                host,
-                shortName=attr,
-                attributeType="float",
-                keyable=False if "Default" in attr else True,
-                defaultValue=value
+        if not host_node.has_attribute(attr):
+            host_node.add_attribute(
+                attr,
+                value=None,
+                attribute_type="float",
+                keyable="Default" not in attr,
+                defaultValue=value,
             )
 
-    # -- Convert the float to the attribute address
-    for idx, joint in enumerate(full_chain):
-        float_attrs["Joint%sAddition" % idx] = f"{host}.Joint%sAddition" % idx
-
+    addition_attrs = [f"{host}.Joint{idx}Addition" for idx in range(len(default_lengths))]
     soft_dist_attr = f"{host}.SoftDistance"
     stretch_attr = f"{host}.Stretch"
 
-    if not mc.objExists(f"{host}.root_matrix"):
-        mc.addAttr(
-            host,
-            shortName="root_matrix",
-            at="matrix",
-        )
-    root_matrix = f"{host}.root_matrix"
+    root_matrix = _add_matrix_attribute(host, "root_matrix")
+    target_matrix = _add_matrix_attribute(host, "target_matrix")
 
-    if not mc.objExists(f"{host}.target_matrix"):
-        mc.addAttr(
-            host,
-            shortName="target_matrix",
-            at="matrix",
-        )
-    target_matrix = f"{host}.target_matrix"
+    mref.get(root_target).attr("worldMatrix[0]").connect(root_matrix)
+    mref.get(end_target).attr("worldMatrix[0]").connect(target_matrix)
 
-    mc.connectAttr(
-        f"{root_target}.worldMatrix[0]",
-        root_matrix,
-    )
-
-    mc.connectAttr(
-        f"{end_target}.worldMatrix[0]",
-        target_matrix,
-    )
-
-    last_attr = None
-    for idx in range(len(full_chain) - 1):
-
-        section_length = add(
-            float_attrs["Joint%sDefaultLength" % idx],
-            float_attrs["Joint%sAddition" % idx],
-        )
-
-        max_len_attr = add(
-            section_length,
-            last_attr or 0
-        )
-
-        last_attr = max_len_attr
-
-    root_translate_attr = matrix_to_translate(root_matrix)
-    target_translate_attr = matrix_to_translate(target_matrix)
+    max_len_attr = 0
+    for default_length, addition_attr in zip(default_lengths, addition_attrs):
+        max_len_attr = add(add(default_length, addition_attr), max_len_attr)
 
     actual_distance_attr = length(
-        root_translate_attr,
-        target_translate_attr,
+        matrix_to_translate(root_matrix),
+        matrix_to_translate(target_matrix),
     )
 
-    # -- DaU
-    overstretch_amount_attr = subtract(
-        max_len_attr,
-        soft_dist_attr,
-    )
+    overstretch_amount_attr = subtract(max_len_attr, soft_dist_attr)
 
-    # -- CONDITION
+    # -- One condition per bone. When the distance is greater than the
+    # -- overstretch amount we take the true (soft) track, otherwise the
+    # -- false (rigid) track
     conditions = []
+    for default_length, addition_attr in zip(default_lengths, addition_attrs):
+        condition = mref.create("condition")
+        condition.operation.set(2)  # -- Greater Than
+        mref.get(actual_distance_attr).connect(condition.firstTerm)
+        mref.get(overstretch_amount_attr).connect(condition.secondTerm)
 
-    # -_ FALSE TRACK
-    for idx in range(len(full_chain) - 1):
-        cond = mc.createNode("condition")
-
-        mc.setAttr(
-            f"{cond}.operation",
-            2,  # -- Greater Than
-        )
-
-        mc.connectAttr(
-            actual_distance_attr,
-            f"{cond}.firstTerm",
-        )
-
-        mc.connectAttr(
-            overstretch_amount_attr,
-            f"{cond}.secondTerm",
-        )
-        false_attr = add(
-            float_attrs["Joint%sDefaultLength" % idx],
-            float_attrs["Joint%sAddition" % idx],
-        )
-
-
-        mc.connectAttr(
-            false_attr,
-            f"{cond}.colorIfFalseR",
-        )
-
-        conditions.append(cond)
+        mref.get(add(default_length, addition_attr)).connect(condition.colorIfFalseR)
+        conditions.append(condition)
 
     # -- TRUE TRACK
-    n = subtract(
-        actual_distance_attr,
-        overstretch_amount_attr,
-    )
+    scale = _soft_scale(actual_distance_attr, overstretch_amount_attr, soft_dist_attr)
 
-    n = divide(
-        n,
-        soft_dist_attr,
-    )
+    multiplier = -1 if facing_direction == facing_direction.NegativeX else 1
 
-    n = multiply(
-        n,
-        -1,
-    )
+    for idx, (default_length, addition_attr) in enumerate(zip(default_lengths, addition_attrs)):
+        bone_length = multiply(default_length, scale)
+        bone_length = subtract(bone_length, default_length)
+        bone_length = multiply(bone_length, stretch_attr)
+        bone_length = add(bone_length, default_length)
+        bone_length = add(bone_length, addition_attr)
 
-    n = exp(n)
+        mref.get(bone_length).connect(conditions[idx].colorIfTrueR)
 
-    n = subtract(
-        1,
-        n,
-    )
-
-    n = multiply(
-        n,
-        soft_dist_attr,
-    )
-
-    n = add(
-        n,
-        overstretch_amount_attr,
-    )
-
-    scale = divide(
-        actual_distance_attr,
-        n,
-    )
-    # ------------------------------------------------
-
-    # -- Add it all together
-    for idx in range(len(full_chain) - 1):
-        upper_attr = multiply(
-            float_attrs["Joint%sDefaultLength" % idx],
-            scale,
-        )
-
-        upper_attr = subtract(
-            upper_attr,
-            float_attrs["Joint%sDefaultLength" % idx]
-        )
-
-        upper_attr = multiply(
-            upper_attr,
-            stretch_attr,
-        )
-
-        upper_attr = add(
-            upper_attr,
-            float_attrs["Joint%sDefaultLength" % idx],
-        )
-
-        ##
-        upper_attr = add(
-            upper_attr,
-            float_attrs["Joint%sAddition" % idx],
-        )
-
-        mc.connectAttr(
-            upper_attr,
-            f"{conditions[idx]}.colorIfTrueR",
-        )
-
-        multiplier = 1
-
-        if facing_direction == facing_direction.NegativeX:
-            multiplier = -1
-
-        final_mul = multiply(
-            f"{conditions[idx]}.outColorR",
-            multiplier,
-        )
-
-        # -- Finally, conect the attributes to the joints
-        mc.connectAttr(
-            final_mul, #f"{conditions[idx]}.outColorR",
+        # -- Finally, connect the attributes to the joints
+        mref.get(multiply(conditions[idx].outColorR.full_name(), multiplier)).connect(
             f"{full_chain[idx + 1]}.translateX",
             force=True,
         )
-
-
-def _float_math(first_term, second_term, operation=0):
-
-    add_node = mc.createNode("floatMath")
-
-    mc.setAttr(
-        f"{add_node}.operation",
-        operation,
-    )
-
-    if isinstance(first_term, str):
-        mc.connectAttr(
-            first_term,
-            f"{add_node}.floatA",
-        )
-
-    else:
-        mc.setAttr(
-            f"{add_node}.floatA",
-            first_term
-        )
-
-    if isinstance(second_term, str):
-        mc.connectAttr(
-            second_term,
-            f"{add_node}.floatB",
-        )
-
-    else:
-        mc.setAttr(
-            f"{add_node}.floatB",
-            second_term
-        )
-
-    return f"{add_node}.outFloat"
-
-def add(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        0,  # -- Add
-    )
-
-
-def multiply(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        2,  # -- Multiply
-    )
-
-def divide(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        3,  # -- Add
-    )
-
-
-def subtract(first_term, second_term):
-    return _float_math(
-        first_term,
-        second_term,
-        1,  # -- Subtract
-    )
-
-
-def exp(first_term):
-
-    n = mc.createNode("floatMath")
-    mc.setAttr(
-        f"{n}.floatB",
-        0,
-    )
-    mc.expression(s=f"{n}.floatA=exp({first_term})")
-
-    return f"{n}.outFloat"
-
-def matrix_to_translate(matrix_attr):
-
-    decompose_node = mc.createNode("decomposeMatrix")
-
-    mc.connectAttr(
-        matrix_attr,
-        f"{decompose_node}.inputMatrix",
-    )
-
-    return f"{decompose_node}.outputTranslate"
-
-def subtract_vector(first_term, second_term):
-    node = mc.createNode("colorMath")
-
-    mc.connectAttr(
-        first_term,
-        f"{node}.colorA"
-    )
-
-    mc.connectAttr(
-        second_term,
-        f"{node}.colorB",
-    )
-
-    mc.setAttr(
-        f"{node}.operation",
-        1,
-    )
-    return f"{node}.outColor"
-
-def length(first_term, second_term):
-
-    delta_attr = subtract_vector(first_term, second_term)
-
-    len_node = mc.createNode("length")
-
-    mc.connectAttr(
-        delta_attr,
-        f"{len_node}.input"
-    )
-
-    return f"{len_node}.output"
-

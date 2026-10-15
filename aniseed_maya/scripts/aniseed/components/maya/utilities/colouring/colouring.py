@@ -1,8 +1,14 @@
+"""
+Provides the control colouring components. "Utility : Color Controls"
+recolours every curve control in the scene based on the location token in
+its name, falling back to the middle colour. "Utility : Color Specific
+Controls" applies a single colour to a given list of nodes, and a deprecated
+wrapper keeps the misspelled "Utility : Color Specifc Controls" identifier
+loading for older rigs.
+"""
 import os
 import aniseed
 import aniseed_toolkit
-
-from maya import cmds
 
 
 # noinspection PyUnresolvedReferences
@@ -18,6 +24,10 @@ class ColorControls(aniseed.RigComponent):
     icon = os.path.join(os.path.dirname(__file__), "colouring.png")
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares a colour option for each of the left, middle and right
+        locations (tracked in _colour_options) and a Nodes To Skip option.
+        """
         super().__init__(*args, **kwargs)
 
         self._colour_options = {
@@ -51,6 +61,10 @@ class ColorControls(aniseed.RigComponent):
         )
 
     def option_widget(self, option_name):
+        """
+        Returns a colour picker for each colour option and an object list
+        for Nodes To Skip.
+        """
         if option_name in self._colour_options:
             return aniseed.widgets.ColorPicker(
                 default_colour=self.option(option_name).get(),
@@ -61,19 +75,20 @@ class ColorControls(aniseed.RigComponent):
         return None
 
     def run(self) -> bool:
+        """
+        Applies the colour matching each curve control's location token,
+        falling back to the middle colour, and skipping any control listed
+        in Nodes To Skip.
+        """
         colours_by_location = {
             self.config.left:   self.option("Left Color").get(),
             self.config.middle: self.option("Middle Color").get(),
             self.config.right:  self.option("Right Color").get(),
         }
         fallback = colours_by_location[self.config.middle]
-        nodes = cmds.controller(allControllers=True, query=True)
         controls_to_skip = self.option("Nodes To Skip").get()
 
-        for node in nodes:
-            if not cmds.listRelatives(node, type="nurbsCurve"):
-                continue
-
+        for node in aniseed_toolkit.control_queries.curve_controls():
             if node in controls_to_skip:
                 continue
 
@@ -96,6 +111,9 @@ class ColorSpecificControls(aniseed.RigComponent):
     icon = os.path.join(os.path.dirname(__file__), "colouring.png")
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Nodes input and the Color option.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -111,9 +129,15 @@ class ColorSpecificControls(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object list for every input (only Nodes is declared).
+        """
         return aniseed.widgets.ObjectList()
 
     def option_widget(self, option_name):
+        """
+        Returns a colour picker for the Color option.
+        """
         if option_name == "Color":
             return aniseed.widgets.ColorPicker(
                 default_colour=self.option("Color").get(),
@@ -122,23 +146,25 @@ class ColorSpecificControls(aniseed.RigComponent):
         return None
 
     def run(self) -> bool:
+        """
+        Applies the Color option to every node in Nodes which has curve
+        shapes. Nodes without curve shapes are silently skipped.
+        """
         nodes = self.input("Nodes").get()
         colour = self.option("Color").get()
 
         for node in nodes:
-            if not cmds.listRelatives(node, type="nurbsCurve"):
-                continue
-
-            aniseed_toolkit.shapes.apply_color(node, *colour)
+            if aniseed_toolkit.control_queries.has_curve_shapes(node):
+                aniseed_toolkit.shapes.apply_color(node, *colour)
 
         return True
+
 
 # noinspection PyUnresolvedReferences
 class ColorSpecificControlsDeprecatedSpellingErrorWrapper(ColorSpecificControls):
     """
-    Recolours the NURBS curve shapes of a specific list of nodes to a
-    single user-chosen colour, ignoring any location tokens in their
-    names.
+    Deprecated : Kept so rigs saved with the misspelled identifier still
+    load. Use Color Specific Controls instead.
     """
 
     identifier = "Utility : Color Specifc Controls"

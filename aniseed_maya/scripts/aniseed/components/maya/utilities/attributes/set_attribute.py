@@ -1,3 +1,10 @@
+"""
+Provides the "Utility : Set Attribute (Multi)" component, which sets the
+same attribute to the same value on a list of nodes. The value is given as a
+string and coerced into each attribute's python type, with booleans resolved
+from common truthy/falsy strings. An Ignore Errors option controls whether
+unresolvable nodes are skipped or raise.
+"""
 import mref
 import aniseed
 
@@ -7,6 +14,11 @@ _FALSY_STRINGS = frozenset({"", "false", "0", "no", "off"})
 
 
 def _coerce(raw_value: str, python_type: type):
+    """
+    Converts the given string value to the given python type. Booleans are
+    resolved from common truthy/falsy strings rather than python's bool(),
+    which would treat any non-empty string as True.
+    """
     if python_type is bool:
         normalised = raw_value.strip().lower()
         if normalised in _TRUTHY_STRINGS:
@@ -30,6 +42,10 @@ class SetAttributeMany(aniseed.RigComponent):
     identifier = "Utility : Set Attribute (Multi)"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Nodes, Attribute and Value inputs, along with an Ignore
+        Errors option for nodes which cannot be resolved.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -58,27 +74,39 @@ class SetAttributeMany(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object list widget for the Nodes input. Other inputs use
+        the default widget.
+        """
         if requirement_name == "Nodes":
             return aniseed.widgets.ObjectList()
 
     def run(self):
-        node_names = self.input("Nodes").get()
+        """
+        Sets the named attribute on every node to the coerced Value. Nodes
+        which cannot be resolved are reported and either skipped or raise,
+        depending on Ignore Errors. Attributes with no python type are
+        skipped. A missing attribute still fails regardless of Ignore Errors
+        (a known issue noted in the code).
+        """
         attribute_name = self.input("Attribute").get()
         raw_value = self.input("Value").get()
 
-        for node_name in node_names:
-            node = mref.get(node_name)
+        for node_name in self.input("Nodes").get():
 
+            # -- A missing node is returned by mref.get as a plain string,
+            # -- which has no attr method. Known issue (kept for parity): a
+            # -- missing attribute gives None here rather than raising, so
+            # -- it fails on python_type below regardless of Ignore Errors.
             try:
-                attribute = node.attr(attribute_name)
+                attribute = mref.get(node_name).attr(attribute_name)
 
             except AttributeError:
                 print(f"Could not set attribute on {node_name}")
                 if not self.option("Ignore Errors").get():
-                   raise Exception(f"Could not set attribute on {node_name}")
-                else:
-                    continue
-                    
+                    raise Exception(f"Could not set attribute on {node_name}")
+                continue
+
             python_type = attribute.python_type()
 
             if python_type is None:

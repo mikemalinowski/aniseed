@@ -1,6 +1,12 @@
+"""
+Provides the "Mechanics : Piston" component, a two control piston rig between
+a base joint and a tip joint. Each end has an aim transform aimed at the
+opposite control, sharing an upvector offset along a chosen axis, and the
+joints are constrained to those aim transforms.
+"""
+import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class PistonComponent(aniseed.RigComponent):
@@ -17,6 +23,10 @@ class PistonComponent(aniseed.RigComponent):
     identifier = "Mechanics : Piston"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the base/tip parent and joint inputs, the naming and upvector
+        axis options and the Root and Tip aim transform outputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -84,6 +94,9 @@ class PistonComponent(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the base/tip parent and joint inputs.
+        """
 
         object_requirements = [
             "Base Parent",
@@ -96,6 +109,10 @@ class PistonComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
+        """
+        Returns a location selector for Location and an axis selector for
+        Upvector Axis.
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
@@ -103,13 +120,20 @@ class PistonComponent(aniseed.RigComponent):
             return aniseed.widgets.AxisSelector()
 
     def on_enter_stack(self):
+        """
+        Hooks the Base Parent input to the parent component's default output.
+        """
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Base Parent").hook_to_parent()
 
     def run(self) -> bool:
-
-        base_parent = self.input("Base Parent").get()
-        tip_parent = self.input("Tip Parent").get()
+        """
+        Creates root and tip controls under their respective parents, each
+        with an aim transform aimed at the opposite control (sharing an
+        upvector offset 10cm along the Upvector Axis from the root control),
+        parent constrains the base and tip joints to the aim transforms and
+        sets them as the Root and Tip outputs.
+        """
 
         piston_root_jnt = self.input("Base Joint").get()
         piston_tip_jnt = self.input("Tip Joint").get()
@@ -121,7 +145,7 @@ class PistonComponent(aniseed.RigComponent):
             description=f"{prefix}PistonRoot",
             location=location,
             config=self.config,
-            parent=base_parent,
+            parent=self.input("Base Parent").get(),
             shape="core_cube",
             match_to=piston_root_jnt,
         )
@@ -130,7 +154,7 @@ class PistonComponent(aniseed.RigComponent):
             description=f"{prefix}PistonTip",
             location=location,
             config=self.config,
-            parent=tip_parent,
+            parent=self.input("Tip Parent").get(),
             shape="core_cube",
             match_to=piston_tip_jnt,
         )
@@ -153,48 +177,45 @@ class PistonComponent(aniseed.RigComponent):
             match_to=piston_tip_ctl.ctl,
         )
 
-        upvector = aniseed_toolkit.transforms.create(
-            classification="upv",
-            description=f"{prefix}PistonUpVector",
-            location=location,
-            config=self.config,
-            parent=piston_root_ctl.ctl,
-            match_to=piston_root_ctl.ctl,
+        upvector = mref.get(
+            aniseed_toolkit.transforms.create(
+                classification="upv",
+                description=f"{prefix}PistonUpVector",
+                location=location,
+                config=self.config,
+                parent=piston_root_ctl.ctl,
+                match_to=piston_root_ctl.ctl,
+            ),
         )
 
         upvector_axis = self.option("Upvector Axis").get().upper()
-        cmds.setAttr(
-            f"{upvector}.translate{upvector_axis}",
+        upvector.attr(f"translate{upvector_axis}").set(
             aniseed_toolkit.units.from_cm(10),
         )
 
-        cmds.aimConstraint(
-            piston_tip_ctl.ctl,
-            aim_root,
-            aimVector=[0, 1, 0],
-            upVector=[1, 0, 0],
-            worldUpType="object",
-            worldUpObject=upvector,
-            maintainOffset=False,
-        )
+        # -- Each end aims at the opposite control, sharing the upvector
+        aim_pairs = [
+            (piston_tip_ctl.ctl, aim_root),
+            (piston_root_ctl.ctl, aim_tip),
+        ]
+        for aim_target, aim_node in aim_pairs:
+            mref.aimConstraint(
+                aim_target,
+                aim_node,
+                aimVector=[0, 1, 0],
+                upVector=[1, 0, 0],
+                worldUpType="object",
+                worldUpObject=upvector,
+                maintainOffset=False,
+            )
 
-        cmds.aimConstraint(
-            piston_root_ctl.ctl,
-            aim_tip,
-            aimVector=[0, 1, 0],
-            upVector=[1, 0, 0],
-            worldUpType="object",
-            worldUpObject=upvector,
-            maintainOffset=False,
-        )
-
-        cmds.parentConstraint(
+        mref.parentConstraint(
             aim_root,
             piston_root_jnt,
             maintainOffset=True,
         )
 
-        cmds.parentConstraint(
+        mref.parentConstraint(
             aim_tip,
             piston_tip_jnt,
             maintainOffset=True,

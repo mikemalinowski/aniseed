@@ -1,6 +1,8 @@
 import mref
 from maya import cmds
 
+from .. import constraints
+
 
 def create_blend_chain(
         parent,
@@ -23,6 +25,11 @@ def create_blend_chain(
 
 
 class BlendChain:
+    """
+    Creates a chain of joints which are blended between two sets of
+    transforms by a 0-1 attribute (where 0 is fully transforms_a and 1 is
+    fully transforms_b).
+    """
 
     def __init__(
             self,
@@ -61,42 +68,32 @@ class BlendChain:
         parent = self.parent
         created_joints = []
 
-        for idx in range(len(self.transforms_a)):
+        for idx, (transform_a, transform_b) in enumerate(zip(self.transforms_a, self.transforms_b)):
 
-            transform_a = self.transforms_a[idx]
-            transform_b = self.transforms_b[idx]
-
-            # -- Create the joint
+            # -- Create the joint. The selection is cleared so the joint
+            # -- is not created under whatever is selected (cmds is used
+            # -- as mref.select does not support clearing)
             cmds.select(clear=True)
-            blend_joint = mref.get(cmds.joint())
+            blend_joint = mref.get(mref.joint())
 
-            match_target = self.transforms_a[idx]
-            if self.match_transforms:
-                match_target = self.match_transforms[idx]
+            match_target = self.match_transforms[idx] if self.match_transforms else transform_a
 
             blend_joint.set_parent(parent)
             blend_joint.match_to(match_target)
 
-            cmds.parentConstraint(
-                transform_a.full_name(),
-                blend_joint.full_name(),
+            mref.parentConstraint(
+                transform_a,
+                blend_joint,
                 maintainOffset=True,
             )
-            constraint = mref.get(
-                cmds.parentConstraint(
-                    transform_b.full_name(),
-                    blend_joint.full_name(),
+            constraint = mref.parentConstraint(
+                transform_b,
+                blend_joint,
                 maintainOffset=True,
-                )[0]
-            )
+            )[0]
             constraint.attr("interpType").set(2)  # Shortest
-            # -- Hook up the direct connection
-            blend_attribute.connect(constraint.weight_attributes()[1])
 
-            # -- Hook up the reverse connection
-            reverse_node = mref.create("reverse")
-            blend_attribute.connect(reverse_node.attr("inputX"))
-            reverse_node.attr("outputX").connect(constraint.weight_attributes()[0])
+            constraints.blend_weights(blend_attribute, constraint)
 
             created_joints.append(blend_joint)
             parent = blend_joint

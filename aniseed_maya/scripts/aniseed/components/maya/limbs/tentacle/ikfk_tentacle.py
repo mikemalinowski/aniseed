@@ -1,22 +1,25 @@
+"""
+Provides the "Limb : IKFK Tentacle" component and its TentacleBuilder helper,
+which wrap the Blur Studios TwistSpline rig builder to create a twist spline
+tentacle between a start and end joint. The twistSplineBuilder module is not
+distributed with Aniseed and must be made available for this to build. This
+component is not production ready.
+"""
 # NOT PRODUCTION READY!
 import mref
 import aniseed
 import qtility
 import aniseed_toolkit
-import functools
 import maya.cmds as mc
 from Qt import QtWidgets
 
 # -- This tentacle component uses the Blur Studios twist spline setup
 # -- which can be found here: https://github.com/blurstudio/TwistSpline
-# -- We do not distribute that directly within Aniseed, therefore we only
-# -- make this component available if the user/developer/rigger has
-# -- downloaded and made that module available.
-optional_rig_component = object
+# -- We do not distribute that directly within Aniseed, therefore the
+# -- user/developer/rigger must have downloaded and made that module
+# -- available for this component to build.
 try:
     import twistSplineBuilder
-
-    optional_rig_component = aniseed.RigComponent
 except ImportError:
     pass
 
@@ -27,6 +30,11 @@ class TentacleComponent(aniseed.RigComponent):
     version = 1
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent and start/end joint inputs and the naming, control
+        count, twist and (currently unused) space switch / fk options. Per-joint
+        outputs are rebuilt whenever the start or end joint input changes.
+        """
         super(TentacleComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -99,6 +107,9 @@ class TentacleComponent(aniseed.RigComponent):
         self.input("End Joint").value_changed.connect(self.update_outputs)
 
     def on_enter_stack(self):
+        """
+        Hooks the Parent input to the parent component's default output.
+        """
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
@@ -110,26 +121,12 @@ class TentacleComponent(aniseed.RigComponent):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        # -- Start by removing all our output attributes
-        for output_plug in self.outputs()[:]:
-            if output_plug.name().startswith("Out Joint"):
-                self.remove_output(output_plug.name())
-
-        # -- Attempt to get the joints. Note that this is wrapped in an exception
-        # -- statement, as its possible one or more of these attributes are blank.
-        try:
-            joints = aniseed_toolkit.run(
-                "Get Joints Between",
-                self.input("Start Joint").get(),
-                self.input("End Joint").get(),
-            )
-        except:
-            joints = []
-
-        # -- We now cycle the joints and declare a new output attribute
-        # -- to represent it
-        for idx, joint in enumerate(joints):
-            self.declare_output(name="Out Joint %s" % idx)
+        aniseed_toolkit.component_outputs.declare_joint_outputs(
+            self,
+            "Out Joint",
+            self.input("Start Joint").get(),
+            self.input("End Joint").get(),
+        )
 
     def input_widget(self, requirement_name) -> QtWidgets.QWidget:
         """
@@ -159,9 +156,11 @@ class TentacleComponent(aniseed.RigComponent):
         joint = self.input("Start Joint").get()
 
         # -- If we dont have any joints we dont want to show any tools
-        # -- other than the joint creation tool
-        if not joint or not mc.objExists(joint):
-            menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
+        # -- other than the joint creation tool.
+        # -- Note: When there are joints this returns None rather than the
+        # -- menu. This is existing behaviour and is preserved.
+        if not joint or not mref.objExists(joint):
+            menu["Create Joints"] = self.user_func_create_skeleton
             return menu
 
     def user_func_create_skeleton(self, joint_count: int = None, parent: str = None) -> list:
@@ -228,29 +227,24 @@ class TentacleComponent(aniseed.RigComponent):
         return joints
 
     def spread(self, joints):
+        """
+        Returns the tangent spread for the twist spline, which is a third
+        of the distance between each control along the chain.
+        """
         chain_length = aniseed_toolkit.joints.chain_length(joints[0], joints[-1])
         control_count = self.option("Control Count").get()
 
-        x = chain_length / (control_count - 1)
-        y = x / 3.0
-        return y
-
-        _spread = (control_count - 1) / chain_length
-        #_spread = _spread / 3.0
-        return _spread
-
-        _spread = (control_count - 1)
-        _spread /= 3.0
-        return _spread
+        return (chain_length / (control_count - 1)) / 3.0
 
     def run(self) -> bool:
         """
         This function is called when the rig is being built
         """
         location = self.option("Location").get()
+        descriptive = self.option("Descriptive Prefix").get()
+
         # -- Get the list of joints that make up the tentacle chain
-        joints = aniseed_toolkit.run(
-            "Get Joints Between",
+        joints = aniseed_toolkit.joints.get_between(
             self.input("Start Joint").get(),
             self.input("End Joint").get(),
         )
@@ -260,11 +254,10 @@ class TentacleComponent(aniseed.RigComponent):
             cv_count=self.option("Control Count").get(),
             joint_count=len(joints),
             config=self.config,
-            location=self.option("Location").get(),
+            location=location,
             spread=self.spread(joints),
-            description=self.option("Descriptive Prefix").get(),
+            description=descriptive,
         )
-        # - Match the control org to the joint
 
         master_control = mref.get(builder.get_master_control())
         master_control.add_attribute(
@@ -274,17 +267,18 @@ class TentacleComponent(aniseed.RigComponent):
             keyable=True,
         )
         master_control.show_fk.set(channelBox=True)
+
+        # -- Match the rig org to the first joint
         mref.get(builder.org).match_to(joints[0])
 
         # -- TODO: We should zero the controls at this stage!
-        pass
 
         # -- We now constrain our deformation joints to the control rig
         last_fk_control = builder.org
         last_linear_rider = builder.org
         fk_controls = []
 
-        for idx, rider in enumerate(builder.riders()):
+        for rider in builder.riders():
 
             linear_rider = mref.create(
                 "transform",
@@ -296,12 +290,12 @@ class TentacleComponent(aniseed.RigComponent):
                 parent=last_linear_rider,
             )
             last_linear_rider = linear_rider
-            mc.parentConstraint(rider, linear_rider.name())
+            mref.parentConstraint(rider, linear_rider)
 
             fk_control = aniseed_toolkit.control.create(
-                description="FK" + self.option("Descriptive Prefix").get(),
+                description="FK" + descriptive,
                 config=self.config,
-                location=self.option("Location").get(),
+                location=location,
                 parent=last_fk_control,
                 shape="core_rounded_square",
                 rotate_shape=[0, 0, 90],
@@ -309,76 +303,36 @@ class TentacleComponent(aniseed.RigComponent):
             )
 
             for shape in mref.get(fk_control.ctl).shapes():
-                master_control.show_fk.connect(shape.visibility)
+                master_control.show_fk.connect(shape.attr("visibility"))
             fk_controls.append(fk_control.ctl)
 
-            decompose_node = mc.createNode("decomposeMatrix")
-            mc.connectAttr(f"{linear_rider.name()}.matrix", f"{decompose_node}.inputMatrix")
-            mc.connectAttr(f"{decompose_node}.outputTranslate", f"{fk_control.org}.translate")
-            mc.connectAttr(f"{decompose_node}.outputRotate", f"{fk_control.org}.rotate")
-            mc.connectAttr(f"{decompose_node}.outputScale", f"{fk_control.org}.scale")
+            # -- The fk control follows the linear rider
+            aniseed_toolkit.matrix_drive.drive_from_local_matrix(linear_rider, fk_control.org)
 
             last_fk_control = fk_control.ctl
 
         for idx, fk_control in enumerate(fk_controls):
-            mc.parentConstraint(
-                fk_control,
-                joints[idx],
-                maintainOffset=True,
-            )
-            mc.scaleConstraint(
-                fk_control,
-                joints[idx],
-                maintainOffset=True,
-            )
+            aniseed_toolkit.constraints.parent_and_scale(fk_control, joints[idx])
 
         for idx, mech_joint in enumerate(builder.joint_names()):
             # -- Set the corresponding output plug
-            tag = "Out Joint %s" % idx
-            self.output(tag).set(mech_joint)
+            self.output(f"Out Joint {idx}").set(mech_joint)
 
         # -- If we were given a parent then we parent our entire setup
         # -- under the given parent
         parent = self.input("Parent").get()
         if parent:
-            mc.parent(
+            mref.parent(
                 builder.org,
                 parent,
             )
 
-        spline_controls = [
-            control
-            for control in builder.controls()
-            if "TentacleSpline" in control
-        ]
-        twist_controls = [
-            control
-            for control in builder.controls()
-            if "TentacleTwist" in control
-        ]
-
-        for twist_control in twist_controls:
-
-            mref.get(twist_control).attr("UseTwist").set(self.option("Default Twist").get())
-        #
-        # if self.option("Add Space Switches").get():
-        #     aniseed_toolkit.space.setup_fk_transform_worldspace_switches(
-        #         nodes=spline_controls,
-        #         rig=self.rig,
-        #         default_space="World"
-        #     )
-        #
-        # if self.option("Add Space Switches").get():
-        #     nodes = [
-        #         f"MECH_TentacleSpline_0{n+1}_LF"
-        #         for n in range(8)
-        #     ]
-        #     print(nodes)
-        #     aniseed_toolkit.space.setup_fk_transform_worldspace_switches(
-        #         nodes=nodes,
-        #         rig=self.rig,
-        #         default_space="World"
-        #     )
+        # -- Apply the default twist state to the twist controls. Note that
+        # -- the "Add Space Switches" and "Create FK" options are currently
+        # -- not used by the build.
+        for control in builder.controls():
+            if "TentacleTwist" in control:
+                mref.get(control).attr("UseTwist").set(self.option("Default Twist").get())
 
         return True
 
@@ -400,6 +354,19 @@ class TentacleBuilder:
             spread: float,
             config: "aniseed.RigConfiguration"
     ):
+        """
+        Builds the blur twist spline, then wraps it in an org hierarchy,
+        renames its nodes using the rig configuration and creates aniseed
+        controls for each blur control.
+
+        Args:
+            cv_count: Number of cvs (control points) in the twist spline.
+            joint_count: Number of deformation joints to create.
+            description: Descriptive name for the setup.
+            location: Location token used for naming.
+            spread: Spread value passed through to the blur builder.
+            config: The rig configuration used to generate names.
+        """
 
         # -- Store our incoming variables
         self.config = config
@@ -512,15 +479,6 @@ class TentacleBuilder:
 
         ]
 
-    def all_nodes(self):
-        """
-        Return the names of all the objects in the rig
-        """
-        return [
-            m_object
-            for m_object in self.lookup.values()
-        ]
-
     def controls(self):
         """
         Returns the names of all the controls in the rig
@@ -528,17 +486,6 @@ class TentacleBuilder:
         return [
             aniseed_toolkit.run("MObject Name", control)
             for control in self._final_controls
-        ]
-
-    def mechanicals(self):
-        """
-        This returns all the nodes in the blur rigs which are nodes relating
-        to zero'ing or providing mechanical support to the rig
-        """
-        return [
-            self.lookup[node]
-            for node in self.lookup.keys()
-            if node.startswith("Hbfr_")
         ]
 
     def joints(self):
@@ -560,25 +507,10 @@ class TentacleBuilder:
             for joint in self.joints()
         ]
 
-    def control_org(self):
-        """
-        Returns the org which all the controls reside under
-        """
-        return self.lookup["Org_X_Default_Ctrls"]
-
-    def joints_org(self):
-        """
-        Returns the org which all the deformers reside under
-        """
-        return self.lookup["Org_X_X_DefaultJnts"]
-
-    def rig_mech(self):
-        """
-        Returns the special blur studios tentacle spline node
-        """
-        return self.lookup["Rig_X_DefaultSpline_Drv"]
-
     def riders(self):
+        """
+        Returns the names of all the rider nodes in the rig
+        """
         results = []
 
         for k in self.lookup.keys():
@@ -588,12 +520,6 @@ class TentacleBuilder:
                 results.append(node_name)
         return results
 
-    def get_descriptive(self, node: str):
-        """
-        This will extract the descriptive element of a blur named object
-        """
-        return node.split(self.TAG)[-1].replace("_", "")
-
     def get_name(self, m_object: str):
         """
         Convenience function for returning the name of an mobject
@@ -601,12 +527,20 @@ class TentacleBuilder:
         return aniseed_toolkit.run("MObject Name", m_object)
 
     def blur_control_names(self):
+        """
+        Returns the current names of the controls created by the blur
+        twist spline build.
+        """
         return [
             aniseed_toolkit.run("MObject Name", control_target)
             for control_target in self._blur_controls.values()
         ]
 
     def get_master_control(self):
+        """
+        Returns the name of the first final control containing "Global", or
+        None if there is no such control.
+        """
         for control in self.controls():
             if "Global" in control:
                 return control
@@ -670,8 +604,6 @@ class TentacleBuilder:
                 continue
 
             parent = mc.listRelatives(object_name, parent=True)[0]
-            children = mc.listRelatives(object_name, children=True)
-            shapes = mc.listRelatives(object_name, shapes=True) or list()
             label = identifier.split("_")[2].replace("Default", "")
 
             new_control = aniseed_toolkit.run(
