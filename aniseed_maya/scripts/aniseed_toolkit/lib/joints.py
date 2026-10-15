@@ -1,8 +1,11 @@
+import typing
 import mref
-import aniseed
 from maya import cmds
 
 from . import transformation
+
+if typing.TYPE_CHECKING:
+    import aniseed
 
 
 def create(

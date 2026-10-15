@@ -1,5 +1,8 @@
-import aniseed
+import typing
 from maya import cmds
+
+if typing.TYPE_CHECKING:
+    import aniseed
 
 
 def create(

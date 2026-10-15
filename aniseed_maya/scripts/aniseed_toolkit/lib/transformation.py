@@ -1,9 +1,5 @@
-from PySide6 import QtWidgets
-
 import mref
-import aniseed
 import functools
-import aniseed_toolkit
 from maya import cmds
 from maya.api import OpenMaya as om
 
@@ -82,17 +78,8 @@ def factor_between(node: str = "", from_this: str = "", to_this: str = "", print
     Returns:
         The factor for how close the given node is between the from_this and to_this
     """
-    total_distance = aniseed_toolkit.run(
-        "Distance Between",
-        from_this,
-        to_this,
-    )
-
-    delta = aniseed_toolkit.run(
-        "Distance Between",
-        node,
-        to_this,
-    )
+    total_distance = distance_between(from_this, to_this)
+    delta = distance_between(node, to_this)
 
     distance_factor = max(
         0.0,
@@ -1018,15 +1005,6 @@ def aim_at(node, target, aim_axis, up_axis, up_target=None):
     cmds.delete(temp_constraint)
 
 
-class TransformMixerUi(QtWidgets.QWidget):
-
-    def __init__(self, mixer, parent=None):
-        super().__init__(parent=parent)
-
-        # -- Store a reference to the mixer class
-        self.mixer = mixer
-
-
 def scale_translation(node, scale_by=1.0):
     """
     Scales the translation values of the given node
@@ -1053,3 +1031,8 @@ def scale_translation_of_hierarchy(root_node, scale_by=1.0):
     for node in all_nodes:
         if node.node_type() in ["transform", "joint"]:
             scale_translation(node, scale_by)
+
+def __getattr__(name):
+    # -- Deprecated names are still served from the legacy package
+    from .._legacy import resolve
+    return resolve(__name__, name)

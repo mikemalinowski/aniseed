@@ -151,7 +151,4 @@ def register(tool):
     This allows for a python module to register a tool without it being on the search
     path.
     """
-    factory = ToolBox.singleton()
-    result = factory.register(tool)
-    print("registered %s" % tool)
-    print("result : %s" % result)
+    return ToolBox.singleton().register(tool)

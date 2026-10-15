@@ -1,5 +1,6 @@
-import aniseed_toolkit
 from maya import cmds
+
+from . import joints
 
 
 class Direction:
@@ -163,7 +164,7 @@ def get_chain_facing_direction(start: str = "", end: str = "", epsilon: float = 
         z=0,
     )
 
-    for joint in aniseed_toolkit.run("Get Joints Between", start, end)[1:]:
+    for joint in joints.get_between(start, end)[1:]:
         for channel in axis:
             axis[channel] += cmds.getAttr(
                 f"{joint}.translate{channel.upper()}",
@@ -218,21 +219,12 @@ def get_upvector_direction(start: str = "", end: str = "", epsilon: float = 0.01
     Returns:
         Direction instance
     """
-    all_joints = aniseed_toolkit.run(
-        "Get Joints Between",
-        start,
-        end,
-    )
+    all_joints = joints.get_between(start, end)
 
     temp_a = cmds.createNode("transform")
     temp_b = cmds.createNode("transform")
 
-    facing_direction = aniseed_toolkit.run(
-        "Get Chain Facing Direction",
-        start,
-        end,
-        epsilon,
-    )
+    facing_direction = get_chain_facing_direction(start, end, epsilon)
 
     cmds.parent(temp_b, temp_a)
 

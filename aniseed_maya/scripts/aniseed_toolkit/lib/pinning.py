@@ -202,8 +202,8 @@ def remove_pins(items: list[str] = None) -> None:
     """
     for pin_or_joint in items:
 
-        joint = aniseed_toolkit.run("Get Joint From Pin", pin_or_joint)
-        pin = aniseed_toolkit.run("Get Pin From Node",pin_or_joint)
+        joint = get_pinned_nodes(pin_or_joint)
+        pin = get_pin(pin_or_joint)
 
         pre_xform = cmds.xform(
             joint,

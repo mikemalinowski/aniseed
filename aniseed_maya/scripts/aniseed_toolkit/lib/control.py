@@ -1,10 +1,14 @@
 import json
+import typing
 import traceback
-import aniseed
-import aniseed_toolkit
+
+import mref
 from maya import cmds
 
 from . import shapes
+
+if typing.TYPE_CHECKING:
+    import aniseed
 
 
 class Control:
@@ -144,16 +148,10 @@ class Control:
 
         for classification in _structure:
 
-            nodes[classification] = aniseed_toolkit.run("Get MObject",
-                cmds.createNode("transform"),
-            )
-
-            name_classification = classification_override or classification
-
-            cmds.rename(
-                aniseed_toolkit.run("MObject Name", nodes[classification]),
+            node = mref.create("transform")
+            node.rename(
                 config.generate_name(
-                    classification=name_classification,
+                    classification=classification_override or classification,
                     description=description,
                     location=location,
                     counter=counter,
@@ -161,98 +159,63 @@ class Control:
             )
 
             if next_parent:
-                cmds.parent(
-                    aniseed_toolkit.run("MObject Name", nodes[classification]),
-                    next_parent,
-                )
+                node.set_parent(next_parent)
 
-            cmds.xform(
-                aniseed_toolkit.run("MObject Name", nodes[classification]),
-                matrix=cmds.xform(
-                    match_to,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-                worldSpace=True,
-            )
+            # -- Without a match_to the node is matched to its own world
+            # -- matrix. This is a deliberate re-application which keeps the
+            # -- output identical to when this was resolved from the selection.
+            match_target = mref.get(match_to) if match_to else node
+            node.set_matrix(match_target.get_matrix(space="world"), space="world")
 
-            next_parent = aniseed_toolkit.run("MObject Name", nodes[classification])
+            nodes[classification] = node
+            next_parent = node
 
-        control_name = aniseed_toolkit.run("MObject Name", nodes[config.control])
-        cmds.setAttr(
-            f"{control_name}.visibility",
-            # lock=True,
-            keyable=False,
-        )
+        control = nodes[config.control]
+        control.attr("visibility").set(keyable=False)
 
         # -- Apply the shape to the control
-        aniseed_toolkit.run(
-            "Apply Shape",
-            control_name,
-            shape,
-        )
+        if shape:
+            shapes.load_shape(control.name(), shape)
 
         if shape_scale != 1.0:
-            aniseed_toolkit.run(
-                "Scale Shapes",
-                control_name,
-                shape_scale
-            )
+            shapes.scale(control.name(), scale_by=shape_scale)
 
         if rotate_shape:
             shapes.rotate(
-                control_name,
+                control.name(),
                 x=rotate_shape[0],
                 y=rotate_shape[1],
                 z=rotate_shape[2],
             )
 
-        # -- Attach the networking
-        for source_node_type in nodes:
-            for target_node_type in nodes:
+        # -- Link every part of the control hierarchy to every other part
+        for source_classification, source_node in nodes.items():
+            for target_classification, target_node in nodes.items():
 
-                if source_node_type == target_node_type:
+                if source_classification == target_classification:
                     continue
 
-                source_node = aniseed_toolkit.run("MObject Name", nodes[source_node_type])
-                target_node = aniseed_toolkit.run("MObject Name", nodes[target_node_type])
-
-                cmds.addAttr(
-                    source_node,
-                    shortName=f"link_{_structure[target_node_type]}",
-                    attributeType="message",
+                link = source_node.add_attribute(
+                    f"link_{_structure[target_classification]}",
+                    value=None,
+                    attribute_type="message",
                 )
+                target_node.attr("message").connect(link)
 
-                cmds.connectAttr(
-                    f"{target_node}.message",
-                    f"{source_node}.link_{_structure[target_node_type]}"
-                )
-
-        controller_name = aniseed_toolkit.run("MObject Name", nodes[config.control])
-
-        cmds.addAttr(
-            controller_name,
-            shortName="naming_data",
-            dataType="string",
-        )
-
-        cmds.setAttr(
-            f"{controller_name}.naming_data",
-            json.dumps(
+        control.add_attribute(
+            "naming_data",
+            value=json.dumps(
                 dict(
                     classification=config.control,
                     location=location,
                     description=description,
                 )
             ),
-            type="string",
+            attribute_type="string",
         )
-        cmds.controller(
-            controller_name,
-        )
+        mref.controller(control)
 
-        return Control(controller_name)
+        return Control(control.name())
 
 
 def create(
@@ -320,7 +283,7 @@ def get(node: str) -> Control:
 def set_as_zero_transform(node: str) -> None:
 
     # -- Get the node as a control object
-    control = aniseed_toolkit.run("Get Control", node)
+    control = Control.get(node)
 
     # -- Read the world transform
     world_xform = cmds.xform(

@@ -1,5 +1,4 @@
 from maya import cmds
-import aniseed_toolkit
 
 _TAG_ATTRIBUTE_ = "aniseed_tagging"
 
@@ -21,10 +20,7 @@ def tag(node: str = "", tag: str = "") -> None:
             dataType="string",
         )
 
-    existing_tags = aniseed_toolkit.run(
-        "Get Tag Data",
-        node=node,
-    )
+    existing_tags = get_tags(node)
 
     if tag in existing_tags:
         print("tag already exists")
@@ -60,7 +56,7 @@ def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
     for long_name in long_names:
         local_name = long_name.split("|")[-1]
 
-        if aniseed_toolkit.run("Has Tag", node=local_name, tag=tag):
+        if has_tag(local_name, tag):
             return local_name
 
 
@@ -86,7 +82,7 @@ def all_children(node: str = "", tag: str = "", include_self=False) -> list:
     for long_name in long_names:
         local_name = long_name.split("|")[-1]
 
-        if aniseed_toolkit.run("Has Tag", node=local_name, tag=tag):
+        if has_tag(local_name, tag):
             results.append(local_name)
 
     return results
@@ -99,17 +95,14 @@ def find_all(tag: str = "", include_self=False) -> None:
 
     results = list()
     for node in nodes:
-        if aniseed_toolkit.run("Has Tag", node=node):
+        if has_tag(node):
             results.append(node)
 
     return results
 
 
 def has_tag(node: str = "", tag: str = "") -> bool:
-    existing_tags = aniseed_toolkit.run(
-        "Get Tag Data",
-        node=node,
-    )
+    existing_tags = get_tags(node)
 
     if tag in existing_tags:
         return True

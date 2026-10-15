@@ -15,6 +15,6 @@ from .app.widgets import launch
 
 __version__ = "3.0.1"
 
-# -- Most code will want to access the toolbox
-# -- tools directly.
-tools = ToolBox()
+# -- Most code will want to access the toolbox tools directly. This is the
+# -- shared instance, so the tools are only discovered once.
+tools = ToolBox.singleton()
