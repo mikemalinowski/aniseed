@@ -31,12 +31,18 @@ class Direction:
             return
 
         if isinstance(direction, str) and len(direction) > 1:
-            if "negative" in direction.lower():
-                self.idx = {"x": 3, "y": 4, "z": 5}[direction.lower()]
+            # -- Strings such as "Negative X" (or "-x")
+            axis = direction.lower()[-1]
+            if "negative" in direction.lower() or direction.startswith("-"):
+                self.idx = {"x": self.NegativeX, "y": self.NegativeY, "z": self.NegativeZ}[axis]
                 return
 
+            # -- Strings such as "Positive X"
+            self.idx = {"x": self.PositiveX, "y": self.PositiveY, "z": self.PositiveZ}[axis]
+            return
+
         if isinstance(direction, str):
-            self.idx = {"x": 0, "y": 1, "z": 2}[direction.lower()]
+            self.idx = {"x": self.PositiveX, "y": self.PositiveY, "z": self.PositiveZ}[direction.lower()]
             return
 
     @property
