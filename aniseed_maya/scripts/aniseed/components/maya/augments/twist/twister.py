@@ -12,8 +12,8 @@ import aniseed_toolkit
 class TwisterComponent(aniseed.RigComponent):
     """
     Builds a twist setup along a chain of joints driven by a Root and
-    Tip driver. The augment creates a twist rig (via the
-    ``Create Twist Setup`` toolkit action), aligns its org to the root
+    Tip driver. The augment creates a twist rig (via
+    ``aniseed_toolkit.rigging.twist.create_twist_setup``), aligns its org to the root
     driver and its tip to the tip driver, optionally parent-constrains
     those ends to the drivers, and then distributes the supplied joints
     along the twist by their normalised distance from root to tip.
@@ -164,7 +164,7 @@ class TwisterComponent(aniseed.RigComponent):
             print("No joints given to drive")
             return False
 
-        facing_direction = aniseed_toolkit.direction.get_chain_facing_direction(
+        facing_direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=joints[0],
             end=joints[-1],
         )
@@ -189,8 +189,7 @@ class TwisterComponent(aniseed.RigComponent):
         tip_driver = self.input("Tip").get()
         parent = self.input("Parent").get()
 
-        twist_builder = aniseed_toolkit.run(
-            "Create Twist Setup",
+        twist_builder = aniseed_toolkit.rigging.twist.create_twist_setup(
             twist_count=len(joints_to_drive),
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
@@ -230,7 +229,7 @@ class TwisterComponent(aniseed.RigComponent):
         twist_builder.reset_aim()
 
         # -- Each twist is blended by its joint's distance along the twist
-        total_distance = aniseed_toolkit.transformation.distance_between(
+        total_distance = aniseed_toolkit.core.maths.distance_between(
             root_driver,
             tip_driver,
         )
@@ -239,7 +238,7 @@ class TwisterComponent(aniseed.RigComponent):
 
             twist_builder.set_blend_factor(
                 idx,
-                aniseed_toolkit.transformation.distance_between(root_driver, joint) / total_distance,
+                aniseed_toolkit.core.maths.distance_between(root_driver, joint) / total_distance,
             )
 
             mref.parentConstraint(

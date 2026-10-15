@@ -249,3 +249,59 @@ on its own.
   rather than at module level, because snappy's package init imports its Qt ui.
 - **Alternatives:** change snappy so its package init does not import its ui.
   That is a better fix, but it is in another package.
+
+## D16. Names and split of the moved rig builders (phase 4b)
+
+- **Chosen:**
+  - The builders behind the tools Create Twist Setup, Create Spline Setup,
+    Create Ribbon (ribbon2), Create Aim Hierarchy (guide_follow) and Align Bones
+    For Ik now live in `rigging.twist`, `rigging.spline`, `rigging.ribbon`,
+    `rigging.aim_hierarchy` and `rigging.bone_alignment`.
+  - They are exposed as `create_twist_setup`, `create_spline_setup`,
+    `create_ribbon`, `create_aim_hierarchy` and `align_bones_for_ik`. These
+    follow the existing `create_*` naming.
+  - The tools are now thin. They keep their identifiers, signatures and
+    selection fallbacks, and their module-level class aliases (`TwistSetup`,
+    `SimpleSplineSetup`, `Ribbon`).
+  - For Align Bones For Ik:
+    - The tool keeps the selection fallback, the prompts and the selection
+      restore.
+    - The library function takes every value explicitly.
+- **Why:** library code must not depend on selection or prompts (plan, section 1).
+- **Alternatives:**
+  - Name the modules after the tools (`rigging.guide_follow`, `rigging.ik_alignment`).
+  - Expose the classes only, with no `create_*` functions.
+
+
+## D17. Re-pinning in Align Bones For Ik (phase 4b)
+
+- **Chosen:** the library re-pins joints only when some were pinned before.
+  - The old `run("Create Pins", [])` call fell back to the selection.
+  - By that point the selection only contains replicated joints which have
+    already been deleted, so the observable result is identical.
+  - The harness case confirms this.
+- **Alternative:** have the library return the pinned joints and let the tool keep
+  the literal "pin or the selection" behaviour.
+
+
+## D18. Quirks kept in the moved builders (phase 4b)
+
+- **Kept for identical output:**
+  - the forced `print_result`/`log_result` calls;
+  - the `print(increment)` lines in the spline builder;
+  - an unused `blendColors` node in the twist builder.
+- **Why:** removing the node would change creation order, and so the default
+  node names.
+- **Alternative:** remove these when a behaviour change is acceptable (for example
+  at 4.0).
+
+
+## D19. Remaining `aniseed_toolkit.run("...")` calls in components (phase 5)
+
+- **Chosen:** components and hosts which still call tools by name keep doing so,
+  for example `spline_spine` calling `run("Create Spline Setup")`.
+  - `run()` is the public tool API, and calling through it adds an undo chunk.
+  - `twister.py` was switched to `rigging.twist.create_twist_setup`, because it
+    was edited in 4b anyway.
+- **Alternative:** switch every component to the direct library calls for clarity.
+  The output would be identical apart from undo chunking.

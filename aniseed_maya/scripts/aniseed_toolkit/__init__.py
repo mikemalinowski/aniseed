@@ -7,7 +7,8 @@ The library is layered - each layer only uses the layers before it:
     core      units, naming, maths, attributes, selection, directions
     scene     transforms, joints, constraints, shapes, skin, surfaces, node maths
     rig       controls, guides, tagging, pinning, spaces, the pose mixer
-    rigging   ik / ikfk / soft ik setups, foot roll, blend chains, facial rig
+    rigging   ik / ikfk / soft ik setups, foot roll, blend chains, twist /
+              spline / ribbon setups, bone alignment, facial rig
 
 User facing tools (the actions shown in the toolkit app, and available through
 `run("<tool name>")`) are registered with the `@tool` decorator or by
