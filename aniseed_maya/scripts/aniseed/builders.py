@@ -145,7 +145,7 @@ def mirror_component(component_instance, transforms, location_label, config, joi
     mirrored_component.set_label(f"{component_instance.label()} (Mirrored)")
 
     # -- Now we do an in-place mirror
-    _mirror.global_mirror(
+    _mirror.mirror_transforms(
         transforms=transforms,
         name_replacement=[
             config.resolved_location(original_location),

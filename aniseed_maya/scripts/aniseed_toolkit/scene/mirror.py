@@ -5,10 +5,7 @@ opposite node.
 import collections
 
 from maya import cmds
-import qtility
-import scribble
 
-from ..registry import tool
 from . import joints as _joints
 
 
@@ -19,7 +16,7 @@ MIRROR_PLANES = {
 }
 
 
-def global_mirror(
+def mirror_transforms(
     transforms: list[str] or str = None,
     across: str = "YZ",
     behaviour: bool = True,
@@ -39,25 +36,24 @@ def global_mirror(
         transforms: list of Transform or string.
         across: plane which to mirror across (XY, YX or XZ).
         behaviour: If true, it should mirror the rotational behaviour too
+        rotate_flip: If true, the result is flipped 180 degrees in X and Y
         name_replacement : a tuple of length two, where the first part should
-            be replaced with the second part
+            be replaced with the second part. If None, each transform's
+            mirrored matrix is applied to the transform itself.
+
+    Note: this never prompts the user - see ui.dialogs.global_mirror for the
+    interactive version.
     """
     # No specified transforms, so will get selection
     if not transforms:
         transforms = cmds.ls(selection=True)
 
-    # -- If we're not given a value for "across", prompt for
-    # -- one
-    across = across or _ask_for_mirror_plane()
 
     # Validate plane which to mirror across,
     if across not in ('XY', 'YZ', 'XZ'):
         raise ValueError(
             "Keyword Argument: 'across' not of accepted value ('XY', 'YZ', 'XZ').")
 
-    # -- Ask for any name replacement data if required
-    if name_replacement is None:
-        name_replacement = _ask_for_rename_data()
 
     stored_matrices = collections.OrderedDict()
 
@@ -136,63 +132,6 @@ def global_mirror(
                 _joints.move_orients_to_rotation([joint])
                 cmds.xform(target, matrix=cmds.xform(joint, q=True, m=True, ws=True), ws=True)
                 cmds.delete(joint)
-
-
-def _ask_for_mirror_plane():
-
-    mirror_plane = qtility.request.item(
-        title="Mirroring",
-        message="Please select the axis you want to mirror across",
-        items=sorted(
-            MIRROR_PLANES.keys(),
-        ),
-        editable=False,
-    )
-
-    if not mirror_plane:
-        return None
-
-    return MIRROR_PLANES[mirror_plane]
-
-
-def _ask_for_rename_data():
-
-    user_data = scribble.get("mirror_across_options")
-
-    replacement_data = qtility.request.text(
-        title="Mirroring",
-        message=(
-            "You can (optionally) provide a search and replace. \n"
-            "If you do, this will mirror the selected transforms "
-            "over to the objects with the replaced "
-            "name. "
-            "\n\n"
-            "Use the format 'replace_this:with_this"
-            "\n\n"
-            "If you leave it blank, it will mirror the selected objects"
-        ),
-        text=user_data.get("mirror_expression", "")
-    )
-
-    if not replacement_data:
-        return
-
-    if ":" not in replacement_data:
-        qtility.request.message(
-            title="Mirroring",
-            message="Could not resolve the remapping format",
-        )
-        return
-
-    # -- Store the users expression so they do not always
-    # -- have to retype it
-    user_data["mirror_expression"] = replacement_data
-    user_data.save()
-
-    return [
-        replacement_data.split(":")[0],
-        replacement_data.split(":")[1],
-    ]
 
 
 def invert_translation(transforms: list[str] = None) -> None:

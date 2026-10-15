@@ -6,7 +6,6 @@ import json
 import typing
 
 from maya import cmds
-import qtility
 
 from ..registry import tool
 from . import mirror as _mirror
@@ -88,12 +87,7 @@ def dict_to_hierarchy(
     )
 
 
-@tool(
-    "Write Joints File",
-    classification="Rigging",
-    categories=["Joints"],
-)
-def write_hierarchy_file(nodes: list[str] = None, filepath: str = None) -> None:
+def write_hierarchy_file(nodes: list[str], filepath: str) -> None:
     """
     This will take the given nodes and serialise them to a json file
     and save that json file to the given filepath.
@@ -105,23 +99,6 @@ def write_hierarchy_file(nodes: list[str] = None, filepath: str = None) -> None:
     Returns:
         None
     """
-    if not nodes:
-        if not cmds.ls(selection=True):
-            return
-
-        nodes = cmds.ls(selection=True)
-
-    if not filepath:
-        filepath = qtility.request.filepath(
-            title="Save Joint File",
-            filter_="*.json (*.json)",
-            save=True,
-            parent=None,
-        )
-
-    if not filepath:
-        return
-
     with open(filepath, "w") as f:
         json.dump(
             _create_dataset_from_nodes(nodes),
@@ -132,8 +109,8 @@ def write_hierarchy_file(nodes: list[str] = None, filepath: str = None) -> None:
 
 
 def load_hierarchy_file(
-        root_parent: str = "",
-        filepath: str = "",
+        root_parent: str,
+        filepath: str,
         apply_names=True,
         invert=False,
         worldspace_root=False,
@@ -154,27 +131,10 @@ def load_hierarchy_file(
     Returns:
         Dictionary where the key is the name as defined in the data and the value
         is the created node
+
+    Note: this never prompts the user - see ui.dialogs.load_hierarchy_file for
+    the version which asks for anything not given.
     """
-    if not root_parent:
-        try:
-            root_parent = cmds.ls(selection=True)[0]
-
-        except IndexError:
-            print("Could not resolve parent")
-            return
-
-    if not filepath:
-        filepath = qtility.request.filepath(
-            title="Save Joint File",
-            filter_="*.json (*.json)",
-            save=False,
-            parent=None,
-        )
-
-    if not filepath:
-        print("Could not resolve file")
-        return
-
     with open(filepath, "r") as f:
         all_joint_data = json.load(f)
 

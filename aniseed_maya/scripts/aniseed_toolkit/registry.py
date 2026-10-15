@@ -17,6 +17,7 @@ There are two ways to declare a tool:
    plugins found through the ANISEED_TOOLKIT_PATHS environment variable).
 """
 import os
+import sys
 import inspect
 import functools
 
@@ -218,6 +219,7 @@ class ToolBox(factories.Factory):
         """
         super(ToolBox, self).reload()
         self._register_function_tools()
+        self._claim_package_attribute()
 
     def run(self, tool_name, *args, **kwargs):
         """
@@ -282,8 +284,19 @@ class ToolBox(factories.Factory):
         """
         if cls._INSTANCE is None:
             cls._INSTANCE = ToolBox()
+            cls._INSTANCE._claim_package_attribute()
 
         return cls._INSTANCE
+
+    def _claim_package_attribute(self):
+        """
+        Makes aniseed_toolkit.tools refer to this tool box. Loading the tool
+        modules can import the tools folder as a namespace package, which
+        would otherwise replace that attribute.
+        """
+        package = sys.modules.get(__name__.rpartition(".")[0])
+        if package is not None:
+            setattr(package, "tools", self)
 
 
 def run(tool_name, *args, **kwargs):

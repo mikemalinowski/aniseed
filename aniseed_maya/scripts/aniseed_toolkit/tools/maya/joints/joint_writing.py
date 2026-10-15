@@ -1,6 +1,7 @@
 import typing
 import aniseed
 import aniseed_toolkit
+import aniseed_toolkit.ui.dialogs
 import maya.cmds as mc
 
 
@@ -72,3 +73,23 @@ def serialise_nodes_to_dict(nodes: list[str]) -> dict:
     return aniseed_toolkit.scene.hierarchy_io.hierarchy_to_dict(
         nodes=nodes or mc.ls(selection=True),
     )
+
+
+@aniseed_toolkit.tool(
+    "Write Joints File",
+    classification="Rigging",
+    categories=["Joints"],
+)
+def write_joints_file(nodes: list[str] = None, filepath: str = None) -> None:
+    """
+    This will take the given nodes (or the selection) and serialise them to a
+    json file, asking for the filepath if one is not given.
+
+    Args:
+        nodes: List of nodes to serialise
+        filepath: The filepath to save the json file
+
+    Returns:
+        None
+    """
+    return aniseed_toolkit.ui.dialogs.write_hierarchy_file(nodes, filepath)

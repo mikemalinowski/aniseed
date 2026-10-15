@@ -208,3 +208,44 @@ on its own.
 - **Alternatives:**
   - Different module names (e.g. aniseed.component_helpers).
   - Make component_outputs methods on RigComponent.
+
+## D13. Interactive versions of library functions (phase 4)
+
+- **Chosen:**
+  - `scene.mirror.mirror_transforms` and the `scene.hierarchy_io` file read/write
+    functions never prompt. A missing name replacement means "no rename", and
+    the file functions require a filepath.
+  - The prompting versions (identical to the old behaviour) are
+    `ui.dialogs.global_mirror`, `ui.dialogs.write_hierarchy_file` and
+    `ui.dialogs.load_hierarchy_file`.
+  - The old paths (`aniseed_toolkit.mirror.global_mirror`,
+    `aniseed_toolkit.io.*_hierarchy_file`) and the tools resolve to the prompting
+    versions, so nothing changes for callers.
+- **Why:** library code must not open dialogs, but scripts and tools relying on
+  the prompts must keep working.
+- **Alternatives:**
+  - Keep the prompts in the library behind an `interactive=True` flag.
+
+
+## D14. The tool box is created on first use (phase 4)
+
+- **Chosen:** `aniseed_toolkit.tools` / `ToolBox.singleton()` / `run()` create the
+  tool box when first needed, not when the package is imported.
+- **Why:**
+  - Creating it executes every tool module, and many import Qt/qtility.
+  - Creating it lazily means the library (core, scene, rig, rigging) can be
+    imported and used without Qt. This is checked by a test which blocks
+    every Qt/qtility import.
+  - The tool box re-assigns `aniseed_toolkit.tools` to itself after loading
+    tools, because importing tool modules can shadow that name with the tools
+    folder as a namespace package.
+- **Alternatives:** create it at import time as before (simpler, but it ties the
+  whole package to Qt).
+
+
+## D15. Third party imports which pull in Qt (phase 4)
+
+- **Chosen:** `snappy` is imported inside `rigging.ikfk.create_snap_groups`
+  rather than at module level, because snappy's package init imports its Qt ui.
+- **Alternatives:** change snappy so its package init does not import its ui.
+  That is a better fix, but it is in another package.

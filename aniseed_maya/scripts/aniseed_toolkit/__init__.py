@@ -41,7 +41,7 @@ def launch(*args, **kwargs):
     """
     Launches the toolkit app. The ui is only imported when it is launched.
     """
-    from .app.widgets import launch as _launch
+    from .ui.app import launch as _launch
     return _launch(*args, **kwargs)
 
 
@@ -86,13 +86,13 @@ def __getattr__(name):
     if name in _OLD_MODULES:
         return importlib.import_module(f"{__name__}.lib.{name}")
 
-    if name in ("app", "lib"):
+    # -- The shared tool box is created on first use. Creating it discovers the
+    # -- tools (executing their modules, which import Qt), so the library can
+    # -- be imported without the tools or Qt.
+    if name == "tools":
+        return ToolBox.singleton()
+
+    if name in ("app", "lib", "ui"):
         return importlib.import_module(f"{__name__}.{name}")
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-# -- The shared tool box. This is created last: tools are discovered (and
-# -- their modules executed) when it is created, so every function declared
-# -- with @tool, and the compatibility names above, must already exist.
-tools = ToolBox.singleton()

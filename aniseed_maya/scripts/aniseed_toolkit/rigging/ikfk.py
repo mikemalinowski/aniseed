@@ -3,7 +3,6 @@ Helpers shared by the components which blend between an ik and an fk
 setup.
 """
 import mref
-import snappy
 
 from ..rig import control as _control
 
@@ -53,6 +52,9 @@ def create_snap_groups(label: str, prefix: str, location: str, ikfk_attribute: s
     Returns:
         The ikfk, ik only and fk only group names
     """
+    # -- snappy is imported here as its package also imports its (Qt) ui
+    import snappy
+
     ikfk_group = f"IKFK_{label}_{prefix}_{location}"
     ikonly_group = f"IKOnly_{label}_{prefix}_{location}"
     fkonly_group = f"FKOnly_{label}_{prefix}_{location}"
