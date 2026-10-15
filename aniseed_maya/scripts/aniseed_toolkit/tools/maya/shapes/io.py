@@ -205,7 +205,7 @@ class ApplyShape(aniseed_toolkit.Tool):
         Returns:
             List of shape nodes created
         """
-        for node in mc.ls(selection=True):
+        for node in [node] if node else mc.ls(selection=True):
             if not data:
                 data = qtility.request.item(
                     items=aniseed_toolkit.run("Get Shape List"),
