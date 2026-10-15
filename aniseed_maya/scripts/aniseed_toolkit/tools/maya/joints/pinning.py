@@ -21,7 +21,7 @@ class IsPinnedTool(aniseed_toolkit.Tool):
         Returns:
             True if the joint is pinned
         """
-        return aniseed_toolkit.pinning.is_pinned(joint or mc.ls(selection=True)[0])
+        return aniseed_toolkit.rig.pinning.is_pinned(joint or mc.ls(selection=True)[0])
 
 
 @aniseed_toolkit.tool(

@@ -171,7 +171,7 @@ class SimpleFkComponent(aniseed.RigComponent):
             # -- Aniseed gives us a function to create a control but it does not
             # -- force you to use it. Aniseed does not expect a formal control
             # -- to be used, but it is easier.
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description=label,
                 location=location,
                 shape=self.option("Shape").get(),
@@ -183,7 +183,7 @@ class SimpleFkComponent(aniseed.RigComponent):
             driver = control.ctl
 
             if self.option("Add Offset Control").get():
-                driver = aniseed_toolkit.offset_controls.add_offset_control(
+                driver = aniseed_toolkit.rig.control.add_offset_control(
                     control,
                     description=label,
                     location=location,
@@ -202,7 +202,7 @@ class SimpleFkComponent(aniseed.RigComponent):
             # -- There is no smoke and mirrors with how an aniseed rig controls
             # -- a skeleton. Its what-you-see-is-what-you-get. So we're just
             # -- using maya to constrain the joint to the control
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 driver,
                 joint_to_drive,
                 maintain_offset=False,

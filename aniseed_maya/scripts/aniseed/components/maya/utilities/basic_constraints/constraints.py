@@ -62,7 +62,7 @@ class ParentConstraint(aniseed.RigComponent):
         maintain_offset = self.option("Maintain Offset").get()
 
         if self.option("Include Scale").get():
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 driver,
                 driven,
                 maintain_offset=maintain_offset,

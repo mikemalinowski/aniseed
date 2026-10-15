@@ -40,7 +40,7 @@ class CreateGuide(aniseed_toolkit.Tool):
         Returns:
             Name of the guide control node
         """
-        return aniseed_toolkit.guide.create(
+        return aniseed_toolkit.rig.guide.create(
             joint=joint,
             parent=parent,
             position_only=position_only,
@@ -62,7 +62,7 @@ class GuideTween(aniseed_toolkit.Tool):
         """
         Creates a blended constraint
         """
-        return aniseed_toolkit.guide.create_tween(
+        return aniseed_toolkit.rig.guide.create_tween(
             drive_this=drive_this,
             from_this=from_this,
             to_this=to_this,

@@ -121,7 +121,7 @@ class TentacleComponent(aniseed.RigComponent):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        aniseed_toolkit.component_outputs.declare_joint_outputs(
+        aniseed.component_outputs.declare_joint_outputs(
             self,
             "Out Joint",
             self.input("Start Joint").get(),
@@ -231,7 +231,7 @@ class TentacleComponent(aniseed.RigComponent):
         Returns the tangent spread for the twist spline, which is a third
         of the distance between each control along the chain.
         """
-        chain_length = aniseed_toolkit.joints.chain_length(joints[0], joints[-1])
+        chain_length = aniseed_toolkit.scene.joints.chain_length(joints[0], joints[-1])
         control_count = self.option("Control Count").get()
 
         return (chain_length / (control_count - 1)) / 3.0
@@ -244,7 +244,7 @@ class TentacleComponent(aniseed.RigComponent):
         descriptive = self.option("Descriptive Prefix").get()
 
         # -- Get the list of joints that make up the tentacle chain
-        joints = aniseed_toolkit.joints.get_between(
+        joints = aniseed_toolkit.scene.joints.get_between(
             self.input("Start Joint").get(),
             self.input("End Joint").get(),
         )
@@ -292,7 +292,7 @@ class TentacleComponent(aniseed.RigComponent):
             last_linear_rider = linear_rider
             mref.parentConstraint(rider, linear_rider)
 
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description="FK" + descriptive,
                 config=self.config,
                 location=location,
@@ -307,12 +307,12 @@ class TentacleComponent(aniseed.RigComponent):
             fk_controls.append(fk_control.ctl)
 
             # -- The fk control follows the linear rider
-            aniseed_toolkit.matrix_drive.drive_from_local_matrix(linear_rider, fk_control.org)
+            aniseed_toolkit.scene.transforms.drive_from_local_matrix(linear_rider, fk_control.org)
 
             last_fk_control = fk_control.ctl
 
         for idx, fk_control in enumerate(fk_controls):
-            aniseed_toolkit.constraints.parent_and_scale(fk_control, joints[idx])
+            aniseed_toolkit.scene.constraints.parent_and_scale(fk_control, joints[idx])
 
         for idx, mech_joint in enumerate(builder.joint_names()):
             # -- Set the corresponding output plug

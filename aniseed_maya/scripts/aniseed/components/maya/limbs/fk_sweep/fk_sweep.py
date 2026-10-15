@@ -141,7 +141,7 @@ class FkSweep(aniseed.RigComponent):
             counter = int(counter_regex.search(joint_name).groups()[0])
 
             # -- Lets build a control for this joint
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description=description,
                 location=location,
                 counter=counter,
@@ -153,7 +153,7 @@ class FkSweep(aniseed.RigComponent):
             driver = control.ctl
 
             if self.option("Add Offset Control").get():
-                driver = aniseed_toolkit.offset_controls.add_offset_control(
+                driver = aniseed_toolkit.rig.control.add_offset_control(
                     control,
                     description=description,
                     location=location,
@@ -163,7 +163,7 @@ class FkSweep(aniseed.RigComponent):
                 ).ctl
 
             # -- Now constrain the joint to the control
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 driver,
                 joint,
                 maintain_offset=True,

@@ -6,7 +6,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class JointlessSingular(aniseed_toolkit.control_mixins.SingularControlMixin, aniseed.RigComponent):
+class JointlessSingular(aniseed.mixins.SingularControlMixin, aniseed.RigComponent):
     """
     A basic component which creates a single control placed at a guide,
     without driving a joint

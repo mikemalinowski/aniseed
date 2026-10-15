@@ -152,7 +152,7 @@ class BlendedConstraint(aniseed.RigComponent):
         description = self.option("Description").get()
         location = self.option("Location").get()
 
-        rotator_control = aniseed_toolkit.control.create(
+        rotator_control = aniseed_toolkit.rig.control.create(
             description=description,
             location=location,
             parent=parent,
@@ -183,10 +183,10 @@ class BlendedConstraint(aniseed.RigComponent):
         )[0]
         constraint.attr("interpType").set(0)  # No Flip
 
-        aniseed_toolkit.constraints.blend_weights(blend_attribute, constraint)
+        aniseed_toolkit.scene.constraints.blend_weights(blend_attribute, constraint)
 
         # -- The control then drives the joint
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             rotator_control.ctl,
             joint,
             maintain_offset=True,

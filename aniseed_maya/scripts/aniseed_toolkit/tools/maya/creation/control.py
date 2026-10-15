@@ -1,3 +1,4 @@
+import aniseed
 import aniseed_toolkit
 
 class CreateControl(aniseed_toolkit.Tool):
@@ -42,7 +43,7 @@ class CreateControl(aniseed_toolkit.Tool):
             Control: The created control which has an accessor for the zero,
                 offset, and org node which makes up a controls hierarchy.
         """
-        return aniseed_toolkit.control.create(
+        return aniseed_toolkit.rig.control.create(
             description=description,
             location=location,
             parent=parent,

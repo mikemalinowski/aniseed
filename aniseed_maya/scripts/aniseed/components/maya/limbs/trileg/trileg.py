@@ -18,7 +18,7 @@ from maya import mel
 foot = aniseed_toolkit.rigging.foot
 
 
-class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComponent):
+class TriLegComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
     identifier = "Limb : Tri Leg"
 
     icon = os.path.join(
@@ -295,7 +295,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         leg_root = self.input("Leg Root").get()
         toe_tip = self.input("Toe").get()
 
-        all_joints = aniseed_toolkit.joints.get_between(
+        all_joints = aniseed_toolkit.scene.joints.get_between(
             leg_root,
             toe_tip,
         )
@@ -310,7 +310,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             )
             return False
 
-        facing_dir = aniseed_toolkit.direction.get_chain_facing_direction(
+        facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             leg_root,
             all_joints[2],
         )
@@ -339,7 +339,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
 
         # -- To encapsulate the entire rig segment, create a
         # -- parent node
-        parent = aniseed_toolkit.transforms.create(
+        parent = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
@@ -390,7 +390,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         prefix = self.option('Descriptive Prefix').get()
         location = self.option("Location").get()
 
-        config_control = aniseed_toolkit.control.create(
+        config_control = aniseed_toolkit.rig.control.create(
             description=f"{prefix}Config",
             location=location,
             parent=parent,
@@ -401,7 +401,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             rotate_shape=[0, 0, 0],
         )
 
-        deformation_joints = aniseed_toolkit.joints.get_between(
+        deformation_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
         )
@@ -420,7 +420,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             blend_joint.rename(self._mechanical_name("LegNK"))
             nk_joints.append(blend_joint.name())
 
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 blend_joint.name(),
                 deformation_joint,
             )
@@ -441,7 +441,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches(fk_data["controls"], rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches(fk_data["controls"], rig=self.rig)
 
         self.output("Blended Upper Leg").set(nk_joints[self.INDEX_UPPER_LEG])
         self.output("Blended Mid Leg").set(nk_joints[self.INDEX_MID_LEG])
@@ -469,12 +469,12 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         fk_controls = []
 
         # -- Get the chain we're to drive
-        joint_chain = aniseed_toolkit.joints.get_between(
+        joint_chain = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
         )
 
-        reference_scale = aniseed_toolkit.joints.chain_length(
+        reference_scale = aniseed_toolkit.scene.joints.chain_length(
             joint_chain[self.INDEX_LOWER_LEG],
             joint_chain[self.INDEX_FOOT],
         )
@@ -482,7 +482,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         fk_parent = parent
 
         for label, joint in zip(self.LABELS, joint_chain):
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description=f"{prefix}{label}FK",
                 location=location,
                 parent=fk_parent,
@@ -522,13 +522,13 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         location = self.option("Location").get()
 
         # -- Get the chain we're to drive
-        joint_chain = aniseed_toolkit.joints.get_between(
+        joint_chain = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
         )
 
         # -- Create the ik root control
-        ik_root_control = aniseed_toolkit.control.create(
+        ik_root_control = aniseed_toolkit.rig.control.create(
             description=f"{prefix}IKRoot",
             location=location,
             shape="core_cube",
@@ -573,8 +573,8 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             name=lambda _: self._mechanical_name("ReverseAnkle"),
             move_rotations_to_orients=False,
         )
-        reverse_ankle_chain = aniseed_toolkit.joints.reverse_chain(reverse_ankle_chain)
-        aniseed_toolkit.joints.move_rotations_to_orients(reverse_ankle_chain)
+        reverse_ankle_chain = aniseed_toolkit.scene.joints.reverse_chain(reverse_ankle_chain)
+        aniseed_toolkit.scene.joints.move_rotations_to_orients(reverse_ankle_chain)
 
         mref.get(reverse_ankle_chain[0]).set_parent(upper_to_foot_chain[self.INDEX_LOWER_LEG])
 
@@ -595,14 +595,14 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         ).name()
 
         # -- Now create the controls we will use to manipulate it all
-        reference_scale = aniseed_toolkit.joints.chain_length(
+        reference_scale = aniseed_toolkit.scene.joints.chain_length(
             upper_to_foot_chain[self.INDEX_LOWER_LEG],
             upper_to_foot_chain[self.INDEX_FOOT],
         )
 
         # -- Create our main controls. Note that controls which are not given
         # -- a match_to are left where they are created
-        foot_control = aniseed_toolkit.control.create(
+        foot_control = aniseed_toolkit.rig.control.create(
             description=prefix + "IKFoot",
             location=location,
             parent=parent,
@@ -687,7 +687,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         )
 
         # -- Create the ankle control
-        ankle_control = aniseed_toolkit.control.create(
+        ankle_control = aniseed_toolkit.rig.control.create(
             description=prefix + "Ankle",
             location=location,
             parent=heel_control.ctl,
@@ -742,7 +742,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         mref.get(upper_to_foot_ikh).set_parent(heel_control.ctl)
 
         # -- Setup the polevector
-        full_chain_upv = aniseed_toolkit.control.create(
+        full_chain_upv = aniseed_toolkit.rig.control.create(
             description=prefix + "Upvector",
             location=location,
             parent=foot_control.ctl,
@@ -752,7 +752,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         )
         mref.xform(
             full_chain_upv.org,
-            translation=aniseed_toolkit.transformation.calculate_upvector_position(
+            translation=aniseed_toolkit.core.maths.calculate_upvector_position(
                 length=self.option("Upvector Position Multiplier").get(),
                 *upper_two_bone_ik
             ),
@@ -771,7 +771,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         )
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             full_chain_upv.ctl,
             upper_to_foot_chain[1],
         )
@@ -796,7 +796,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         )
 
         if self.option("Apply Soft Ik").get():
-            root_marker = aniseed_toolkit.transforms.create(
+            root_marker = aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=f"{prefix}LegIKRootMarker",
                 location=location,
@@ -805,7 +805,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
                 match_to=upper_to_foot_chain[0],
             )
 
-            tip_marker = aniseed_toolkit.transforms.create(
+            tip_marker = aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=f"{prefix}LegIKTipMarker",
                 location=location,
@@ -856,7 +856,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         Creates a heel or toe control at the end of the pivot chain,
         optionally aligned to the foot control
         """
-        control = aniseed_toolkit.control.create(
+        control = aniseed_toolkit.rig.control.create(
             description=f"{self.option('Descriptive Prefix').get()}{label}",
             location=self.option("Location").get(),
             parent=parent,
@@ -906,7 +906,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         Applies a pole vector constraint, and if doing so moves the check
         node then the ik handle is twisted by 180 degrees to counter it.
         """
-        pre_distance = aniseed_toolkit.transformation.distance_between(
+        pre_distance = aniseed_toolkit.core.maths.distance_between(
             check_node,
             polevector_target,
         )
@@ -917,7 +917,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             weight=1,
         )
 
-        post_distance = aniseed_toolkit.transformation.distance_between(
+        post_distance = aniseed_toolkit.core.maths.distance_between(
             check_node,
             polevector_target,
         )
@@ -950,7 +950,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             if not twist_joints:
                 continue
 
-            aniseed_toolkit.component.add_twister(
+            aniseed.builders.add_twister(
                 rig=self.rig,
                 joints=twist_joints,
                 parent=twist_parent,
@@ -985,19 +985,19 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         """
 
         # -- The skeleton is always placed under the current selection
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
 
         # -- Read our option data
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
 
         # -- Determine if we need to build twists
-        upper_twist_count = aniseed_toolkit.component.request_count(
+        upper_twist_count = aniseed.dialogs.request_count(
             upper_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper leg?",
         )
-        lower_twist_count = aniseed_toolkit.component.request_count(
+        lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the lower leg?",
@@ -1006,12 +1006,12 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["upper"] = {"jointOrientX": 90, "jointOrientY": -20, "jointOrientZ": -90}
-        joint_data["mid"] = {"tx": aniseed_toolkit.units.from_cm(42), "jointOrientZ": -50}
-        joint_data["lower"] = {"tx": aniseed_toolkit.units.from_cm(42), "jointOrientZ": 50}
-        joint_data["Foot"] = {"tx": aniseed_toolkit.units.from_cm(22), "jointOrientZ": 70}
-        joint_data["Toe"] = {"tx": aniseed_toolkit.units.from_cm(10)}
+        joint_data["mid"] = {"tx": aniseed_toolkit.core.units.from_cm(42), "jointOrientZ": -50}
+        joint_data["lower"] = {"tx": aniseed_toolkit.core.units.from_cm(42), "jointOrientZ": 50}
+        joint_data["Foot"] = {"tx": aniseed_toolkit.core.units.from_cm(22), "jointOrientZ": 70}
+        joint_data["Toe"] = {"tx": aniseed_toolkit.core.units.from_cm(10)}
 
-        all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
+        all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
             location=location,
             config=self.config,
@@ -1026,7 +1026,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         self.input("Toe").set(all_joints[-1])
 
         if upper_twist_count:
-            upper_twists = aniseed_toolkit.joints.create_twist_joints(
+            upper_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[0],
                 all_joints[1],
                 upper_twist_count,
@@ -1038,7 +1038,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
             self.input("Upper Twist Joints").set(upper_twists)
 
         if lower_twist_count:
-            lower_twists = aniseed_toolkit.joints.create_twist_joints(
+            lower_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[1],
                 all_joints[2],
                 lower_twist_count,
@@ -1052,7 +1052,7 @@ class TriLegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComp
         # -- If we have a parent, then match the translation to it, this
         # -- just makes the riggers life a little easier as the component
         # -- will show in a contextually relevant location.
-        aniseed_toolkit.transformation.snap_position(all_joints[0], parent)
+        aniseed_toolkit.scene.transforms.snap_position(all_joints[0], parent)
 
     def create_snap(self, ik_controls, fk_controls, nk_joints, ikfk_attribute):
         """

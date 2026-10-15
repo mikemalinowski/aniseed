@@ -306,13 +306,13 @@ class Spring(aniseed.RigComponent):
 
         # 2. Wipe any "Control N" outputs left over from a prior build, then build
         #    a control + curve-bind joint per guide and declare an output per control.
-        aniseed_toolkit.component_outputs.clear_outputs(self, "Control ")
+        aniseed.component_outputs.clear_outputs(self, "Control ")
 
         curve_bind_joints = []
         control_parent = parent
         for idx, guide in enumerate(control_guides):
 
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description=description,
                 location=location,
                 parent=control_parent,
@@ -406,7 +406,7 @@ class Spring(aniseed.RigComponent):
 
             # The user joint stays where it is and follows the buffer joint
             # via maintainOffset. No snapping.
-            aniseed_toolkit.constraints.parent_and_scale(buffer_joint, joint_name)
+            aniseed_toolkit.scene.constraints.parent_and_scale(buffer_joint, joint_name)
 
         return True
 

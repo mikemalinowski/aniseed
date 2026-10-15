@@ -144,7 +144,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             follicle_xform,
         )
 
-        control = aniseed_toolkit.control.create(
+        control = aniseed_toolkit.rig.control.create(
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
             parent=follicle_xform.full_name(),
@@ -153,7 +153,7 @@ class StickyPatchComponent(aniseed.RigComponent):
             match_to=joint_to_drive,
         )
 
-        aniseed_toolkit.constraints.parent_and_scale(control.ctl, joint_to_drive)
+        aniseed_toolkit.scene.constraints.parent_and_scale(control.ctl, joint_to_drive)
 
         self.output("Control").set(control.ctl)
         self.output("Follicle").set(follicle)
@@ -214,12 +214,12 @@ class StickyPatchComponent(aniseed.RigComponent):
         Creates the joint to drive (under the current selection) and
         optionally the patch surface too.
         """
-        joint = aniseed_toolkit.joints.create(
+        joint = aniseed_toolkit.scene.joints.create(
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
             config=self.config,
-            parent=aniseed_toolkit.mutils.first_selected(),
-            match_to=aniseed_toolkit.mutils.first_selected(),
+            parent=aniseed_toolkit.core.selection.first_selected(),
+            match_to=aniseed_toolkit.core.selection.first_selected(),
         )
         self.input("Joint To Drive").set(joint)
 
@@ -384,13 +384,13 @@ class AngledStickyPatchComponent(StickyPatchComponent):
         location = self.option("Location").get()
 
         # -- Get the control and follicle
-        control = aniseed_toolkit.control.get(self.output("Control").get())
+        control = aniseed_toolkit.rig.control.get(self.output("Control").get())
         follicle = self.output("Follicle").get()
         follicle_xform = mref.get(follicle).parent()
 
         # -- Create an aim upvector
         aim_transform = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=descriptive + "Aim",
                 location=location,
@@ -408,7 +408,7 @@ class AngledStickyPatchComponent(StickyPatchComponent):
         readers = []
         for axis, u, v in [("V", 0.5, 1), ("U", 1, 0.5)]:
             reader = mref.get(
-                aniseed_toolkit.transforms.create(
+                aniseed_toolkit.scene.transforms.create(
                     classification="mech",
                     description=descriptive + f"Reader{axis}",
                     location=location,
@@ -434,7 +434,7 @@ class AngledStickyPatchComponent(StickyPatchComponent):
 
         # -- Now we create our resolver. This blends the result of the two
         resolver = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=descriptive + "Resolver",
                 location=location,

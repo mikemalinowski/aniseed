@@ -144,13 +144,13 @@ class MouthComponent(aniseed.RigComponent):
         if prefix:
             prefix += "_"
 
-        jaw_length = aniseed_toolkit.transformation.distance_between(
+        jaw_length = aniseed_toolkit.core.maths.distance_between(
             jaw_joint,
             lower_lip_joint,
         )
 
         # -- Create our component org to keep everything together
-        component_org = aniseed_toolkit.transforms.create(
+        component_org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=prefix + "Mouth",
             location=location,
@@ -160,7 +160,7 @@ class MouthComponent(aniseed.RigComponent):
         )
 
         # -- Start by creating our jaw control
-        jaw_control = aniseed_toolkit.control.create(
+        jaw_control = aniseed_toolkit.rig.control.create(
             description=prefix + "Jaw",
             location=location,
             parent=component_org,
@@ -170,7 +170,7 @@ class MouthComponent(aniseed.RigComponent):
         )
         self.output("Jaw Control").set(jaw_control.ctl)
 
-        aniseed_toolkit.shapes.scale(
+        aniseed_toolkit.scene.shapes.scale(
             jaw_control.ctl,
             scale_by=jaw_length,
             x=0.5,
@@ -178,7 +178,7 @@ class MouthComponent(aniseed.RigComponent):
             z=1,
         )
 
-        aniseed_toolkit.shapes.offset(
+        aniseed_toolkit.scene.shapes.offset(
             jaw_control.ctl,
             offset_by=jaw_length,
             x=0,
@@ -231,13 +231,13 @@ class MouthComponent(aniseed.RigComponent):
         # -- If we need to create the aim control, set that up now
         if self.option("Use Aim Control").get():
 
-            chain_direction = aniseed_toolkit.direction.get_chain_facing_direction(
+            chain_direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
                 jaw_joint,
                 lower_lip_joint,
                 epsilon=jaw_length * 0.3,
             )
 
-            aim_control = aniseed_toolkit.control.create(
+            aim_control = aniseed_toolkit.rig.control.create(
                 description=prefix + "JawAim",
                 location=location,
                 parent=component_org,
@@ -247,7 +247,7 @@ class MouthComponent(aniseed.RigComponent):
                 match_to=jaw_joint,
             )
 
-            aniseed_toolkit.shapes.scale(
+            aniseed_toolkit.scene.shapes.scale(
                 aim_control.ctl,
                 scale_by=jaw_length,
                 x=0.25,
@@ -255,7 +255,7 @@ class MouthComponent(aniseed.RigComponent):
                 z=0,
             )
 
-            aniseed_toolkit.guide.link(
+            aniseed_toolkit.rig.guide.link(
                 aim_control.ctl,
                 jaw_control.ctl,
             )
@@ -264,7 +264,7 @@ class MouthComponent(aniseed.RigComponent):
                 jaw_length * self.option("Aim Control Distance Multiplier").get(),
             )
 
-            aim_node = aniseed_toolkit.transforms.create(
+            aim_node = aniseed_toolkit.scene.transforms.create(
                 classification="aim",
                 description=prefix + "JawAimSolver",
                 location=location,
@@ -274,7 +274,7 @@ class MouthComponent(aniseed.RigComponent):
             )
 
             aim_upvector = mref.get(
-                aniseed_toolkit.transforms.create(
+                aniseed_toolkit.scene.transforms.create(
                     classification="aim",
                     description=prefix + "JawAimUpvector",
                     location=location,
@@ -289,7 +289,7 @@ class MouthComponent(aniseed.RigComponent):
                 aim_control.ctl,
                 aim_node,
                 aimVector=chain_direction.axis_vector,
-                upVector=aniseed_toolkit.direction.Direction(chain_direction.cross_axis).axis_vector,
+                upVector=aniseed_toolkit.core.direction.Direction(chain_direction.cross_axis).axis_vector,
                 worldUpType="object",
                 worldUpObject=aim_upvector,
                 maintainOffset=False,
@@ -337,7 +337,7 @@ class MouthComponent(aniseed.RigComponent):
         """
         Creates a mechanical transform under (and matched to) the component org
         """
-        return aniseed_toolkit.transforms.create(
+        return aniseed_toolkit.scene.transforms.create(
             classification="rot",
             description=prefix + description,
             location=location,
@@ -356,13 +356,13 @@ class MouthComponent(aniseed.RigComponent):
         constraint = mref.parentConstraint(first_driver, driven)[0]
         mref.parentConstraint(second_driver, driven)
 
-        aniseed_toolkit.constraints.blend_weights(attribute, constraint)
+        aniseed_toolkit.scene.constraints.blend_weights(attribute, constraint)
 
     def _create_lip_control(self, description, prefix, location, parent, match_to, jaw_length):
         """
         Creates a lip control, scaling its shape relative to the jaw length
         """
-        lip_control = aniseed_toolkit.control.create(
+        lip_control = aniseed_toolkit.rig.control.create(
             description=prefix + description,
             location=location,
             parent=parent,
@@ -372,7 +372,7 @@ class MouthComponent(aniseed.RigComponent):
             match_to=match_to,
         )
 
-        aniseed_toolkit.shapes.scale(
+        aniseed_toolkit.scene.shapes.scale(
             lip_control.ctl,
             scale_by=jaw_length * 0.2,
             x=1,
@@ -389,7 +389,7 @@ class MouthComponent(aniseed.RigComponent):
         object if there is one.
         """
 
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
         location = self.option("Location").get()
         prefix = self.option("Naming Prefix").get()
 
@@ -397,28 +397,28 @@ class MouthComponent(aniseed.RigComponent):
             prefix += "_"
 
         # -- Create the jaw and the lower lip
-        jaw_joint = aniseed_toolkit.joints.create(
+        jaw_joint = aniseed_toolkit.scene.joints.create(
             description=prefix + "Jaw",
             location=location,
             parent=parent,
             config=self.config,
         )
 
-        lower_lip_joint = aniseed_toolkit.joints.create(
+        lower_lip_joint = aniseed_toolkit.scene.joints.create(
             description=prefix + "LowerLip",
             location=location,
             parent=jaw_joint,
             match_to=jaw_joint,
             config=self.config,
         )
-        mref.get(lower_lip_joint).translateZ.set(aniseed_toolkit.units.from_cm(4))
+        mref.get(lower_lip_joint).translateZ.set(aniseed_toolkit.core.units.from_cm(4))
 
         # -- If we have a parent, then snap the jaw to the parent position
         if parent:
-            aniseed_toolkit.transformation.snap_position(jaw_joint, parent)
+            aniseed_toolkit.scene.transforms.snap_position(jaw_joint, parent)
 
         # -- Now we create the upper lip
-        upper_lip_joint = aniseed_toolkit.joints.create(
+        upper_lip_joint = aniseed_toolkit.scene.joints.create(
             description=prefix + "UpperLip",
             location=location,
             match_to=lower_lip_joint,

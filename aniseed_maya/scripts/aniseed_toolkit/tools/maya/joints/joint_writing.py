@@ -45,7 +45,7 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             Dictionary where the key is the name as defined in the data and the value
             is the created node 
         """
-        return aniseed_toolkit.io.load_hierarchy_file(
+        return aniseed_toolkit.ui.dialogs.load_hierarchy_file(
             root_parent=root_parent,
             filepath=filepath,
             apply_names=apply_names,

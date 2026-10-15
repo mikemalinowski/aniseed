@@ -15,7 +15,7 @@ import collections
 import aniseed_toolkit
 
 
-class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComponent):
+class ArmComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
 
     identifier = "Limb : Arm"
     icon = os.path.join(
@@ -196,7 +196,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             return
 
         self.user_func_create_skeleton(
-            parent=aniseed_toolkit.mutils.first_selected(),
+            parent=aniseed_toolkit.core.selection.first_selected(),
             upper_twist_count=upper_twist_count.get(),
             lower_twist_count=lower_twist_count.get(),
         )
@@ -246,12 +246,12 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         This gives us the chance to validate the skeleton
         before we commit to building.
         """
-        arm_joints = aniseed_toolkit.joints.get_between(
+        arm_joints = aniseed_toolkit.scene.joints.get_between(
             self.input("Shoulder").get(),
             self.input("Hand").get(),
         )[1:]
 
-        direction = aniseed_toolkit.direction.get_chain_facing_direction(
+        direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             arm_joints[0],
             arm_joints[-1],
         )
@@ -272,7 +272,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.org = aniseed_toolkit.transforms.create(
+        self.org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=f"{self.prefix}Arm",
             location=self.location,
@@ -280,7 +280,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             parent=self.input("Parent").get(),
             match_to=self.input("Parent").get()
         )
-        self.arm_joints = aniseed_toolkit.joints.get_between(
+        self.arm_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input('Shoulder').get(),
             end=self.input("Hand").get(),
         )
@@ -304,7 +304,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         mref.get(self.config_control.ctl).lock_transform_attributes(hide=True)
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             self.upvector_control.ctl,
             ikfk_setup.ik_chain[1].name(),
         )
@@ -344,7 +344,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -355,7 +355,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         """
         Here we create all the controls for the arm
         """
-        self.shoulder_control = aniseed_toolkit.control.create(
+        self.shoulder_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Shoulder",
             location=self.location,
             parent=self.org,
@@ -370,7 +370,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             mref.get(self.shoulder_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.control.create(
+        self.config_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}ArmConfig",
             location=self.location,
             parent=self.shoulder_control.ctl,
@@ -381,7 +381,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             rotate_shape=self.shape_rotation,
         )
 
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             self.shoulder_control.ctl,
             self.arm_joints[0],
         )
@@ -390,7 +390,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         fk_parent = self.shoulder_control.ctl
         fk_controls = []
         for label, joint in zip(["UpperArmFK", "LowerArmFK", "HandFK"], self.arm_joints[1:4]):
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description=f"{self.prefix}{label}",
                 location=self.location,
                 parent=fk_parent,
@@ -407,7 +407,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         self.fk_controls = [fk_control.ctl for fk_control in fk_controls]
 
         # -- Now create the main IK control
-        self.ik_hand_control = aniseed_toolkit.control.create(
+        self.ik_hand_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Hand",
             location=self.location,
             parent=self.shoulder_control.ctl,
@@ -423,7 +423,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             mref.get(self.ik_hand_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Create the upvector control for the arm
-        self.upvector_control = aniseed_toolkit.control.create(
+        self.upvector_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}ArmUpvector",
             location=self.location,
             parent=self.shoulder_control.ctl,
@@ -437,7 +437,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         upvector_org = mref.get(self.upvector_control.org)
         upvector_org.set_position(
-            aniseed_toolkit.transformation.calculate_upvector_position(
+            aniseed_toolkit.core.maths.calculate_upvector_position(
                 point_a=self.arm_joints[1],
                 point_b=self.arm_joints[2],
                 point_c=self.arm_joints[3],
@@ -517,7 +517,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         )
 
         if upper_twist_joints:
-            aniseed_toolkit.component.add_twister(
+            aniseed.builders.add_twister(
                 rig=self.rig,
                 joints=upper_twist_joints,
                 parent=self.shoulder_control.ctl,
@@ -529,7 +529,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             )
 
         if lower_twist_joints:
-            aniseed_toolkit.component.add_twister(
+            aniseed.builders.add_twister(
                 rig=self.rig,
                 joints=lower_twist_joints,
                 parent=self.nk_joints[1],
@@ -559,14 +559,14 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         This will create a skeleton structure automatically
         """
         if not parent:
-            parent = aniseed_toolkit.mutils.first_selected()
+            parent = aniseed_toolkit.core.selection.first_selected()
 
-        upper_twist_count = aniseed_toolkit.component.request_count(
+        upper_twist_count = aniseed.dialogs.request_count(
             upper_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper arm?",
         )
-        lower_twist_count = aniseed_toolkit.component.request_count(
+        lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the lower arm?",
@@ -578,11 +578,11 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["shoulder"] = {}
-        joint_data["upperarm"] = {"tx": aniseed_toolkit.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
-        joint_data["lowerarm"] = {"tx": aniseed_toolkit.units.to_cm(24), "jointOrientY": -20,}
-        joint_data["hand"] = {"tx": aniseed_toolkit.units.to_cm(24)}
+        joint_data["upperarm"] = {"tx": aniseed_toolkit.core.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
+        joint_data["lowerarm"] = {"tx": aniseed_toolkit.core.units.to_cm(24), "jointOrientY": -20,}
+        joint_data["hand"] = {"tx": aniseed_toolkit.core.units.to_cm(24)}
 
-        all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
+        all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
             location=location,
             config=self.config,
@@ -594,7 +594,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         self.input("Hand").set(all_joints[-1])
 
         if upper_twist_count:
-            upper_twists = aniseed_toolkit.joints.create_twist_joints(
+            upper_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[1],
                 all_joints[2],
                 upper_twist_count,
@@ -606,7 +606,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             self.input("Upper Twist Joints").set(upper_twists)
 
         if lower_twist_count:
-            lower_twists = aniseed_toolkit.joints.create_twist_joints(
+            lower_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[2],
                 all_joints[3],
                 lower_twist_count,
@@ -632,7 +632,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         world = global_srt_component.output("Main Control").address()
 
-        aniseed_toolkit.space.add_space_switch(
+        aniseed.builders.add_space_switch(
             component=self,
             label=self.label() + " Hand Space Switch",
             driven=self.output("Ik Hand").address(),
@@ -644,7 +644,7 @@ class ArmComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             ],
         )
 
-        aniseed_toolkit.space.add_space_switch(
+        aniseed.builders.add_space_switch(
             component=self,
             label=self.label() + " Upvector Space Switch",
             driven=self.output("Upvector").address(),

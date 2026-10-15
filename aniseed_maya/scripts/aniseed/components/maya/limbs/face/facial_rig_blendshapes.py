@@ -167,7 +167,7 @@ class BlendshapeFacialRig(aniseed.RigComponent):
 
         # -- The control settings for this component are stored as options
         # -- and no proxies are exposed
-        control_rig = aniseed_toolkit.facial_controls.FacialControlRig(
+        control_rig = aniseed_toolkit.rigging.facial.FacialControlRig(
             config=self.config,
             read_setting=lambda name: self.option(name).get(),
         )

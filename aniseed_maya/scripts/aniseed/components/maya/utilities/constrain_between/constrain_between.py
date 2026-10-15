@@ -131,4 +131,4 @@ class ConstrainBetween(aniseed.RigComponent):
             value=default_blend,
             attribute_type="float",
         )
-        aniseed_toolkit.constraints.blend_weights(attribute, constraint)
+        aniseed_toolkit.scene.constraints.blend_weights(attribute, constraint)

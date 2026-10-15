@@ -119,10 +119,10 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         if not data or not node_to_drive or not host:
             return
 
-        aniseed_toolkit.attributes.add_separator(host)
+        aniseed_toolkit.core.attributes.add_separator(host)
 
         # -- If the node to drive is part of a control we drive its org
-        control = aniseed_toolkit.control.get(node_to_drive)
+        control = aniseed_toolkit.rig.control.get(node_to_drive)
         if control:
             node_to_drive = control.org
         node_to_drive = mref.get(node_to_drive)

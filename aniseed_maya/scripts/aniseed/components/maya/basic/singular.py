@@ -9,7 +9,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class Singular(aniseed_toolkit.control_mixins.SingularControlMixin, aniseed.RigComponent, aniseed.mixins.MirrorMixin):
+class Singular(aniseed.mixins.SingularControlMixin, aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     A basic component which creates a single joint and a single control
     """
@@ -75,7 +75,7 @@ class Singular(aniseed_toolkit.control_mixins.SingularControlMixin, aniseed.RigC
         if not joint_option.get():
             return
 
-        joint = aniseed_toolkit.stack_joints.create_from_selection(
+        joint = aniseed.builders.create_joint_from_selection(
             name=self.config.generate_name(
                 classification=self.config.joint,
                 description=self.option("Description").get(),
@@ -95,7 +95,7 @@ class Singular(aniseed_toolkit.control_mixins.SingularControlMixin, aniseed.RigC
         """
         driving_control = self._create_singular_controls(offset_visibility_toggle=True)
 
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             driving_control.ctl,
             self.input("Joint").get(),
         )
@@ -105,7 +105,7 @@ class Singular(aniseed_toolkit.control_mixins.SingularControlMixin, aniseed.RigC
         """
         Return the list of scene-node names representing this component's
         bones. These transforms will be reflected across the mirror plane
-        onto the twin side using ``aniseed_toolkit.mirror.global_mirror``.
+        onto the twin side using ``aniseed_toolkit.scene.mirror.mirror_transforms``.
         """
         return [
             self.input("Joint").get()

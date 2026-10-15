@@ -7,7 +7,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class InsertParentControlComponent(aniseed_toolkit.control_mixins.InsertControlMixin, aniseed.RigComponent):
+class InsertParentControlComponent(aniseed.mixins.InsertControlMixin, aniseed.RigComponent):
     """
     Creates a control as a child of the nodes parent and then makes
     the given node a child of the new control.

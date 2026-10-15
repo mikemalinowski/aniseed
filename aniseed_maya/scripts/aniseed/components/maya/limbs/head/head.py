@@ -8,6 +8,7 @@ import os
 import mref
 import aniseed
 import aniseed_toolkit
+import aniseed_toolkit.ui.dialogs
 
 
 class HeadComponent(aniseed.RigComponent):
@@ -147,7 +148,7 @@ class HeadComponent(aniseed.RigComponent):
 
         for neck_joint in self.input("Neck Joints").get():
             # -- Create the neck control
-            neck_control = aniseed_toolkit.control.create(
+            neck_control = aniseed_toolkit.rig.control.create(
                 description=f"{prefix}Neck",
                 location=location,
                 parent=next_parent,
@@ -161,7 +162,7 @@ class HeadComponent(aniseed.RigComponent):
                 mref.get(neck_control.org).set_rotation([0, 0, 0], space="world")
 
             # -- Constrain our neck
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 neck_control.ctl,
                 neck_joint,
             )
@@ -170,7 +171,7 @@ class HeadComponent(aniseed.RigComponent):
 
         # -- Create the head control
         head_joint = self.input("Head Joint").get()
-        head_control = aniseed_toolkit.control.create(
+        head_control = aniseed_toolkit.rig.control.create(
             description=f"{prefix}Head",
             location=location,
             parent=next_parent,
@@ -185,7 +186,7 @@ class HeadComponent(aniseed.RigComponent):
             mref.get(head_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Constrain the head joint
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             head_control.ctl,
             head_joint,
         )
@@ -201,9 +202,9 @@ class HeadComponent(aniseed.RigComponent):
         head inputs and snaps the neck to the parent's position.
         """
 
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
 
-        joint_map = aniseed_toolkit.io.load_hierarchy_file(
+        joint_map = aniseed_toolkit.ui.dialogs.load_hierarchy_file(
             root_parent=parent,
             filepath=os.path.join(
                 os.path.dirname(__file__),
@@ -239,4 +240,4 @@ class HeadComponent(aniseed.RigComponent):
         self.input("Head Joint").set(head.name())
 
         if parent:
-            aniseed_toolkit.transformation.snap_position(neck.name(), parent)
+            aniseed_toolkit.scene.transforms.snap_position(neck.name(), parent)

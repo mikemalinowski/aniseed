@@ -144,7 +144,7 @@ class FKSpineComponent(aniseed.RigComponent):
             print(f"{chest} does not exist")
             return False
 
-        facing_dir = aniseed_toolkit.direction.get_chain_facing_direction(
+        facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=hip,
             end=chest,
             epsilon=20,
@@ -192,7 +192,7 @@ class FKSpineComponent(aniseed.RigComponent):
             shape_scale=20,
         )
 
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             sway_control.ctl,
             hip_bone,
         )
@@ -208,7 +208,7 @@ class FKSpineComponent(aniseed.RigComponent):
                 shape_scale=16,
             )
 
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 spine_control.ctl,
                 joint,
             )
@@ -225,7 +225,7 @@ class FKSpineComponent(aniseed.RigComponent):
         # -- Store the chest output
         self.output("Chest").set(chest_control.ctl)
 
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             chest_control.ctl,
             chest_bone,
         )
@@ -237,7 +237,7 @@ class FKSpineComponent(aniseed.RigComponent):
         Creates a spine control, aligning it to the world if the option
         to do so is enabled.
         """
-        control = aniseed_toolkit.control.create(
+        control = aniseed_toolkit.rig.control.create(
             description=label + self.option("Label").get(),
             location=self.option("Location").get(),
             shape_scale=shape_scale,
@@ -250,7 +250,7 @@ class FKSpineComponent(aniseed.RigComponent):
 
         if self.option("Align Controls To World").get():
             mref.get(control.org).set_rotation([0, 0, 0], space="world")
-            aniseed_toolkit.shapes.rotate(control.ctl, x=0, y=0, z=90)
+            aniseed_toolkit.scene.shapes.rotate(control.ctl, x=0, y=0, z=90)
 
         return control
 
@@ -276,9 +276,9 @@ class FKSpineComponent(aniseed.RigComponent):
 
             joint_count = int(joint_count)
 
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
 
-        increment = aniseed_toolkit.units.to_cm(25) / (joint_count - 1)
+        increment = aniseed_toolkit.core.units.to_cm(25) / (joint_count - 1)
 
         hip_joint = self._create_joint("Hip", parent)
         self.input("Hip").set(hip_joint)
@@ -306,7 +306,7 @@ class FKSpineComponent(aniseed.RigComponent):
         """
         Creates a spine joint as a child of (and matched to) the given parent
         """
-        return aniseed_toolkit.joints.create(
+        return aniseed_toolkit.scene.joints.create(
             description=label + self.option("Label").get(),
             location=self.option("Location").get(),
             parent=parent,

@@ -16,7 +16,7 @@ class SnapshotCopyDestination(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.LocalisedSkinCopy.snapshot_vertices()
+        aniseed_toolkit.scene.skin.LocalisedSkinCopy.snapshot_vertices()
 
         qtility.request.message(
             title="Scale Translation Snapshot",
@@ -39,7 +39,7 @@ class CopyLocalised(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.LocalisedSkinCopy.copy_skinweights()
+        aniseed_toolkit.scene.skin.LocalisedSkinCopy.copy_skinweights()
 
         qtility.request.message(
             title = "Scale Translation Snapshot",

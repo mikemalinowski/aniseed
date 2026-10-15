@@ -32,7 +32,7 @@ class DistanceBetweenTool(aniseed_toolkit.Tool):
         Returns:
             The distance between two objects
         """
-        return aniseed_toolkit.transformation.distance_between(
+        return aniseed_toolkit.core.maths.distance_between(
             node_a=node_a,
             node_b=node_b,
             print_result=True,
@@ -61,7 +61,7 @@ class FactorBetween(aniseed_toolkit.Tool):
         Returns:
             The factor for how close the given node is between the from_this and to_this
         """
-        return aniseed_toolkit.transformation.factor_between(
+        return aniseed_toolkit.core.maths.factor_between(
             node=node,
             from_this=from_this,
             to_this=to_this,

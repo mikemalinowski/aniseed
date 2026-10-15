@@ -109,7 +109,7 @@ class ReadShapeFromFile(aniseed_toolkit.Tool):
         Returns:
             dict
         """
-        return aniseed_toolkit.shapes.shape_data_from_file(shape_file)
+        return aniseed_toolkit.scene.shapes.shape_data_from_file(shape_file)
 
 
 class SaveShape(aniseed_toolkit.Tool):
@@ -144,7 +144,7 @@ class SaveShape(aniseed_toolkit.Tool):
         if not filepath:
             return dict()
 
-        return aniseed_toolkit.shapes.save_to_file(node, filepath)
+        return aniseed_toolkit.scene.shapes.save_to_file(node, filepath)
 
 
 class ApplyShape(aniseed_toolkit.Tool):
@@ -190,7 +190,7 @@ class ApplyShape(aniseed_toolkit.Tool):
                     editable=False,
                 )
 
-            aniseed_toolkit.shapes.load_shape(
+            aniseed_toolkit.scene.shapes.load_shape(
                 node=node,
                 data=data,
                 clear=clear,

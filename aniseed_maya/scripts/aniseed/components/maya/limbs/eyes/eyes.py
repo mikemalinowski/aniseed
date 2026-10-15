@@ -138,7 +138,7 @@ class EyesComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Aim Distance",
-            value=aniseed_toolkit.units.to_cm(30),
+            value=aniseed_toolkit.core.units.to_cm(30),
             group="Behaviour",
         )
 
@@ -307,12 +307,12 @@ class EyesComponent(aniseed.RigComponent):
         rt_eye_component.run()
 
         aim_controls = [
-            aniseed_toolkit.control.get(eye_component.output("Aim Control").get())
+            aniseed_toolkit.rig.control.get(eye_component.output("Aim Control").get())
             for eye_component in [lf_eye_component, rt_eye_component]
         ]
 
         # -- Create the control to act as the master aim
-        master_aim_control = aniseed_toolkit.control.create(
+        master_aim_control = aniseed_toolkit.rig.control.create(
             description=f"{self.option('Name').get()}AimMaster",
             location=self.config.middle,
             config=self.config,
@@ -445,7 +445,7 @@ class EyesComponent(aniseed.RigComponent):
 
             root_joint = component.user_func_create_skeleton()
 
-            aniseed_toolkit.transformation.snap_position(root_joint, parent.full_name())
+            aniseed_toolkit.scene.transforms.snap_position(root_joint, parent.full_name())
             mref.get(root_joint).attr(f"translate{cross_axis}").set(side_offset * multiplier)
 
             # -- Now set the side specific requirements
@@ -526,7 +526,7 @@ class EyeComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Aim Distance",
-            value=aniseed_toolkit.units.to_cm(30),
+            value=aniseed_toolkit.core.units.to_cm(30),
             group="Behaviour",
         )
 
@@ -677,13 +677,13 @@ class EyeComponent(aniseed.RigComponent):
         """
 
         # -- Determine the parent for the joints
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
 
         description = self.option("Name").get()
         location = self.option("Location").get()
 
         # -- Start by creating the eye
-        eye_joint = aniseed_toolkit.joints.create(
+        eye_joint = aniseed_toolkit.scene.joints.create(
             description=description,
             location=location,
             parent=parent,
@@ -695,7 +695,7 @@ class EyeComponent(aniseed.RigComponent):
             # -- Now create the eyelids
             for label in ["Lower", "Upper"]:
 
-                lid_joint = aniseed_toolkit.joints.create(
+                lid_joint = aniseed_toolkit.scene.joints.create(
                     description=f"{description}{label}Lid",
                     location=location,
                     parent=eye_joint,
@@ -704,7 +704,7 @@ class EyeComponent(aniseed.RigComponent):
                 self.input(f"{label} Eye Lid Joint").set(lid_joint)
 
         if self.option("Add Pupil").get():
-            pupil_joint = aniseed_toolkit.joints.create(
+            pupil_joint = aniseed_toolkit.scene.joints.create(
                 description=f"{description}Pupil",
                 location=location,
                 parent=eye_joint,
@@ -713,7 +713,7 @@ class EyeComponent(aniseed.RigComponent):
             self.input("Pupil Joint").set(pupil_joint)
 
         if parent:
-            aniseed_toolkit.transformation.snap_position(eye_joint, parent)
+            aniseed_toolkit.scene.transforms.snap_position(eye_joint, parent)
 
         return eye_joint
 
@@ -734,7 +734,7 @@ class EyeComponent(aniseed.RigComponent):
         up_axis = self.option("Up Axis").get()
 
         # -- Create a node to place everything under
-        component_org = aniseed_toolkit.transforms.create(
+        component_org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=description + "Component",
             location=location,
@@ -743,7 +743,7 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         # -- Create our eye control
-        direct_eye_control = aniseed_toolkit.control.create(
+        direct_eye_control = aniseed_toolkit.rig.control.create(
             description=description,
             location=location,
             parent=component_org,
@@ -753,7 +753,7 @@ class EyeComponent(aniseed.RigComponent):
         )
 
         # -- Create our aim control and move it to the right place
-        aim_control = aniseed_toolkit.control.create(
+        aim_control = aniseed_toolkit.rig.control.create(
             description=f"{description}Aim",
             location=location,
             parent=direct_eye_control.ctl,
@@ -765,7 +765,7 @@ class EyeComponent(aniseed.RigComponent):
         self.output("Aim Control").set(aim_control.ctl)
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             aim_control.ctl,
             direct_eye_control.ctl,
         )
@@ -783,7 +783,7 @@ class EyeComponent(aniseed.RigComponent):
 
         # -- Create the upvector
         upvector = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="upv",
                 description=description + "AimStabilizer",
                 location=location,
@@ -796,7 +796,7 @@ class EyeComponent(aniseed.RigComponent):
         upvector.set_parent(component_org)
 
         # -- Create the aim setup
-        aim_node = aniseed_toolkit.transforms.create(
+        aim_node = aniseed_toolkit.scene.transforms.create(
             classification="aim",
             description=description,
             location=location,
@@ -822,7 +822,7 @@ class EyeComponent(aniseed.RigComponent):
             maintainOffset=True,
         )
 
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             direct_eye_control.ctl,
             eye_joint,
         )
@@ -849,7 +849,7 @@ class EyeComponent(aniseed.RigComponent):
         Adds a blink attribute to the eye control which rotates the upper
         and lower lid controls closed.
         """
-        node_math = aniseed_toolkit.rigging.node_math
+        node_math = aniseed_toolkit.scene.node_math
 
         host = mref.get(eye_control.ctl)
         blink_attribute = host.add_attribute(
@@ -880,7 +880,7 @@ class EyeComponent(aniseed.RigComponent):
         eye_controller = mref.get(eye_control.ctl)
         pupil_joint = self.input("Pupil Joint").get()
 
-        pupil_control = aniseed_toolkit.control.create(
+        pupil_control = aniseed_toolkit.rig.control.create(
             description=f"{self.option('Name').get()}Pupil",
             location=self.option("Location").get(),
             config=self.config,
@@ -888,7 +888,7 @@ class EyeComponent(aniseed.RigComponent):
             shape="core_circle",
             match_to=pupil_joint,
         )
-        aniseed_toolkit.constraints.parent_and_scale(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             pupil_control.ctl,
             pupil_joint,
             maintain_offset=False,
@@ -925,8 +925,8 @@ class EyeComponent(aniseed.RigComponent):
         eye_controller = mref.get(eye_control)
         aim_controller = mref.get(aim_control)
 
-        aniseed_toolkit.attributes.add_separator(eye_control)
-        aniseed_toolkit.attributes.add_separator(aim_control)
+        aniseed_toolkit.core.attributes.add_separator(eye_control)
+        aniseed_toolkit.core.attributes.add_separator(aim_control)
 
         # -- Add the attribute we will use to blend the behaviour out
         auto_eyelids = eye_controller.add_attribute(
@@ -936,7 +936,7 @@ class EyeComponent(aniseed.RigComponent):
             defaultValue=1,
             keyable=True,
         )
-        aniseed_toolkit.attributes.add_separator(eye_control)
+        aniseed_toolkit.core.attributes.add_separator(eye_control)
 
         # -- Add the follow attributes, which are proxied onto the aim control
         follow_attributes = dict()
@@ -964,7 +964,7 @@ class EyeComponent(aniseed.RigComponent):
 
             eye_lid_joint = self.input(f"{label} Eye Lid Joint").get()
 
-            lid_driver_parent = aniseed_toolkit.transforms.create(
+            lid_driver_parent = aniseed_toolkit.scene.transforms.create(
                 classification="zro",
                 description=f"{description}{label}LidDriver",
                 location=location,
@@ -973,7 +973,7 @@ class EyeComponent(aniseed.RigComponent):
                 match_to=eye_lid_joint,
             )
 
-            lid_driver = aniseed_toolkit.transforms.create(
+            lid_driver = aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=f"{description}{label}LidDriver",
                 location=location,
@@ -982,7 +982,7 @@ class EyeComponent(aniseed.RigComponent):
                 match_to=eye_lid_joint,
             )
 
-            lid_tracker = aniseed_toolkit.transforms.create(
+            lid_tracker = aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=f"{description}{label}LidTracker",
                 location=location,
@@ -1002,11 +1002,11 @@ class EyeComponent(aniseed.RigComponent):
             m_lid_tracker = mref.get(lid_tracker)
             m_lid_driver = mref.get(lid_driver)
 
-            horizontal_rotation = aniseed_toolkit.rigging.node_math.multiply(
+            horizontal_rotation = aniseed_toolkit.scene.node_math.multiply(
                 m_lid_tracker.attr(f"rotate{up_axis}").full_name(),
                 follow_attributes["horizontalLidFollow"].full_name(),
             )
-            vertical_rotation = aniseed_toolkit.rigging.node_math.multiply(
+            vertical_rotation = aniseed_toolkit.scene.node_math.multiply(
                 m_lid_tracker.attr(f"rotate{cross_axis}").full_name(),
                 vertical_multipliers[label].full_name(),
             )
@@ -1020,7 +1020,7 @@ class EyeComponent(aniseed.RigComponent):
             blend_multiplier.outputX.connect(m_lid_driver.attr(f"rotate{up_axis}"))
             blend_multiplier.outputY.connect(m_lid_driver.attr(f"rotate{cross_axis}"))
 
-            lid_control = aniseed_toolkit.control.create(
+            lid_control = aniseed_toolkit.rig.control.create(
                 description=f"{label}EyeLid",
                 location=location,
                 parent=lid_driver,
@@ -1031,7 +1031,7 @@ class EyeComponent(aniseed.RigComponent):
             lid_controls.append(lid_control)
             self.output(f"{label} Eye Lid Control").set(lid_control.ctl)
 
-            aniseed_toolkit.shapes.scale(
+            aniseed_toolkit.scene.shapes.scale(
                 lid_control.ctl,
                 scale_by=1,
                 **{
@@ -1041,7 +1041,7 @@ class EyeComponent(aniseed.RigComponent):
                 }
             )
 
-            aniseed_toolkit.shapes.offset(
+            aniseed_toolkit.scene.shapes.offset(
                 lid_control.ctl,
                 offset_by=1,
                 **{
@@ -1051,7 +1051,7 @@ class EyeComponent(aniseed.RigComponent):
                 }
             )
 
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 lid_control.ctl,
                 eye_lid_joint,
             )

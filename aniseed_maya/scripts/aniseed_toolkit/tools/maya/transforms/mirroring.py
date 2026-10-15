@@ -1,4 +1,5 @@
 import aniseed_toolkit
+import aniseed_toolkit.ui.dialogs
 import maya.cmds as mc
 
 
@@ -34,7 +35,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
             name_replacement : a tuple of length two, where the first part should
                 be replaced with the second part
         """
-        return aniseed_toolkit.mirror.global_mirror(
+        return aniseed_toolkit.ui.dialogs.global_mirror(
             transforms=transforms or mc.ls(selection=True),
             across=across,
             behaviour=behaviour,

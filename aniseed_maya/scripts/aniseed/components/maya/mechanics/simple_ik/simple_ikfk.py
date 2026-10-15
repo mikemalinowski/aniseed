@@ -219,12 +219,12 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         positive or negative X axis.
         """
 
-        limb_joints = aniseed_toolkit.joints.get_between(
+        limb_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Root Joint").get(),
             end=self.input("Tip Joint").get(),
         )
 
-        direction = aniseed_toolkit.direction.get_chain_facing_direction(
+        direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=limb_joints[0],
             end=limb_joints[-1],
         )
@@ -245,7 +245,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.org = aniseed_toolkit.transforms.create(
+        self.org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=f"{self.prefix}Arm",
             location=self.location,
@@ -253,7 +253,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             parent=self.input("Parent").get(),
             match_to=self.input("Parent").get()
         )
-        self.joints = aniseed_toolkit.joints.get_between(
+        self.joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input('Root Joint').get(),
             end=self.input("Tip Joint").get(),
         )
@@ -278,7 +278,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             config_org.match_to(ikfk_setup.blend_chain[-1])
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             self.upvector_control.ctl,
             ikfk_setup.ik_chain[1].name(),
         )
@@ -319,7 +319,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -330,7 +330,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         Here we create all the controls for the limb
         """
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.control.create(
+        self.config_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Config",
             location=self.location,
             parent=self.org,
@@ -345,7 +345,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         fk_parent = self.org
         fk_controls = []
         for label, joint in zip(["UpperFK", "LowerFK", "FK"], self.joints[:3]):
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description=f"{self.prefix}{label}",
                 location=self.location,
                 parent=fk_parent,
@@ -362,7 +362,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         self.fk_controls = [fk_control.ctl for fk_control in fk_controls]
 
         # -- Now create the main IK control
-        self.ik_target_control = aniseed_toolkit.control.create(
+        self.ik_target_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}IK",
             location=self.location,
             parent=self.org,
@@ -378,7 +378,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             mref.get(self.ik_target_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Create the upvector control
-        self.upvector_control = aniseed_toolkit.control.create(
+        self.upvector_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Upvector",
             location=self.location,
             parent=self.org,
@@ -392,7 +392,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
 
         upvector_org = mref.get(self.upvector_control.org)
         upvector_org.set_position(
-            aniseed_toolkit.transformation.calculate_upvector_position(
+            aniseed_toolkit.core.maths.calculate_upvector_position(
                 point_a=self.joints[0],
                 point_b=self.joints[1],
                 point_c=self.joints[2],

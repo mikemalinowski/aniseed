@@ -16,7 +16,7 @@ import aniseed_toolkit
 foot = aniseed_toolkit.rigging.foot
 
 
-class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigComponent):
+class LegComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
     """
     This is some documentation that the user will see. You should adjust the guides...
     """
@@ -316,12 +316,12 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.leg_joints = aniseed_toolkit.joints.get_between(
+        self.leg_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Leg Root").get(),
             end=self.input("Toe").get(),
         )
 
-        self.org = aniseed_toolkit.transforms.create(
+        self.org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=f"{self.prefix}Leg",
             location=self.location,
@@ -368,7 +368,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         # -- We also expect that the bones to be facing down X - at least
         # -- between the upper leg and the foot
-        facing_dir = aniseed_toolkit.direction.get_chain_facing_direction(
+        facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             all_joints[0],
             all_joints[2],
         )
@@ -388,7 +388,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         This function will create all the controls for the leg
         """
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.control.create(
+        self.config_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}LegConfig",
             location=self.location,
             parent=self.org,
@@ -400,7 +400,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         )
 
         # -- Create the upvector control for the leg
-        self.upvector_control = aniseed_toolkit.control.create(
+        self.upvector_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}LegUpvector",
             location=self.location,
             parent=self.org,
@@ -414,7 +414,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         upvector_org = mref.get(self.upvector_control.org)
         upvector_org.set_position(
-            aniseed_toolkit.transformation.calculate_upvector_position(
+            aniseed_toolkit.core.maths.calculate_upvector_position(
                 point_a=self.leg_joints[0],
                 point_b=self.leg_joints[1],
                 point_c=self.leg_joints[2],
@@ -427,7 +427,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             upvector_org.set_rotation([0, 0, 0], space="world")
 
         # -- Now create the main IK control
-        self.ik_foot_control = aniseed_toolkit.control.create(
+        self.ik_foot_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Foot",
             location=self.location,
             parent=self.org,
@@ -463,7 +463,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         for label, joint in zip(self._LABELS, self.leg_joints):
 
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description=f"{self.prefix}{label}FK",
                 location=self.location,
                 parent=fk_parent,
@@ -478,14 +478,14 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
     def _create_paddle_control(self, label: str):
         """
         Creates a heel or toe control at the end of the pivot chain,
         optionally aligned to the foot control
         """
-        control = aniseed_toolkit.control.create(
+        control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}{label}",
             location=self.location,
             parent=self.ik_pivot_endpoint,
@@ -511,7 +511,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         """
 
         # -- Create the ik root control
-        self.ik_root_control = aniseed_toolkit.control.create(
+        self.ik_root_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}LegIKRoot",
             location=self.location,
             shape="core_cube",
@@ -537,14 +537,14 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         )
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             self.upvector_control.ctl,
             self.ik_joints[1],
         )
 
         if self.option("Apply Soft Ik").get():
 
-            root_marker = aniseed_toolkit.transforms.create(
+            root_marker = aniseed_toolkit.scene.transforms.create(
                 classification="mech",
                 description=f"{self.prefix}LegIKMarker",
                 location=self.location,
@@ -614,7 +614,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             blend_joint.rename(self._mechanical_name("LegNK"))
             self.nk_joints.append(blend_joint.name())
 
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 blend_joint.name(),
                 leg_joint,
             )
@@ -719,7 +719,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         lower_twist_joints = self.input("Lower Twist Joints").get()
 
         if upper_twist_joints:
-            aniseed_toolkit.component.add_twister(
+            aniseed.builders.add_twister(
                 rig=self.rig,
                 joints=upper_twist_joints,
                 parent=self.ik_root_control.ctl,
@@ -731,7 +731,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             )
 
         if lower_twist_joints:
-            aniseed_toolkit.component.add_twister(
+            aniseed.builders.add_twister(
                 rig=self.rig,
                 joints=lower_twist_joints,
                 parent=self.nk_joints[1],
@@ -773,14 +773,14 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         """
 
         # -- The skeleton is always parented to the current selection
-        parent = aniseed_toolkit.mutils.first_selected()
+        parent = aniseed_toolkit.core.selection.first_selected()
 
-        upper_twist_count = aniseed_toolkit.component.request_count(
+        upper_twist_count = aniseed.dialogs.request_count(
             upper_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper leg?",
         )
-        lower_twist_count = aniseed_toolkit.component.request_count(
+        lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
             title="Upper Twist Count",
             message="How many twist joints do you want on the lower leg?",
@@ -792,11 +792,11 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["UpperLeg"] = {"jointOrientX": 90, "jointOrientY": -4, "jointOrientZ": -90}
-        joint_data["LowerLeg"] = {"tx": aniseed_toolkit.units.to_cm(42), "jointOrientZ": -11}
-        joint_data["Foot"] = {"tx": aniseed_toolkit.units.to_cm(42), "jointOrientZ": 55}
-        joint_data["Toe"] = {"tx": aniseed_toolkit.units.to_cm(10), "jointOrientZ": 42}
+        joint_data["LowerLeg"] = {"tx": aniseed_toolkit.core.units.to_cm(42), "jointOrientZ": -11}
+        joint_data["Foot"] = {"tx": aniseed_toolkit.core.units.to_cm(42), "jointOrientZ": 55}
+        joint_data["Toe"] = {"tx": aniseed_toolkit.core.units.to_cm(10), "jointOrientZ": 42}
 
-        all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
+        all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
             location=location,
             config=self.config,
@@ -817,7 +817,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
         self.input("Toe").set(all_joints[-1])
 
         if upper_twist_count:
-            upper_twists = aniseed_toolkit.joints.create_twist_joints(
+            upper_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[0],
                 all_joints[1],
                 upper_twist_count,
@@ -829,7 +829,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             self.input("Upper Twist Joints").set(upper_twists)
 
         if lower_twist_count:
-            lower_twists = aniseed_toolkit.joints.create_twist_joints(
+            lower_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[1],
                 all_joints[2],
                 lower_twist_count,
@@ -855,7 +855,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
 
         world = global_srt_component.output("Main Control").address()
 
-        aniseed_toolkit.space.add_space_switch(
+        aniseed.builders.add_space_switch(
             component=self,
             label=self.label() + " Foot Space Switch",
             driven=self.output("Ik Foot").address(),
@@ -866,7 +866,7 @@ class LegComponent(aniseed_toolkit.component.JointChainMixin, aniseed.RigCompone
             ],
         )
 
-        aniseed_toolkit.space.add_space_switch(
+        aniseed.builders.add_space_switch(
             component=self,
             label=self.label() + " Upvector Space Switch",
             driven=self.output("Upvector").address(),

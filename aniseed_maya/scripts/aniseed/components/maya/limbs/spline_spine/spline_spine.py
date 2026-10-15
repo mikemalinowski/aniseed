@@ -128,7 +128,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Remove the joints (re-parenting any children)
         new_parent = mref.get(self.input("Root Joint").get()).parent()
-        aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
+        aniseed_toolkit.scene.joints.reparent_unknown_children(self.all_joints(), new_parent)
 
         # -- Now delete our joint chain
         mref.delete(self.input("Root Joint").get())
@@ -285,7 +285,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Create a basic transform node to act as the parent
         # -- of everything
-        org = aniseed_toolkit.transforms.create(
+        org = aniseed_toolkit.scene.transforms.create(
             classification="org",
             description=descriptive,
             location=location,
@@ -300,7 +300,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Build the main master control
         spine_master_transform = self.input("Spine Master Transform").get()
-        master_control = aniseed_toolkit.control.create(
+        master_control = aniseed_toolkit.rig.control.create(
             description=f"{descriptive}Master",
             location=location,
             parent=org,
@@ -352,7 +352,7 @@ class SplineSpine(aniseed.RigComponent):
             joint = mref.get(joints[idx])
 
             # -- Create the tweaker
-            offset_control = aniseed_toolkit.control.create(
+            offset_control = aniseed_toolkit.rig.control.create(
                 description=f"{descriptive}FkOffset",
                 location=location,
                 parent=fk_control.full_name(),
@@ -395,7 +395,7 @@ class SplineSpine(aniseed.RigComponent):
             if self.option("Align Offsets To Bone").get():
                 mref.get(offset_control.org).match_to(joint)
 
-            aniseed_toolkit.constraints.parent_and_scale(fk_tweak, joint)
+            aniseed_toolkit.scene.constraints.parent_and_scale(fk_tweak, joint)
 
             # -- Hook up the visibility
             for nurbs_shape in fk_control.shapes():
@@ -488,7 +488,7 @@ class SplineSpine(aniseed.RigComponent):
         for idx, trace_joint in enumerate(spline_setup.out_anchor_points):
 
             # -- Create the actual control hierarchy
-            fk_control = aniseed_toolkit.control.create(
+            fk_control = aniseed_toolkit.rig.control.create(
                 description=f"{descriptive}Fk",
                 location=location,
                 parent=next_parent,
@@ -501,7 +501,7 @@ class SplineSpine(aniseed.RigComponent):
             # -- We need the automated FK setup in the spline rig to
             # -- drive our FK controls. This is because the FK controls
             # -- in the spline rig auto-follow the IK.
-            aniseed_toolkit.matrix_drive.drive_from_local_matrix(trace_joint, fk_control.org)
+            aniseed_toolkit.scene.transforms.drive_from_local_matrix(trace_joint, fk_control.org)
 
             if self.option("Orient FK Controls To World").get():
                 mref.get(fk_control.zero).set_rotation([0, 0, 0], space="world")
@@ -515,7 +515,7 @@ class SplineSpine(aniseed.RigComponent):
             # -- The next fk control is parented under a realigner, which
             # -- is a child of this fk control matched to the trace joint.
             realigner = mref.get(
-                aniseed_toolkit.transforms.create(
+                aniseed_toolkit.scene.transforms.create(
                     classification="mech",
                     description=f"{descriptive}FkReAlign",
                     location=location,
@@ -535,7 +535,7 @@ class SplineSpine(aniseed.RigComponent):
         each other. This is useful for creating hierarchies of controls where
         each control has a sub control which can be manipulated in isolation.
         """
-        main_control = aniseed_toolkit.control.create(
+        main_control = aniseed_toolkit.rig.control.create(
             description=descriptive,
             location=location,
             parent=parent,
@@ -544,7 +544,7 @@ class SplineSpine(aniseed.RigComponent):
             config=self.config,
             match_to=match_to,
         )
-        tweak_control = aniseed_toolkit.control.create(
+        tweak_control = aniseed_toolkit.rig.control.create(
             description=f"{descriptive}Tweak",
             location=location,
             parent=main_control.ctl,
@@ -690,7 +690,7 @@ class SplineSpine(aniseed.RigComponent):
 
         # -- Make the joints selectable
         joints = self.all_joints()
-        aniseed_toolkit.joints.unreference(joints)
+        aniseed_toolkit.scene.joints.unreference(joints)
 
         guide_data = self.guide_data()
 
@@ -706,7 +706,7 @@ class SplineSpine(aniseed.RigComponent):
         guide_data["control_transforms"] = []
 
         # -- Get all the controllable items
-        guide_controls = aniseed_toolkit.tagging.all_children(guide_root, "ControlGuide")
+        guide_controls = aniseed_toolkit.rig.tagging.all_children(guide_root, "ControlGuide")
 
         # -- Now we cycle them and store the relative matrix between the
         # -- guide and the root joint. This means that everything can be
@@ -720,7 +720,7 @@ class SplineSpine(aniseed.RigComponent):
             guide_data["control_transforms"].append(root_relative_matrix)
 
         # -- Now delete the spline setup
-        with aniseed_toolkit.joints.HeldTransforms(joints):
+        with aniseed_toolkit.scene.joints.HeldTransforms(joints):
             mref.delete(str(guide_data["LinkedGuide"]))
 
         # -- Finally we remove the entry for the linked guide (marking this
@@ -790,7 +790,7 @@ class SplineSpine(aniseed.RigComponent):
         guide data. This ensures our code paths can always assume they have access
         to guide data.
         """
-        base_number = aniseed_toolkit.units.from_cm(50.0)
+        base_number = aniseed_toolkit.core.units.from_cm(50.0)
         identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
         data = dict(
@@ -811,7 +811,7 @@ class SplineSpine(aniseed.RigComponent):
         """
         Returns all the joints between the root and the tip joint
         """
-        return aniseed_toolkit.joints.get_between(
+        return aniseed_toolkit.scene.joints.get_between(
             self.input("Root Joint").get(),
             self.input("Tip Joint").get(),
         )
@@ -831,7 +831,7 @@ class SplineSpine(aniseed.RigComponent):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        aniseed_toolkit.component_outputs.declare_joint_outputs(
+        aniseed.component_outputs.declare_joint_outputs(
             self,
             "FK Control",
             self.input("Root Joint").get(),

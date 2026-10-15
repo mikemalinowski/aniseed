@@ -18,7 +18,7 @@ class JointChainMixin:
 
     Compose alongside RigComponent, mixin first:
 
-        class Arm(aniseed_toolkit.component.JointChainMixin, aniseed.RigComponent):
+        class Arm(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
             chain_root_input = "Shoulder"
             chain_tip_input = "Hand"
     """

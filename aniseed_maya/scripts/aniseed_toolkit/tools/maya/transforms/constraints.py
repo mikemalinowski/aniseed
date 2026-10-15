@@ -20,4 +20,4 @@ class ClearConstraintsTool(aniseed_toolkit.Tool):
         else:
             nodes = mc.ls(selection=True)
 
-        aniseed_toolkit.containts.remove_all(nodes)
+        aniseed_toolkit.scene.constraints.remove_all(nodes)

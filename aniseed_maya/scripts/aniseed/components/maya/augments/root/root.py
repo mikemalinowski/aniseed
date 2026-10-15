@@ -128,7 +128,7 @@ class GlobalControlRoot(aniseed.RigComponent):
             return
 
         # -- To reach here the user would like us to create the joint.
-        joint = aniseed_toolkit.stack_joints.create_from_selection(
+        joint = aniseed.builders.create_joint_from_selection(
             name=self.config.generate_name(
                 description="global_srt",
                 classification=self.config.joint,
@@ -160,7 +160,7 @@ class GlobalControlRoot(aniseed.RigComponent):
         parent = self.input("Parent").get()
         joint_to_drive = self.input("Joint To Drive").get()
 
-        srt_control = aniseed_toolkit.control.create(
+        srt_control = aniseed_toolkit.rig.control.create(
             description=self.option("Label").get(),
             location=self.config.middle,
             shape="core_srt",
@@ -170,7 +170,7 @@ class GlobalControlRoot(aniseed.RigComponent):
             match_to=joint_to_drive,
         )
 
-        root_control = aniseed_toolkit.control.create(
+        root_control = aniseed_toolkit.rig.control.create(
             description=self.option("Label").get() + "Root",
             location=self.config.middle,
             shape="core_arrow",
@@ -181,7 +181,7 @@ class GlobalControlRoot(aniseed.RigComponent):
         )
 
         if joint_to_drive:
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 root_control.ctl,
                 joint_to_drive,
                 maintain_offset=False,

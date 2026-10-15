@@ -40,7 +40,7 @@ class ReplicateJoint(aniseed_toolkit.Tool):
         Returns:
               The name of the created joint
         """
-        return aniseed_toolkit.joints.replicate(
+        return aniseed_toolkit.scene.joints.replicate(
             joint=joint,
             parent=parent,
             worldspace=worldspace,
@@ -81,7 +81,7 @@ class CopyJointAttributes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        return aniseed_toolkit.joints.copy_attributes(
+        return aniseed_toolkit.scene.joints.copy_attributes(
             from_this=from_this,
             to_this=to_this,
             link=link,
@@ -118,7 +118,7 @@ class GetJointsBetween(aniseed_toolkit.Tool):
         Return:
             List of joints
         """
-        return aniseed_toolkit.joints.get_between(start, end)
+        return aniseed_toolkit.scene.joints.get_between(start, end)
 
 
 class ReplicateChain(aniseed_toolkit.Tool):
@@ -161,7 +161,7 @@ class ReplicateChain(aniseed_toolkit.Tool):
         Returns:
             List of new joints
         """
-        return aniseed_toolkit.joints.replicate_chain(
+        return aniseed_toolkit.scene.joints.replicate_chain(
             from_this=from_this,
             to_this=to_this,
             parent=parent,
@@ -193,7 +193,7 @@ class ReverseChain(aniseed_toolkit.Tool):
         Returns:
             The joint chain in its new order
         """
-        return aniseed_toolkit.joints.reverse_chain(joints)
+        return aniseed_toolkit.scene.joints.reverse_chain(joints)
 
 
 class ReplicateEntireChain(aniseed_toolkit.Tool):
@@ -231,7 +231,7 @@ class ReplicateEntireChain(aniseed_toolkit.Tool):
         Returns:
             The newly duplicated root joint
         """
-        return aniseed_toolkit.joints.replicate_entire_chain(
+        return aniseed_toolkit.scene.joints.replicate_entire_chain(
             joint_root=joint_root,
             parent=parent,
             link=link,
@@ -264,7 +264,7 @@ class GetChainLength(aniseed_toolkit.Tool):
         Returns:
             The total length of all the bones in the chain
         """
-        return aniseed_toolkit.joints.chain_length(
+        return aniseed_toolkit.scene.joints.chain_length(
             start=start,
             end=end,
             log_result=log_result,

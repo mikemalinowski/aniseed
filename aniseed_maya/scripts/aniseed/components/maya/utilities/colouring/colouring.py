@@ -88,13 +88,13 @@ class ColorControls(aniseed.RigComponent):
         fallback = colours_by_location[self.config.middle]
         controls_to_skip = self.option("Nodes To Skip").get()
 
-        for node in aniseed_toolkit.control_queries.curve_controls():
+        for node in aniseed_toolkit.rig.control.curve_controls():
             if node in controls_to_skip:
                 continue
 
             location = self.config.extract_location(node)
             colour = colours_by_location.get(location, fallback)
-            aniseed_toolkit.shapes.apply_color(node, *colour)
+            aniseed_toolkit.scene.shapes.apply_color(node, *colour)
 
         return True
 
@@ -154,8 +154,8 @@ class ColorSpecificControls(aniseed.RigComponent):
         colour = self.option("Color").get()
 
         for node in nodes:
-            if aniseed_toolkit.control_queries.has_curve_shapes(node):
-                aniseed_toolkit.shapes.apply_color(node, *colour)
+            if aniseed_toolkit.rig.control.has_curve_shapes(node):
+                aniseed_toolkit.scene.shapes.apply_color(node, *colour)
 
         return True
 

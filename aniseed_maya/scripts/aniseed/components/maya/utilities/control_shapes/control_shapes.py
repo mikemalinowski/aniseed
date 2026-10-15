@@ -201,7 +201,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                     connection_pairs.append([driving_attribute, destination_attribute])
                     cmds.disconnectAttr(driving_attribute, f"{shape}.{destination_attribute}")
 
-            aniseed_toolkit.shapes.load_shape(
+            aniseed_toolkit.scene.shapes.load_shape(
                 node=node,
                 data=shape_data,
                 clear=True,
@@ -224,7 +224,7 @@ class ApplyControlShapes(aniseed.RigComponent):
         """
         Empties the Shape Data option after asking the user to confirm.
         """
-        aniseed_toolkit.option_files.clear_option(
+        aniseed.dialogs.clear_option(
             self.option("Shape Data"),
             title="Clear Shape Data",
             message="Are you sure you want to clear the shape data?",
@@ -243,7 +243,7 @@ class ApplyControlShapes(aniseed.RigComponent):
         shapes to it as JSON. Note that this captures the scene, not the
         stored Shape Data.
         """
-        aniseed_toolkit.option_files.save_json_file(
+        aniseed.dialogs.save_json_file(
             title="Save Shape Data File",
             get_data=self.get_shape_data,
         )
@@ -252,7 +252,7 @@ class ApplyControlShapes(aniseed.RigComponent):
         """
         Prompts for a JSON file and loads its contents into Shape Data.
         """
-        aniseed_toolkit.option_files.load_json_file(
+        aniseed.dialogs.load_json_file(
             title="Load Shape Data File",
             option=self.option("Shape Data"),
         )
@@ -263,8 +263,8 @@ class ApplyControlShapes(aniseed.RigComponent):
         to this rig.
         """
         return [
-            aniseed_toolkit.shapes.shape_to_dict(node)
-            for node in aniseed_toolkit.control_queries.curve_controls()
+            aniseed_toolkit.scene.shapes.shape_to_dict(node)
+            for node in aniseed_toolkit.rig.control.curve_controls()
 
             # -- Ensure we're only looking at controls which are part
             # -- of our rig

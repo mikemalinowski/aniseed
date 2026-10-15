@@ -22,7 +22,7 @@ class HideNodesTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        aniseed_toolkit.visibility.hide(items)
+        aniseed_toolkit.scene.visibility.hide(items)
 
 
 class ShowNodesTool(aniseed_toolkit.Tool):
@@ -45,4 +45,4 @@ class ShowNodesTool(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        aniseed_toolkit.visibility.show(items)
+        aniseed_toolkit.scene.visibility.show(items)

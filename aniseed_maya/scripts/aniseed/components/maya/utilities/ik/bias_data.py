@@ -145,7 +145,7 @@ class ApplyIKBiasData(aniseed.RigComponent):
         """
         Empties the Bias Data cache after asking the user for confirmation.
         """
-        aniseed_toolkit.option_files.clear_option(
+        aniseed.dialogs.clear_option(
             self.option("Bias Data"),
             title="Clear Bias Data",
             message="Are you sure you want to clear the bias data?",
@@ -156,7 +156,7 @@ class ApplyIKBiasData(aniseed.RigComponent):
         """
         Prompts for a file path and writes the Bias Data cache to it as json.
         """
-        aniseed_toolkit.option_files.save_json_file(
+        aniseed.dialogs.save_json_file(
             title="Save Bias Data File",
             get_data=self.option("Bias Data").get,
         )
@@ -166,7 +166,7 @@ class ApplyIKBiasData(aniseed.RigComponent):
         Prompts for a json file and replaces the Bias Data cache with its
         contents.
         """
-        aniseed_toolkit.option_files.load_json_file(
+        aniseed.dialogs.load_json_file(
             title="Load Bias Data File",
             option=self.option("Bias Data"),
         )

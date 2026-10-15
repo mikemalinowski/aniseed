@@ -15,7 +15,7 @@ from Qt import QtCore, QtWidgets
 
 class TransformMixer(aniseed.RigComponent):
     """
-    Builds a transform mixer (see aniseed_toolkit.transformation.TransformMixer)
+    Builds a transform mixer (see aniseed_toolkit.rig.pose_mixer.TransformMixer)
     from the stored data, and connects its deformers to the nodes they are
     mapped to. The option buttons allow poses and deformers to be edited on
     the built mixer, and the result stored back into the component.
@@ -98,7 +98,7 @@ class TransformMixer(aniseed.RigComponent):
         input, records its node name and connects the translate, rotate and
         scale of each mapped deformer to the node it drives.
         """
-        mixer = aniseed_toolkit.transformation.TransformMixer.deserialise(
+        mixer = aniseed_toolkit.rig.pose_mixer.TransformMixer.deserialise(
             self.option("Data").get(),
         )
         mixer.node.set_parent(self.input("Parent").get())
@@ -265,7 +265,7 @@ class TransformMixer(aniseed.RigComponent):
 
         self.option("Data").set(mixer.serialise())
 
-    def mixer(self) -> aniseed_toolkit.transformation.TransformMixer|None:
+    def mixer(self) -> aniseed_toolkit.rig.pose_mixer.TransformMixer|None:
         """
         Returns the mixer built by the last build, or None (after showing an
         error message) if it does not exist.
@@ -280,7 +280,7 @@ class TransformMixer(aniseed.RigComponent):
                 parent=None,
             )
             return None
-        return aniseed_toolkit.transformation.TransformMixer(mixer_node)
+        return aniseed_toolkit.rig.pose_mixer.TransformMixer(mixer_node)
 
 
 class ConstraintMappingWidget(QtWidgets.QWidget):

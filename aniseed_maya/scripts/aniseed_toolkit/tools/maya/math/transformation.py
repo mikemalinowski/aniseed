@@ -41,7 +41,7 @@ class CalculateUpvectorPosition(aniseed_toolkit.Tool):
         Returns:
             MVector of the position in worldspace
         """
-        return aniseed_toolkit.transformation.calculate_upvector_position(
+        return aniseed_toolkit.core.maths.calculate_upvector_position(
             point_a=point_a,
             point_b=point_b,
             point_c=point_c,

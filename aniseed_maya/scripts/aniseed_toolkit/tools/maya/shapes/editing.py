@@ -29,7 +29,7 @@ class CombineShapes(aniseed_toolkit.Tool):
         if not nodes:
             return
 
-        return aniseed_toolkit.shapes.combine(nodes)
+        return aniseed_toolkit.scene.shapes.combine(nodes)
 
 
 
@@ -64,7 +64,7 @@ class RotateShapes(aniseed_toolkit.Tool):
             None
         """
         for node in [node] if node else mc.ls(selection=True):
-            aniseed_toolkit.shapes.rotate(node, x, y, z)
+            aniseed_toolkit.scene.shapes.rotate(node, x, y, z)
 
 
 class OffsetShapes(aniseed_toolkit.Tool):
@@ -98,7 +98,7 @@ class OffsetShapes(aniseed_toolkit.Tool):
             None
         """
         for node in [node] if node else mc.ls(selection=True):
-            aniseed_toolkit.shapes.offset(
+            aniseed_toolkit.scene.shapes.offset(
                 node=node,
                 offset_by=offset_by,
                 x=x,
@@ -137,7 +137,7 @@ class ScaleShapes(aniseed_toolkit.Tool):
             None
         """
         for node in [node] if node else mc.ls(selection=True):
-            aniseed_toolkit.shapes.scale(
+            aniseed_toolkit.scene.shapes.scale(
                 node=node,
                 scale_by=scale_by,
                 x=x,

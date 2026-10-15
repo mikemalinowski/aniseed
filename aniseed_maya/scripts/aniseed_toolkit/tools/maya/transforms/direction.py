@@ -10,7 +10,7 @@ class GetDirectionClass(aniseed_toolkit.Tool):
         "Transforms",
     ]
 
-    def run(self, direction: str = "x") -> aniseed_toolkit.direction.Direction:
+    def run(self, direction: str = "x") -> aniseed_toolkit.core.direction.Direction:
         """
         This will return a Direction instance for the given direction.
 
@@ -29,7 +29,7 @@ class GetDirectionClass(aniseed_toolkit.Tool):
         Return
             Direction class
         """
-        return aniseed_toolkit.direction.Direction(direction)
+        return aniseed_toolkit.core.direction.Direction(direction)
 
 
 class GetUpvectorDirection(aniseed_toolkit.Tool):
@@ -40,7 +40,7 @@ class GetUpvectorDirection(aniseed_toolkit.Tool):
         "Transforms",
     ]
 
-    def run(self, start: str = "", end: str = "", epsilon: float = 0.01) -> aniseed_toolkit.direction.Direction:
+    def run(self, start: str = "", end: str = "", epsilon: float = 0.01) -> aniseed_toolkit.core.direction.Direction:
         """
         This will attempt to return a Direction instance which represents the
         upvector direction of the chain between the start and end joint.
@@ -61,7 +61,7 @@ class GetUpvectorDirection(aniseed_toolkit.Tool):
         Returns:
             Direction instance
         """
-        return aniseed_toolkit.direction.get_upvector_direction(
+        return aniseed_toolkit.scene.joints.get_upvector_direction(
             start, end, epsilon
         )
 
@@ -84,4 +84,4 @@ class AimAtTool(aniseed_toolkit.Tool):
             at_this = selection_list[1]
             up_target = selection_list[2]
         print("up target : ", up_target)
-        aniseed_toolkit.transformation.aim_at(aim_this, at_this, aim_axis, up_axis, up_target)
+        aniseed_toolkit.scene.transforms.aim_at(aim_this, at_this, aim_axis, up_axis, up_target)

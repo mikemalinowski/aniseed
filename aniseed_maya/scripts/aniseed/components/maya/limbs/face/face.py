@@ -155,7 +155,7 @@ class FaceComponent(aniseed.RigComponent):
                 group="Joints",
             )
 
-        # -- The mixer (from aniseed_toolkit.transformation.TransformationMixer) is a special
+        # -- The mixer (aniseed_toolkit.rig.pose_mixer.TransformMixer) is a special
         # -- structure and node setup which allows for poses to be defined through collections
         # -- of transforms. The deformers are then blended additively to these transforms. This
         # -- allows for a face rig which feels like a morph target rig but is bone driven.
@@ -254,7 +254,7 @@ class FaceComponent(aniseed.RigComponent):
             # -- in the face_bones.json file
             bone_parent = created_joints.get(bone_description["parent"], joint_parent)
             bone = mref.get(
-                aniseed_toolkit.joints.create(
+                aniseed_toolkit.scene.joints.create(
                     description=bone_description["name"],
                     location=sides[bone_description["location"]],
                     parent=bone_parent.name() if bone_parent is not None else None,
@@ -308,7 +308,7 @@ class FaceComponent(aniseed.RigComponent):
 
         # -- Create the org
         org = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification=self.config.organisational,
                 description="face",
                 location=self.config.middle,
@@ -409,7 +409,7 @@ class FaceComponent(aniseed.RigComponent):
                 constraint.delete()
 
             # -- Create a control to drive the joint
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description="direct_" + data["name"],
                 location=data["location"],
                 parent=created_controls.get(
@@ -423,7 +423,7 @@ class FaceComponent(aniseed.RigComponent):
 
             # -- Hook up the constraints between the control
             # -- and the joint
-            aniseed_toolkit.constraints.parent_and_scale(
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 control.ctl,
                 joint,
                 maintain_offset=True,
@@ -450,10 +450,10 @@ class FaceComponent(aniseed.RigComponent):
 
             # -- Create a control which we will insert into the hierarchy
             # -- above the control created by the sub component
-            created_control = aniseed_toolkit.control.get(created_control)
+            created_control = aniseed_toolkit.rig.control.get(created_control)
             created_control_org = mref.get(created_control.org)
 
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description="direct_" + data["name"],
                 location=data["location"],
                 parent=created_control_org.parent().name(),
@@ -475,7 +475,7 @@ class FaceComponent(aniseed.RigComponent):
             lip_control = mouth_component.output(f"{section.title()} Lip Control").get()
             for control_label, control in direct_controls.items():
                 if f"{section}_lip_" in control_label:
-                    mref.get(aniseed_toolkit.control.get(control).org).set_parent(lip_control)
+                    mref.get(aniseed_toolkit.rig.control.get(control).org).set_parent(lip_control)
 
         # ----------------------------------------------------
         # -- Get the jaw as an mref object
@@ -501,7 +501,7 @@ class FaceComponent(aniseed.RigComponent):
         # -- Instance the mixer, but store a reference to the mixer in the component. This
         # -- allows any tools to inspect the component and know which mixer to interact
         # -- with.
-        mixer = aniseed_toolkit.transformation.TransformMixer(parent=org.name())
+        mixer = aniseed_toolkit.rig.pose_mixer.TransformMixer(parent=org.name())
         self.option("Mixer").set(mixer.node.name())
 
         # -- Cycle over all our direct controls and add them as deformers into our
@@ -509,7 +509,7 @@ class FaceComponent(aniseed.RigComponent):
         for plug_name, control in direct_controls.items():
 
             # -- Get the control, and then access the offset node
-            control_instance = aniseed_toolkit.control.get(control)
+            control_instance = aniseed_toolkit.rig.control.get(control)
             controller = mref.get(control_instance.ctl)
             control_offset = mref.get(control_instance.off)
 
@@ -676,7 +676,7 @@ class FaceComponent(aniseed.RigComponent):
                 # -- From the control get the control instance class and
                 # -- access the offset, zero and org
                 control_name = direct_controls[f"{label}_{location}"]
-                control_instance = aniseed_toolkit.control.get(control_name)
+                control_instance = aniseed_toolkit.rig.control.get(control_name)
 
                 # -- Create the proxy node. This is the node that has the constraints
                 # -- on which represents the behaviour.
@@ -718,7 +718,7 @@ class FaceComponent(aniseed.RigComponent):
 
                 # -- Finally we drive the weight of that constraint based on the
                 # -- attributes we expose to the user.
-                aniseed_toolkit.constraints.blend_weights(
+                aniseed_toolkit.scene.constraints.blend_weights(
                     jaw_control.attr(f"smooth_lips_{location}"),
                     cns,
                 )
@@ -757,10 +757,10 @@ class FaceComponent(aniseed.RigComponent):
             return None
 
         # -- Instance the mixer object and return it
-        return aniseed_toolkit.transformation.TransformMixer(node=mixer_name)
+        return aniseed_toolkit.rig.pose_mixer.TransformMixer(node=mixer_name)
 
 
-class HighLevelControlRig(aniseed_toolkit.facial_controls.FacialControlRig):
+class HighLevelControlRig(aniseed_toolkit.rigging.facial.FacialControlRig):
     """
     The high level control rig is a set of controls which ultimately drives
     the transformation mixer. This makes for a much nicer animator-friendly
@@ -997,7 +997,7 @@ class MixerTools:
 
             # -- Select the nodes and instigate the mirror
             mref.select(source_targets)
-            aniseed_toolkit.mirror.global_mirror(
+            aniseed_toolkit.scene.mirror.mirror_transforms(
                 transforms=[target.name() for target in source_targets],
                 name_replacement=[direction_mapping[0], direction_mapping[1]],
                 behaviour=True,

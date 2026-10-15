@@ -32,7 +32,7 @@ class CopySkinToUnskinnedMeshes(aniseed_toolkit.Tool):
         if not isinstance(unbound_meshes, list):
             unbound_meshes = [unbound_meshes]
 
-        aniseed_toolkit.skin.copy_skin_to_unbound_meshes(
+        aniseed_toolkit.scene.skin.copy_skin_to_unbound_meshes(
             skinned_mesh=skinned_mesh,
             unbound_meshes=unbound_meshes,
         )
@@ -47,7 +47,7 @@ class AddAllSkinJointsToAllSkins(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.add_all_skin_joints_to_all_skins()
+        aniseed_toolkit.scene.skin.add_all_skin_joints_to_all_skins()
 
 class AddAllSkinJointsToSelectedSkins(aniseed_toolkit.Tool):
 
@@ -58,6 +58,6 @@ class AddAllSkinJointsToSelectedSkins(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.add_all_skin_joints_to_target_meshes(
+        aniseed_toolkit.scene.skin.add_all_skin_joints_to_target_meshes(
             mc.ls(selection=True),
         )

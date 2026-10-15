@@ -17,4 +17,4 @@ class CreateLocatorAtCenterTool(aniseed_toolkit.Tool):
         Returns:
             The name of the created locator
         """
-        return aniseed_toolkit.transforms.create_locator_at_center()
+        return aniseed_toolkit.scene.transforms.create_locator_at_center()

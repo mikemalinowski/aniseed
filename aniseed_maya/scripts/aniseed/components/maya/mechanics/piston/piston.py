@@ -141,7 +141,7 @@ class PistonComponent(aniseed.RigComponent):
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
 
-        piston_root_ctl = aniseed_toolkit.control.create(
+        piston_root_ctl = aniseed_toolkit.rig.control.create(
             description=f"{prefix}PistonRoot",
             location=location,
             config=self.config,
@@ -150,7 +150,7 @@ class PistonComponent(aniseed.RigComponent):
             match_to=piston_root_jnt,
         )
 
-        piston_tip_ctl = aniseed_toolkit.control.create(
+        piston_tip_ctl = aniseed_toolkit.rig.control.create(
             description=f"{prefix}PistonTip",
             location=location,
             config=self.config,
@@ -159,7 +159,7 @@ class PistonComponent(aniseed.RigComponent):
             match_to=piston_tip_jnt,
         )
 
-        aim_root = aniseed_toolkit.transforms.create(
+        aim_root = aniseed_toolkit.scene.transforms.create(
             classification="piv",
             description=f"{prefix}PistonRootAim",
             location=location,
@@ -168,7 +168,7 @@ class PistonComponent(aniseed.RigComponent):
             match_to=piston_root_ctl.ctl,
         )
 
-        aim_tip = aniseed_toolkit.transforms.create(
+        aim_tip = aniseed_toolkit.scene.transforms.create(
             classification="piv",
             description=f"{prefix}PistonTipAim",
             location=location,
@@ -178,7 +178,7 @@ class PistonComponent(aniseed.RigComponent):
         )
 
         upvector = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="upv",
                 description=f"{prefix}PistonUpVector",
                 location=location,
@@ -190,7 +190,7 @@ class PistonComponent(aniseed.RigComponent):
 
         upvector_axis = self.option("Upvector Axis").get().upper()
         upvector.attr(f"translate{upvector_axis}").set(
-            aniseed_toolkit.units.from_cm(10),
+            aniseed_toolkit.core.units.from_cm(10),
         )
 
         # -- Each end aims at the opposite control, sharing the upvector

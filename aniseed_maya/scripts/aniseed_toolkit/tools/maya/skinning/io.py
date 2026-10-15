@@ -25,7 +25,7 @@ class ReadSkinData(aniseed_toolkit.Tool):
             None
         """
         mesh = mesh or cmds.ls(selection=True)[0]
-        return aniseed_toolkit.skin.skin_to_dict(mesh)
+        return aniseed_toolkit.scene.skin.skin_to_dict(mesh)
 
 
 class SaveSkinFile(aniseed_toolkit.Tool):
@@ -63,7 +63,7 @@ class SaveSkinFile(aniseed_toolkit.Tool):
             filepath = os.path.join(folderpath, f"{mesh}.skin")
             print("filepath : %s" % filepath)
             print("mesh : %s" % mesh)
-            aniseed_toolkit.skin.save(mesh, filepath)
+            aniseed_toolkit.scene.skin.save(mesh, filepath)
 
 
 class LoadSkinFile(aniseed_toolkit.Tool):
@@ -99,7 +99,7 @@ class LoadSkinFile(aniseed_toolkit.Tool):
         if not os.path.exists(filepath):
             raise FileNotFoundError(filepath)
 
-        return aniseed_toolkit.skin.load(mesh, filepath)
+        return aniseed_toolkit.scene.skin.load(mesh, filepath)
 
 
 class LoadSkinDirectory(aniseed_toolkit.Tool):
@@ -140,6 +140,6 @@ class LoadSkinDirectory(aniseed_toolkit.Tool):
             print("mesh : %s" % mesh_name)
             if cmds.objExists(mesh_name):
                 try:
-                    aniseed_toolkit.skin.load(mesh_name, filepath)
+                    aniseed_toolkit.scene.skin.load(mesh_name, filepath)
                 except:
                     print(f"did not apply to {mesh_name}")
