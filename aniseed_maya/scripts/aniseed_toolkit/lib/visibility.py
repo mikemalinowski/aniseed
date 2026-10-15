@@ -22,7 +22,7 @@ def hide(items: list[str] = None) -> None:
 
     for item in items:
 
-        if  cmds.nodeType(item, "joint"):
+        if cmds.nodeType(item) == "joint":
             cmds.setAttr(
                 f"{item}.drawStyle",
                 2,  # Invisible
