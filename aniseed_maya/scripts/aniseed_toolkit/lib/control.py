@@ -6,6 +6,7 @@ import mref
 from maya import cmds
 
 from . import shapes
+from ..registry import tool
 
 if typing.TYPE_CHECKING:
     import aniseed
@@ -266,6 +267,11 @@ def create(
     )
 
 
+@tool(
+    "Get Control",
+    classification="Rigging",
+    user_facing=False,
+)
 def get(node: str) -> Control:
     """
     This will instance a Control class for the given node
@@ -280,6 +286,10 @@ def get(node: str) -> Control:
     return Control.get(node)
 
 
+@tool(
+    "Set As Zero Transform",
+    classification="Rigging",
+)
 def set_as_zero_transform(node: str) -> None:
 
     # -- Get the node as a control object

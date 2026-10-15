@@ -4,6 +4,7 @@ import collections
 from maya import cmds
 
 from . import joints
+from ..registry import tool
 
 MIRROR_PLANES = {
     "Z": 'XY',
@@ -188,6 +189,11 @@ def _ask_for_rename_data():
 
 
 
+@tool(
+    "Invert Translation",
+    classification="Rigging",
+    categories=["Transforms"],
+)
 def invert_translation(transforms: list[str] = None) -> None:
     """
     This will invert the translation channels of a node

@@ -87,30 +87,6 @@ class GetShapeList(aniseed_toolkit.Tool):
         return aniseed_toolkit.resources.contents("shapes")
 
 
-class ReadShapeFromNode(aniseed_toolkit.Tool):
-
-    identifier = "Read Shape From Node"
-    classification = "Rigging"
-    user_facing = False
-
-    categories = [
-        "Shapes",
-    ]
-
-    def run(self, node: str = "") -> typing.Dict:
-        """
-        Looks at all the NurbsCurve shape nodes under  the given node
-        and attempts to read them into a dictionary format.
-
-        Args:
-            node: The node to seralise the shape data for
-
-        Returns:
-            dictionary
-        """
-        return aniseed_toolkit.shapes.shape_to_dict(node)
-
-
 class ReadShapeFromFile(aniseed_toolkit.Tool):
 
     identifier = "Read Shape From File"

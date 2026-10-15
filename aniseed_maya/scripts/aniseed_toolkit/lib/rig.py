@@ -1,8 +1,14 @@
 import aniseed
 from maya import cmds
 from . import control
+from ..registry import tool
 
 
+@tool(
+    "Get Controls",
+    classification="Animation",
+    user_facing=False,
+)
 def all_controls(namespace: str = "") -> list[str]:
     controls = []
 
@@ -17,6 +23,11 @@ def all_controls(namespace: str = "") -> list[str]:
     return controls
 
 
+@tool(
+    "Resolve Rig Node",
+    classification="Animation",
+    user_facing=False,
+)
 def get_rig_node(node: str = "") -> str:
     full_node_path = cmds.ls(node, long=True)[0].split("|")
 
@@ -35,6 +46,12 @@ def get(node):
     return aniseed.Rig(host=rig_node)
 
 
+@tool(
+    "Get Opposites",
+    classification="Animation",
+    categories=["Selection", "Controls"],
+    user_facing=False,
+)
 def opposing_controls(controls: list[str] or None = None) -> list[str]:
     """
     This will return the opposite controls for the given controls
@@ -77,6 +94,12 @@ def opposing_controls(controls: list[str] or None = None) -> list[str]:
 
     return opposites
 
+@tool(
+    "Get By Location",
+    classification="Animation",
+    categories=["Selection", "Controls"],
+    user_facing=False,
+)
 def controls_by_location(controls: list[str] or None = None) -> list[str]:
     """
     This will return the opposite controls for the given controls

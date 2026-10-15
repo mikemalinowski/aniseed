@@ -4,6 +4,7 @@ import qtility
 from maya import cmds
 
 from . import mirror
+from ..registry import tool
 
 SUPPORTED_TYPES = [
     "transform",
@@ -13,6 +14,11 @@ SUPPORTED_TYPES = [
 ]
 
 
+@tool(
+    "Get Joint Writer Supported Types",
+    classification="Rigging",
+    categories=["Joints"],
+)
 def get_supported_io_types() -> list[str]:
     """
     This will return a list of supported node types which are supported in
@@ -24,6 +30,12 @@ def get_supported_io_types() -> list[str]:
     return SUPPORTED_TYPES
 
 
+@tool(
+    "Serialise Nodes To Dict",
+    classification="Rigging",
+    categories=["Joints"],
+    user_facing=False,
+)
 def hierarchy_to_dict(nodes: list[str]) -> dict:
     """
     This will store the given nodes and their attributes to a dictionary
@@ -38,6 +50,12 @@ def hierarchy_to_dict(nodes: list[str]) -> dict:
     return _create_dataset_from_nodes(nodes)
 
 
+@tool(
+    "Deserialise Nodes From Dict",
+    classification="Rigging",
+    categories=["Joints"],
+    user_facing=False,
+)
 def dict_to_hierarchy(
         root_parent: str = "",
         dataset: typing.Dict = None,
@@ -70,6 +88,11 @@ def dict_to_hierarchy(
     )
 
 
+@tool(
+    "Write Joints File",
+    classification="Rigging",
+    categories=["Joints"],
+)
 def write_hierarchy_file(nodes: list[str] = None, filepath: str = None) -> None:
     """
     This will take the given nodes and serialise them to a json file

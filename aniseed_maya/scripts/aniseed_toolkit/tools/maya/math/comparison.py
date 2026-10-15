@@ -67,37 +67,3 @@ class FactorBetween(aniseed_toolkit.Tool):
             to_this=to_this,
             print_result=True,
         )
-
-
-class DirectionBetween(aniseed_toolkit.Tool):
-
-    identifier = "Direction Between"
-    classification = "Rigging"
-    user_facing = False
-    categories = [
-        "Math",
-    ]
-
-    def run(
-        self,
-        node_a: str = "",
-        node_b: str = "",
-        print_result: bool = True,
-    ) -> list[float]:
-        """
-        This will return a direction vector (normalised vector) between the
-        two nodes
-
-        Args:
-            node_a: The object to measure from
-            node_b: The object to measure to
-            print_result: If true, the result will be printed
-
-        Returns:
-            The direction vector between the two nodes
-        """
-        return aniseed_toolkit.transformation.direction_between(
-            node_a=node_a,
-            node_b=node_b,
-            print_result=True,
-        )

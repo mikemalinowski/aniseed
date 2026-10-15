@@ -66,17 +66,6 @@ class SaveSkinFile(aniseed_toolkit.Tool):
             aniseed_toolkit.skin.save(mesh, filepath)
 
 
-class ApplySkinData(aniseed_toolkit.Tool):
-
-    identifier = "Apply Skin Data"
-    classification = "Rigging"
-    categories = [
-        "Skinning",
-    ]
-    def run(self, mesh, weight_data) -> str:
-        return aniseed_toolkit.skin.dict_to_skin(mesh, weight_data)
-
-
 class LoadSkinFile(aniseed_toolkit.Tool):
 
     identifier = "Load Skin File"

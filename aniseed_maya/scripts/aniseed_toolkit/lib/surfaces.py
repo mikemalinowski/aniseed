@@ -1,4 +1,5 @@
 import maya.api.OpenMaya as om
+from ..registry import tool
 
 
 def _get_surface_fn(node_name):
@@ -16,6 +17,11 @@ def _get_surface_fn(node_name):
 
 
 
+@tool(
+    "Serialise Nurbs Surface",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def serialise(surface, relative_to=None):
     fn = _get_surface_fn(surface)
 
@@ -69,6 +75,11 @@ def serialise(surface, relative_to=None):
     }
 
 
+@tool(
+    "Construct Nurbs Surface",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def construct(data, name="reconstructedSurface", parent_transform=None):
     degree_u = data["degreeU"]
     degree_v = data["degreeV"]

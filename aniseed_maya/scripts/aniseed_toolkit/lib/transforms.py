@@ -1,10 +1,16 @@
 import typing
 from maya import cmds
+from ..registry import tool
 
 if typing.TYPE_CHECKING:
     import aniseed
 
 
+@tool(
+    "Create Basic Transform",
+    classification="Creation",
+    user_facing=False,
+)
 def create(
         classification: str,
         description: str,

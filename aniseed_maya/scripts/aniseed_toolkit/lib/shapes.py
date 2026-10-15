@@ -9,6 +9,7 @@ from . import units
 import maya.api.OpenMaya as om
 
 from .. import resources
+from ..registry import tool
 
 def apply_color(node: str = "", r: float = 0, g: float = 0, b: float = 0) -> None:
     """
@@ -387,6 +388,12 @@ def global_mirror(mapping: str = "_LF:_RT", axis="x"):
         )
 
 
+@tool(
+    "Read Shape From Node",
+    classification="Rigging",
+    categories=["Shapes"],
+    user_facing=False,
+)
 def shape_to_dict(node: str = "") -> typing.Dict:
     """
     Looks at all the NurbsCurve shape nodes under  the given node

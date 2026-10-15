@@ -1,8 +1,14 @@
 from maya import cmds
 
 from . import shapes
+from ..registry import tool
 
 
+@tool(
+    "Create Pins",
+    classification="Rigging",
+    categories=["Pinning"],
+)
 def pin(joints: list[str] = None) -> list[str]:
     """
     This will create a pin for the given joints. Pins are used to
@@ -105,6 +111,12 @@ def pin(joints: list[str] = None) -> list[str]:
     return pins
 
 
+@tool(
+    "Get Joint From Pin",
+    classification="Rigging",
+    categories=["Pinning"],
+    user_facing=False,
+)
 def get_pinned_nodes(item: str = "") -> str or None:
     """
     This will attempt to find the joint from a pin setup. If the joint
@@ -126,6 +138,12 @@ def get_pinned_nodes(item: str = "") -> str or None:
     return None
 
 
+@tool(
+    "Get Pin From Node",
+    classification="Rigging",
+    categories=["Pinning"],
+    user_facing=False,
+)
 def get_pin(item: str = "") -> str or None:
     """
     This will return the pin control for the given node. If the pin control
@@ -171,6 +189,11 @@ def is_pinned(item: str = None) -> bool:
     return False
 
 
+@tool(
+    "Remove Pins",
+    classification="Rigging",
+    categories=["Pinning"],
+)
 def remove_pins(items: list[str] = None) -> None:
     """
     This will remove any pins which are pinning any of the nodes
@@ -208,6 +231,11 @@ def remove_pins(items: list[str] = None) -> None:
         )
 
 
+@tool(
+    "Remove All Pins",
+    classification="Rigging",
+    categories=["Pinning"],
+)
 def remove_all_pins():
     """
     This will remove all pins in the entire scene
@@ -216,6 +244,11 @@ def remove_all_pins():
         remove_pins([pin])
 
 
+@tool(
+    "Pin Hierarchy",
+    classification="Rigging",
+    categories=["Pinning"],
+)
 def pin_hierarchy(root: str = None) -> list[str]:
     """
     This will pin all joints in the entire hierarchy

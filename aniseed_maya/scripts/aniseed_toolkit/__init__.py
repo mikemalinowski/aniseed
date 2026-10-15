@@ -2,10 +2,11 @@
 This aniseed toolkit is a tool which exposes various
 useful rigging tools and features.
 """
-from .core import Tool
-from .core import ToolBox
-from .core import run
-from .core import register
+from .registry import Tool
+from .registry import ToolBox
+from .registry import run
+from .registry import register
+from .registry import tool
 from .resources import register_resource_path
 from .lib import *
 from .lib import rigging

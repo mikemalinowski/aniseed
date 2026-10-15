@@ -1,8 +1,15 @@
 import aniseed_toolkit
 from maya import cmds
 import maya.api.OpenMaya as om
+from ..registry import tool
 
 
+@tool(
+    "MObject Name",
+    classification="Rigging",
+    categories=["Misc"],
+    user_facing=False,
+)
 def get_name(mobject: om.MObject = None):
     """
     This will return the name of the MObject pointer
@@ -25,6 +32,11 @@ def get_name(mobject: om.MObject = None):
         raise ValueError(f"Could not get dependency node for {mobject}")
 
 
+@tool(
+    "Get MObject",
+    categories=["Misc"],
+    user_facing=False,
+)
 def get_mobject(name: str = "") -> om.MFnDependencyNode:
     """
     Given the name of a node, this will return the MObject representation. This means
@@ -50,6 +62,10 @@ def get_mobject(name: str = "") -> om.MFnDependencyNode:
         raise RuntimeError(f"Could not find node {name}")
 
 
+@tool(
+    "Get DagPath",
+    user_facing=False,
+)
 def get_dagpath(name: str = "") -> om.MDagPath or None:
     """
     This will return the name of the MObject pointer

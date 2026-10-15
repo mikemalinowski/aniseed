@@ -5,6 +5,7 @@ from maya.api import OpenMaya as om
 
 from . import direction
 from . import units
+from ..registry import tool
 
 
 def timed_function_call(func):
@@ -95,6 +96,12 @@ def factor_between(node: str = "", from_this: str = "", to_this: str = "", print
     return distance_factor
 
 
+@tool(
+    "Direction Between",
+    classification="Rigging",
+    categories=["Math"],
+    user_facing=False,
+)
 def direction_between(
     node_a: str = "",
     node_b: str = "",
@@ -314,6 +321,11 @@ def calculate_four_point_spline_positions(
     cmds.delete(quad_curve)
     return positions
 
+@tool(
+    "Interpolate Vectors",
+    categories=["Transforms"],
+    user_facing=False,
+)
 def interpolate_vector(
     vector_a: list[float],
     vector_b: list[float],
@@ -334,6 +346,10 @@ def interpolate_vector(
 
 
 
+@tool(
+    "Position Between",
+    categories=["Transforms"],
+)
 def position_between(
     node: str = "",
     from_this: str = "",
@@ -399,6 +415,11 @@ def position_between(
     )
 
 
+@tool(
+    "Get Relative Matrix",
+    categories=["Transforms"],
+    user_facing=False,
+)
 def get_relative_matrix(node: str = "", relative_to: str = "") -> list[float]:
     """
     This will get a matrix which is the relative matrix between the relative_to
@@ -450,6 +471,11 @@ def get_relative_matrix(node: str = "", relative_to: str = "") -> list[float]:
     return relative_matrix
 
 
+@tool(
+    "Apply Relative Matrix",
+    categories=["Transforms"],
+    user_facing=False,
+)
 def apply_relative_matrix(node: str, matrix: list[float], relative_to: str = ""):
     """
     This will apply the matrix to the node as if the node were a child

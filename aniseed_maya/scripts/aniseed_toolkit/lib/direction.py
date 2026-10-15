@@ -1,6 +1,7 @@
 from maya import cmds
 
 from . import joints
+from ..registry import tool
 
 
 class Direction:
@@ -142,6 +143,11 @@ class Direction:
         return None
 
 
+@tool(
+    "Get Chain Facing Direction",
+    categories=["Transforms"],
+    user_facing=False,
+)
 def get_chain_facing_direction(start: str = "", end: str = "", epsilon: float = 0.01) -> Direction:
     """
     This will return a Direction class which represents the facing direction

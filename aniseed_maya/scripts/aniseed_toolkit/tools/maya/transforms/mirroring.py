@@ -41,26 +41,3 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
             name_replacement=name_replacement,
             rotate_flip=flip_xy_rotations,
         )
-
-
-class InvertTranslationTool(aniseed_toolkit.Tool):
-
-    identifier = "Invert Translation"
-    classification = "Rigging"
-    categories = [
-        "Transforms",
-    ]
-
-    def run(self, transforms: list[str] = None) -> None:
-        """
-        This will invert the translation channels of a node
-
-        Args:
-            transforms: List of transforms to invert the translation of
-
-        Returns:
-            None
-        """
-        return aniseed_toolkit.mirror.invert_translation(
-            transforms=transforms or mc.ls(selection=True),
-        )

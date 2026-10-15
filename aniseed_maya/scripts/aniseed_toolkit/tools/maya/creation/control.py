@@ -53,30 +53,3 @@ class CreateControl(aniseed_toolkit.Tool):
             rotate_shape=rotate_shape,
             classification_override=classification_override
         )
-
-
-class GetControl(aniseed_toolkit.Tool):
-    identifier = "Get Control"
-    classification = "Rigging"
-    user_facing = False
-
-    def run(self, node: str) -> "Control":
-        """
-        This will instance a Control class for the given node
-
-        Args:
-            node: The node to instance a control class for (it can be any part of a
-                control hierarchy, but MUST be part of a valid control hierarchy).
-
-        Returns:
-            Control instance
-        """
-        return aniseed_toolkit.control.get(node)
-
-
-class ResetControlAsZero(aniseed_toolkit.Tool):
-    identifier = "Set As Zero Transform"
-    classification = "Rigging"
-
-    def run(self, node: str) -> None:
-        return aniseed_toolkit.control.set_as_zero_transform(node)

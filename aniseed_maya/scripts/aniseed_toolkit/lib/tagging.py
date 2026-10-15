@@ -1,8 +1,14 @@
 from maya import cmds
+from ..registry import tool
 
 _TAG_ATTRIBUTE_ = "aniseed_tagging"
 
 
+@tool(
+    "Tag Node",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def tag(node: str = "", tag: str = "") -> None:
     """
     Args:
@@ -34,6 +40,11 @@ def tag(node: str = "", tag: str = "") -> None:
     )
 
 
+@tool(
+    "Find First Child With Tag",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
 
     nodes = cmds.listRelatives(
@@ -60,6 +71,11 @@ def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
             return local_name
 
 
+@tool(
+    "Find All Children With Tag",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def all_children(node: str = "", tag: str = "", include_self=False) -> list:
 
     nodes = cmds.listRelatives(
@@ -88,6 +104,11 @@ def all_children(node: str = "", tag: str = "", include_self=False) -> list:
     return results
 
 
+@tool(
+    "Find All With Tag",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def find_all(tag: str = "", include_self=False) -> None:
 
     nodes = cmds.ls()
@@ -101,6 +122,11 @@ def find_all(tag: str = "", include_self=False) -> None:
     return results
 
 
+@tool(
+    "Has Tag",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def has_tag(node: str = "", tag: str = "") -> bool:
     existing_tags = get_tags(node)
 
@@ -109,6 +135,11 @@ def has_tag(node: str = "", tag: str = "") -> bool:
     return False
 
 
+@tool(
+    "Get Tag Data",
+    classification="Rigging",
+    categories=["Visibility"],
+)
 def get_tags(node: str = "") -> list[str]:
 
     attribute_name = f"{node}.{_TAG_ATTRIBUTE_}"

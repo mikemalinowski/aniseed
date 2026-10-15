@@ -3,11 +3,17 @@ import mref
 from maya import cmds
 
 from . import transformation
+from ..registry import tool
 
 if typing.TYPE_CHECKING:
     import aniseed
 
 
+@tool(
+    "Create Joint",
+    classification="Rigging",
+    user_facing=False,
+)
 def create(
     description: str,
     location: str,
@@ -61,6 +67,11 @@ def create(
     return joint_
 
 
+@tool(
+    "Create Spread Joints",
+    classification="Rigging",
+    user_facing=False,
+)
 def create_spread(
     root_joint: str,
     tip_joint: str,
@@ -473,6 +484,11 @@ def chain_length(start: str = "", end: str = "", log_result: bool = True) -> flo
     return distance
 
 
+@tool(
+    "Move Joint Rotations To Orients",
+    classification="Rigging",
+    categories=["Joints"],
+)
 def move_rotations_to_orients(joints: list[str] = None) -> None:
     """
     Moves the rotations on the given joints to the joint orients
@@ -533,6 +549,11 @@ def move_rotations_to_orients(joints: list[str] = None) -> None:
     return None
 
 
+@tool(
+    "Move Joint Orients to Rotation",
+    classification="Rigging",
+    categories=["Joints"],
+)
 def move_orients_to_rotation(joints: list[str] = None) -> None:
     """
     Moves the values from the joint orient of the node to the rotation

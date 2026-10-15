@@ -70,3 +70,61 @@ on its own.
 - **Alternatives:** skip the matching entirely when match_to is None. This is
   cleaner, but could introduce floating point noise in the local transform values
   compared to existing rigs.
+
+## D4. Fixing the broken library functions (phase 1, open decision 1)
+
+- **Chosen:** fixed, one commit each, so each fix can be reverted on its own.
+  - tagging.find_all
+  - visibility.hide and visibility.show
+  - Direction.set_direction
+  - joints.replicate_chain with replacements
+  - skin.load return value
+  - pinning.pin shape and colour
+- **Details:**
+  - pinning.pin now uses red (255, 0, 0) for the pin shapes. The code passed r=1
+    to a function that works in 0-255, which is clearly meant as red.
+  - Direction.set_direction now accepts "x", "Positive X", "Negative X" and "-x"
+    style strings, and keeps NegativeZ as 6.
+- **Why:** each one either raised or returned a wrong result on every call, so no
+  working behaviour can depend on them.
+- **Alternatives:**
+  - Leave the bugs and only document them.
+  - For the pin colour, use another colour or a darker red.
+
+
+## D5. Shape tools and their node argument (phase 1)
+
+- **Chosen:** Apply Shape, Rotate/Offset/Scale Shapes and Apply Shape Color act on
+  the given node, and only fall back to the selection when no node is given.
+- **Why:**
+  - They documented a node argument but always ignored it.
+  - This was why "Load Rig Control Shapes From File" applied every stored shape
+    to the current selection.
+- **Alternatives:** keep the tools selection-only and remove the node argument.
+
+
+## D6. Misspelled tool identifier (phase 2)
+
+- **Chosen:** the "Get Upvector Direction" tool declared `identifer` (sic), so it
+  was registered with an empty identifier. It is now registered as "Get Upvector
+  Direction".
+- **Why:** a tool with an empty identifier cannot be used deliberately.
+- **Alternatives:** none sensible.
+
+
+## D7. Which wrapper tools become @tool functions (phase 2)
+
+- **Chosen:**
+  - 41 of the 64 thin wrapper tools had exactly the library function's signature
+    and no class customisation. They were replaced by `@tool(...)` on the library
+    function, with the same identifier, version, flags and categories (the tool
+    registry snapshot proves it).
+  - The other 23 stay as Tool classes because they declare ui_elements (custom
+    widgets), different parameter defaults/names, or wrap a class. Making those
+    functions would change the forms users see in the toolkit ui.
+  - The documentation the toolkit shows for a converted tool is now the library
+    function's docstring.
+- **Alternatives:**
+  - Give @tool a `ui_elements` hook and an `adapter` signature, then convert the
+    remaining 23 as well.
+  - Keep all 64 wrapper classes.

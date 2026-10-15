@@ -9,6 +9,7 @@ from maya.api import OpenMaya as om
 from maya.api import OpenMayaAnim as om_anim
 
 from . import mutils
+from ..registry import tool
 
 
 def copy_skin_to_unbound_meshes(skinned_mesh: str = "", unbound_meshes: list[str] = None) -> None:
@@ -388,6 +389,11 @@ def save(mesh: str = "", filepath: str = ""):
         )
 
 
+@tool(
+    "Apply Skin Data",
+    classification="Rigging",
+    categories=["Skinning"],
+)
 def dict_to_skin(mesh, weight_data) -> str:
 
     # # -- Get the vertex count
