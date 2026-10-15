@@ -95,7 +95,7 @@ def find_all(tag: str = "", include_self=False) -> None:
 
     results = list()
     for node in nodes:
-        if has_tag(node):
+        if has_tag(node, tag):
             results.append(node)
 
     return results
