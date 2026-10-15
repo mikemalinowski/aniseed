@@ -1,5 +1,6 @@
-import aniseed_toolkit
 from maya import cmds
+
+from . import shapes
 
 
 def pin(joints: list[str] = None) -> list[str]:
@@ -52,35 +53,16 @@ def pin(joints: list[str] = None) -> list[str]:
         except:
             radius = 1
 
-        aniseed_toolkit.run(
-            "Apply Shape",
-            pin_node,
-            "core_pin",
-        )
+        # -- The pin shows as a pin shape, with a sphere for the offset
+        shapes.load_shape(pin_node, "core_pin")
+        shapes.scale(pin_node, scale_by=radius * 8)
 
-        aniseed_toolkit.run(
-            "Scale Shapes",
-            pin_node,
-            radius * 8,
-        )
+        shapes.load_shape(pin_offset, "core_sphere")
+        shapes.scale(pin_offset, scale_by=radius * 3)
 
-        aniseed_toolkit.run(
-            "Apply Shape",
-            pin_offset,
-            "core_sphere",
-        )
-
-        try:
-            aniseed_toolkit.run(
-                "Scale Shapes",
-                pin_offset,
-                radius * 3,
-            )
-        except ValueError:
-            pass
-
+        # -- Colours are given in the 0-255 range
         for node in [pin_node, pin_offset]:
-            aniseed_toolkit.run("Apply Shape Color", node, r=1, g=0, b=0)
+            shapes.apply_color(node, r=255, g=0, b=0)
 
         cmds.xform(
             pin_node,
