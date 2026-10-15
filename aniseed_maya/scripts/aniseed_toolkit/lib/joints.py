@@ -287,13 +287,12 @@ def replicate_chain(
 
         if replacements:
             for replace_this, with_this in replacements.items():
-                new_name = new_joint.replace(
-                    replace_this,
-                    with_this,
-                )
-                new_name = cmds.rename(
+                new_joint = cmds.rename(
                     new_joint,
-                    new_name,
+                    new_joint.replace(
+                        replace_this,
+                        with_this,
+                    ),
                 )
 
         # -- The first joint we always have to simply match
