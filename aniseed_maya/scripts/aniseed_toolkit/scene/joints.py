@@ -873,6 +873,44 @@ def reparent_unknown_children(known_joints, new_parent):
     return reparented_joints
 
 
+def get_chain(root: str, tip: str, extra_joints: list = None) -> list[str]:
+    """
+    Returns the joints from root to tip (inclusive) followed by any extra
+    joints, such as twist joints. Empty entries in extra_joints are skipped.
+
+    Args:
+        root: The highest level joint of the chain
+        tip: The lowest level joint of the chain
+        extra_joints: Optional list of further joints to append
+
+    Returns:
+        List of joint names, or an empty list if root or tip does not exist
+    """
+    if not mref.objExists(root) or not mref.objExists(tip):
+        return []
+
+    chain_joints = get_between(root, tip)
+    chain_joints += extra_joints or []
+
+    return [joint for joint in chain_joints if joint]
+
+
+def remove_chain(root: str, chain_joints: list) -> None:
+    """
+    Deletes the joint hierarchy below (and including) root. Any children of
+    the chain joints which are not themselves chain joints are first moved
+    to the parent of root, so they survive the deletion.
+
+    Args:
+        root: The root joint of the chain to delete
+        chain_joints: All the joints which belong to the chain
+    """
+    new_parent = mref.get(root).parent()
+    reparent_unknown_children(chain_joints, new_parent)
+
+    mref.delete(root)
+
+
 def create_twist_joints(start, end, twist_count, description, location, config, down_bone_axis="x"):
     """
     This will create an even spread of twist joints which are a child

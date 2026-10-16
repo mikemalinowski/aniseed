@@ -7,7 +7,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class InsertParentControlComponent(aniseed.mixins.InsertControlMixin, aniseed.RigComponent):
+class InsertParentControlComponent(aniseed.RigComponent):
     """
     Creates a control as a child of the nodes parent and then makes
     the given node a child of the new control.
@@ -17,8 +17,8 @@ class InsertParentControlComponent(aniseed.mixins.InsertControlMixin, aniseed.Ri
 
     def __init__(self, *args, **kwargs):
         """
-        Declares the "Node" input and the shared control attributes (match to,
-        location etc) from the insert control mixin.
+        Declares the "Node" input, the match, naming and shape options, and the
+        "Control" output.
         """
         super().__init__(*args, **kwargs)
 
@@ -34,18 +34,75 @@ class InsertParentControlComponent(aniseed.mixins.InsertControlMixin, aniseed.Ri
             group="Required Joint",
         )
 
-        self._declare_control_attributes(
-            match_description=(
+        self.declare_option(
+            name="Match Transform To",
+            description=(
                 "Optional node whose world transform the new control "
                 "will be matched to. Leave empty to match the input "
                 "node's parent."
             ),
-            location_description=(
+            value="",
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Name",
+            description="Descriptive name token used when generating the control's name.",
+            value="",
+            group="Naming",
+            pre_expose=True,
+        )
+
+        self.declare_option(
+            name="Location",
+            description=(
                 "Location token (e.g. c/l/r/f/b) used when generating "
                 "the control's name. Inherited from the parent "
                 "component when added to the stack."
             ),
+            value=self.config.middle,
+            group="Naming",
+            should_inherit=True,
+            pre_expose=True,
         )
+
+        self.declare_option(
+            name="Shape",
+            description="Aniseed-toolkit control shape used for the inserted control.",
+            value="core_cube",
+            group="Visuals",
+        )
+
+        self.declare_output(
+            "Control",
+            description="The newly-created control node.",
+        )
+
+    def option_widget(self, option_name: str):
+        """
+        Returns a location selector for "Location", a shape selector for
+        "Shape" and an object selector for "Match Transform To", or None
+        otherwise.
+        """
+        if option_name == "Location":
+            return aniseed.widgets.LocationSelector(config=self.config)
+
+        if option_name == "Shape":
+            return aniseed.widgets.ShapeSelector(
+                default_item=self.option("Shape").get(),
+            )
+
+        if option_name == "Match Transform To":
+            return aniseed.widgets.ObjectSelector(component=self)
+
+    def suggested_label(self):
+        """
+        Builds a label from the "Name" and upper-cased "Location" options.
+        """
+        name = self.option("Name").get()
+        location = self.option("Location").get().upper()
+
+        return f"Insert {name} Control {location}"
 
     def input_widget(self, requirement_name: str):
         """
@@ -73,10 +130,16 @@ class InsertParentControlComponent(aniseed.mixins.InsertControlMixin, aniseed.Ri
         node_parent = node.parent()
         parent_name = node_parent.full_name() if node_parent else None
 
-        control = self._create_control(
+        control = aniseed_toolkit.rig.control.create(
+            description=self.option("Name").get(),
+            location=self.option("Location").get(),
             parent=parent_name,
-            default_match_to=parent_name,
+            config=self.config,
+            shape=self.option("Shape").get(),
+            match_to=self.option("Match Transform To").get() or parent_name,
         )
+        self.output("Control").set(control.ctl)
+
         node.set_parent(control.ctl)
 
         return True

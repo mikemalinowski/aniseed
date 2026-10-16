@@ -124,8 +124,8 @@ Moves into aniseed (component plumbing, not general rigging):
 
 | Current | New home in aniseed |
 |---|---|
-| component.JointChainMixin | aniseed.mixins.joint_chain |
-| control_mixins.InsertControlMixin, SingularControlMixin | aniseed.mixins.controls |
+| component.JointChainMixin | removed (D23): each limb has its own methods, using scene.joints.get_chain / remove_chain |
+| control_mixins.InsertControlMixin, SingularControlMixin | removed (D23): declarations live in each component, using rig.control.create / create_with_offset |
 | component.add_twister | aniseed.builders.add_twister |
 | space.add_space_switch, setup_fk_worldspace_switches, setup_fk_transform_worldspace_switches | aniseed.builders (they create Space Switch components) |
 | component.mirror | aniseed.builders.mirror_component |

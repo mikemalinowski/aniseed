@@ -16,7 +16,7 @@ import aniseed_toolkit
 foot = aniseed_toolkit.rigging.foot
 
 
-class LegComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
+class LegComponent(aniseed.RigComponent):
     """
     This is some documentation that the user will see. You should adjust the guides...
     """
@@ -34,11 +34,8 @@ class LegComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
         "Toe",
     ]
 
-    chain_root_input = "Leg Root"
-    chain_tip_input = "Toe"
+    # -- The tags of the foot guides, each held in a "<tag> Guide" input
     guide_tags = foot.PIVOT_TAGS
-    delete_guides_on_removal = True
-    mirror_guides = True
 
     def __init__(self, *args, **kwargs):
         """
@@ -336,6 +333,55 @@ class LegComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
         self.create_snap()
         self.create_twists()
         self.set_outputs()
+
+    def all_joints(self):
+        """
+        Returns all the joints this component affects: the leg root to toe
+        chain followed by the upper and lower twist joints.
+        """
+        return aniseed_toolkit.scene.joints.get_chain(
+            self.input("Leg Root").get(),
+            self.input("Toe").get(),
+            extra_joints=(
+                (self.input("Upper Twist Joints").get() or [])
+                + (self.input("Lower Twist Joints").get() or [])
+            ),
+        )
+
+    def all_guides(self):
+        """
+        Returns the foot guide transforms for this component
+        """
+        return [
+            self.input(f"{guide_tag} Guide").get()
+            for guide_tag in self.guide_tags
+        ]
+
+    def on_removed_from_stack(self):
+        """
+        When the component is removed from the stack we remove its joints,
+        re-parenting any children which do not belong to the component, and
+        delete the foot guides.
+        """
+        aniseed_toolkit.scene.joints.remove_chain(
+            self.input("Leg Root").get(),
+            self.all_joints(),
+        )
+        mref.delete(self.all_guides())
+
+    def user_func_create_mirror(self):
+        """
+        This will create a mirrored version of the component, including the
+        foot guides
+        """
+        aniseed.builders.mirror_component(
+            component_instance=self,
+            transforms=self.all_guides() + self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Leg Root").get()).parent().name(),
+            input_overrides={"Leg Root": ""},
+        )
 
     def user_functions(self):
         """

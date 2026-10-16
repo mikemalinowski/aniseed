@@ -418,6 +418,80 @@ def add_offset_control(
     )
 
 
+def create_with_offset(
+        description: str,
+        location: str,
+        config: "aniseed.RigConfiguration",
+        shape: str,
+        parent: str,
+        match_to: str,
+        align_to_world: bool = False,
+        add_offset: bool = False,
+        offset_visibility_toggle: bool = False,
+) -> typing.Tuple["Control", typing.Optional["Control"]]:
+    """
+    Creates a control and, optionally, an offset control beneath it, both
+    matched to the same node.
+
+    Args:
+        description: Descriptive part of the control names. "_offset" is
+            appended for the offset control
+        location: The location of the controls
+        config: The rig configuration instance
+        shape: The shape to apply to both controls
+        parent: The node the control's org is parented under
+        match_to: The node to match both controls' transforms to
+        align_to_world: If True, the control's org is given a world rotation
+            of [0, 0, 0] before the offset control is created
+        add_offset: If True, an offset control is created under the control
+        offset_visibility_toggle: If True (and an offset control is created),
+            a non-keyable "show_offset" attribute on the control drives the
+            visibility of the offset control's shapes
+
+    Returns:
+        A tuple of the control and the offset control (None when add_offset
+        is False)
+    """
+    control = create(
+        description=description,
+        location=location,
+        config=config,
+        shape=shape,
+        parent=parent,
+        match_to=match_to,
+    )
+
+    if align_to_world:
+        mref.get(control.org).set_rotation([0, 0, 0], space="world")
+
+    if not add_offset:
+        return control, None
+
+    if offset_visibility_toggle:
+        show_offset = mref.get(control.ctl).add_attribute(
+            "show_offset",
+            value=False,
+            attribute_type="bool",
+            keyable=False,
+        )
+        show_offset.set(channelBox=True)
+
+    offset_control = create(
+        description=description + "_offset",
+        location=location,
+        config=config,
+        shape=shape,
+        parent=control.ctl,
+        match_to=match_to,
+    )
+
+    if offset_visibility_toggle:
+        for shape_node in mref.get(offset_control.ctl).shapes():
+            show_offset.connect(shape_node.attr("visibility"))
+
+    return control, offset_control
+
+
 def has_curve_shapes(node) -> bool:
     """
     Returns True if the given node has at least one nurbsCurve shape.

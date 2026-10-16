@@ -1,19 +1,18 @@
 """
 Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
 
-Everything here now lives in: aniseed.builders, aniseed.dialogs, aniseed.mixins.joint_chain
+Everything here now lives in: aniseed.builders, aniseed.dialogs
 """
 import warnings
 
 
 warnings.warn(
-    f"{__name__} is deprecated, use aniseed.builders, aniseed.dialogs, aniseed.mixins.joint_chain",
+    f"{__name__} is deprecated, use aniseed.builders, aniseed.dialogs",
     DeprecationWarning,
     stacklevel=2,
 )
 
 _LAZY = {
-    'JointChainMixin': ('aniseed.mixins.joint_chain', 'JointChainMixin'),
     'add_twister': ('aniseed.builders', 'add_twister'),
     'mirror': ('aniseed.builders', 'mirror_component'),
     'request_count': ('aniseed.dialogs', 'request_count'),

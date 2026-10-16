@@ -15,16 +15,13 @@ import collections
 import aniseed_toolkit
 
 
-class ArmComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
+class ArmComponent(aniseed.RigComponent):
 
     identifier = "Limb : Arm"
     icon = os.path.join(
         os.path.dirname(__file__),
         "arm.png",
     )
-
-    chain_root_input = "Shoulder"
-    chain_tip_input = "Hand"
 
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
@@ -223,6 +220,43 @@ class ArmComponent(aniseed.mixins.JointChainMixin, aniseed.RigComponent):
 
         if requirement_name in ["Upper Twist Joints", "Lower Twist Joints"]:
             return aniseed.widgets.ObjectList()
+
+    def all_joints(self):
+        """
+        Returns all the joints this component affects: the shoulder to hand
+        chain followed by the upper and lower twist joints.
+        """
+        return aniseed_toolkit.scene.joints.get_chain(
+            self.input("Shoulder").get(),
+            self.input("Hand").get(),
+            extra_joints=(
+                (self.input("Upper Twist Joints").get() or [])
+                + (self.input("Lower Twist Joints").get() or [])
+            ),
+        )
+
+    def on_removed_from_stack(self):
+        """
+        When the component is removed from the stack we remove its joints,
+        re-parenting any children which do not belong to the component.
+        """
+        aniseed_toolkit.scene.joints.remove_chain(
+            self.input("Shoulder").get(),
+            self.all_joints(),
+        )
+
+    def user_func_create_mirror(self):
+        """
+        This will create a mirrored version of the component
+        """
+        aniseed.builders.mirror_component(
+            component_instance=self,
+            transforms=self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Shoulder").get()).parent().name(),
+            input_overrides={"Shoulder": ""},
+        )
 
     def user_functions(self) -> typing.Dict[str, callable]:
         """

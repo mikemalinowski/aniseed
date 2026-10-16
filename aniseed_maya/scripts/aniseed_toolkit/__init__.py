@@ -55,7 +55,6 @@ _OLD_MODULES = [
     "constraints",
     "containts",
     "control",
-    "control_mixins",
     "control_queries",
     "direction",
     "facial_controls",

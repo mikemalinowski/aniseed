@@ -206,8 +206,9 @@ on its own.
     add_twister, create_joint_from_selection.
   - aniseed.dialogs: request_count and the option file dialogs.
   - aniseed.component_outputs.
-  - aniseed.mixins: JointChainMixin, InsertControlMixin and
-    SingularControlMixin, alongside MirrorMixin.
+  - ~~aniseed.mixins: JointChainMixin, InsertControlMixin and
+    SingularControlMixin, alongside MirrorMixin.~~ Superseded by D23: those
+    three mixins were removed and MirrorMixin is the only mixin.
   - The FacialControlRig stayed in the toolkit (rigging.facial) because it has no
     aniseed dependency.
 - **Alternatives:**
@@ -380,3 +381,28 @@ on its own.
     `__getattr__` map;
   - bump to 4.0.
 - **Alternative:** remove them now if no external scripts use the old paths.
+
+
+## D23. No mixins other than MirrorMixin (user request, after phase 6)
+
+- **Chosen:** JointChainMixin, InsertControlMixin and SingularControlMixin were
+  removed. They were introduced by the component cleanup, not the original code.
+  - Shared logic became plain toolkit helpers that take values, not components:
+    - `scene.joints.get_chain(root, tip, extra_joints)`;
+    - `scene.joints.remove_chain(root, chain_joints)`;
+    - `rig.control.create_with_offset(...)`, which returns
+      `(control, offset_control_or_None)`.
+  - Each component now has its own `all_joints`, `all_guides` (Leg and Tri Leg
+    only), `on_removed_from_stack`, `user_func_create_mirror`, widget,
+    `is_valid` and `suggested_label` methods. These call the helpers above.
+  - The option, input and output declarations are copied into each component
+    rather than shared, as the user chose, so every component file lists all its
+    own attributes.
+  - `aniseed_toolkit.lib.control_mixins` and the `JointChainMixin` entry of the
+    `lib.component` shim were deleted, not deprecated. They never existed before
+    this refactor, and nothing had been pushed.
+  - Arm no longer has an `all_guides` method. The mixin's version always returned
+    `[]`, nothing calls it, and the original Arm did not have one.
+- **Alternative:** a toolkit function that declares the shared attributes on a
+  component passed in (e.g. `declare_singular_attributes(component, ...)`). That
+  avoids duplicated declarations but is a mixin in all but name.
