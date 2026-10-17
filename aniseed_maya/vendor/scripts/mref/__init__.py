@@ -19,6 +19,10 @@ from .core import ReferenceList
 from . import time
 from . import constants
 from . import wrapping
+from . import types
+
+from .stubs import generate_stubs
+from .documentation import generate_docs
 
 from maya import cmds
 from maya import mel

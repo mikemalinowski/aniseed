@@ -31,6 +31,9 @@ def run(verbosity: int = 2, target: str = None) -> unittest.TestResult:
         suite = loader.discover(
             start_dir=os.path.dirname(__file__),
             pattern="test_*.py",
+            # -- Import tests as mref.tests.test_x rather than top-level test_x
+            # -- modules, so dropping the mref package also drops the tests
+            top_level_dir=os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
         )
 
     return unittest.TextTestRunner(verbosity=verbosity).run(suite)

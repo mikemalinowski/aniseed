@@ -21,3 +21,10 @@ class MayaObject(mref.Trait):
         Returns the mobject for this object
         """
         return self._pointer
+
+    def api_type(self) -> str:
+        """
+        Returns the OpenMaya function set type of this object as a string,
+        for example ``"kTransform"`` or ``"kMesh"``.
+        """
+        return self._pointer.apiTypeStr

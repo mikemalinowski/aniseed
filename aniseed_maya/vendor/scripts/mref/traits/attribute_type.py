@@ -59,7 +59,14 @@ class Attribute(mref.Trait):
     """
     Trait bound to any ``om.MPlug`` — every attribute on every node in
     the scene. Exposes name / path resolution, value get/set,
-    connect/disconnect, type queries, and Python-type mapping.
+    connect/disconnect, type queries, and Python-type mapping, plus
+    definition queries (default, min/max, enum names, dynamic),
+    keyable / channel box / lock / hidden state, nice name and alias,
+    array / compound navigation, and deletion of dynamic attributes.
+
+    Editing an attribute's definition (range, enum names, hidden, nice
+    name) is only possible on dynamic attributes; those setters raise
+    RuntimeError on static (node-type defined) attributes.
 
     Addressing forms:
       * ``name(include_node=False)`` — bare attribute name
@@ -330,6 +337,374 @@ class Attribute(mref.Trait):
         on every call.
         """
         return _ATTRIBUTE_TYPE_TO_PYTHON_TYPE.get(self.get_type())
+
+    # ------------------------------------------------------------------
+    # Definition queries (default / range / enum / dynamic)
+    # ------------------------------------------------------------------
+
+    def is_dynamic(self) -> bool:
+        """
+        Returns True if this is a dynamic (user-added) attribute rather
+        than one defined by the node type.
+        """
+        return om.MFnAttribute(self._pointer.attribute()).dynamic
+
+    def default_value(self) -> typing.Any:
+        """
+        Returns the attribute's default value in UI units — a single
+        value for simple attributes or a list for compounds such as
+        ``translate``. Returns None for attribute types that have no
+        queryable default (strings, matrices, messages, ...).
+        """
+        result = self._attribute_query(listDefault=True)
+        if not result:
+            return None
+        return result[0] if len(result) == 1 else list(result)
+
+    def minimum(self) -> float|None:
+        """
+        Returns the hard minimum of a numeric attribute, or None if it
+        has no minimum.
+        """
+        if not self._attribute_query(minExists=True):
+            return None
+        result = self._attribute_query(minimum=True)
+        return result[0] if result and len(result) == 1 else result
+
+    def maximum(self) -> float|None:
+        """
+        Returns the hard maximum of a numeric attribute, or None if it
+        has no maximum.
+        """
+        if not self._attribute_query(maxExists=True):
+            return None
+        result = self._attribute_query(maximum=True)
+        return result[0] if result and len(result) == 1 else result
+
+    def set_minimum(self, value: float|None) -> None:
+        """
+        Sets the hard minimum of a dynamic numeric attribute. Pass None
+        to remove the minimum. Maya does not allow the range of static
+        (node-type defined) attributes to be edited.
+        """
+        if value is None:
+            self._edit_dynamic(hasMinValue=False)
+        else:
+            self._edit_dynamic(minValue=value)
+
+    def set_maximum(self, value: float|None) -> None:
+        """
+        Sets the hard maximum of a dynamic numeric attribute. Pass None
+        to remove the maximum. Maya does not allow the range of static
+        (node-type defined) attributes to be edited.
+        """
+        if value is None:
+            self._edit_dynamic(hasMaxValue=False)
+        else:
+            self._edit_dynamic(maxValue=value)
+
+    def enum_names(self) -> list[str]|None:
+        """
+        Returns the field names of an enum attribute ordered by their
+        index, or None if this is not an enum attribute. Gaps in the
+        index range (e.g. ``a=0:b=5``) are skipped, so the position in
+        the list is not necessarily the field's value.
+        """
+        attribute = self._pointer.attribute()
+        if not attribute.hasFn(om.MFn.kEnumAttribute):
+            return None
+
+        fn = om.MFnEnumAttribute(attribute)
+        names = []
+        for index in range(fn.getMin(), fn.getMax() + 1):
+            try:
+                names.append(fn.fieldName(index))
+            except RuntimeError:
+                continue
+        return names
+
+    def set_enum_names(self, names: list[str]) -> None:
+        """
+        Replaces the fields of a dynamic enum attribute. Each entry may
+        be a plain name (indexed sequentially) or ``"name=index"``.
+        """
+        self._edit_dynamic(enumName=":".join(names))
+
+    # ------------------------------------------------------------------
+    # State (keyable / channel box / lock / hidden)
+    # ------------------------------------------------------------------
+
+    def is_keyable(self) -> bool:
+        """
+        Returns True if the attribute is keyable.
+        """
+        return self._pointer.isKeyable
+
+    def set_keyable(self, state: bool) -> None:
+        """
+        Sets whether the attribute is keyable. Keyable attributes are
+        always shown in the channel box.
+        """
+        cmds.setAttr(self.path(), keyable=state)
+
+    def is_in_channel_box(self) -> bool:
+        """
+        Returns True if the attribute is shown in the channel box —
+        either because it is keyable or because it has been flagged as
+        a non-keyable channel box attribute.
+        """
+        return self._pointer.isKeyable or self._pointer.isChannelBox
+
+    def set_in_channel_box(self, state: bool) -> None:
+        """
+        Shows or hides a non-keyable attribute in the channel box.
+        Note Maya ignores this for keyable attributes (always shown);
+        use ``set_keyable(False)`` first to hide one.
+        """
+        cmds.setAttr(self.path(), channelBox=state)
+
+    def is_locked(self) -> bool:
+        """
+        Returns True if the attribute is locked.
+        """
+        return self._pointer.isLocked
+
+    def lock(self) -> None:
+        """
+        Locks the attribute. Equivalent to ``set(lock=True)``.
+        """
+        cmds.setAttr(self.path(), lock=True)
+
+    def unlock(self) -> None:
+        """
+        Unlocks the attribute. Equivalent to ``set(lock=False)``.
+        """
+        cmds.setAttr(self.path(), lock=False)
+
+    def is_hidden(self) -> bool:
+        """
+        Returns True if the attribute is hidden from the UI (Attribute
+        Editor, Channel Box, Connection Editor etc).
+        """
+        return om.MFnAttribute(self._pointer.attribute()).hidden
+
+    def set_hidden(self, state: bool) -> None:
+        """
+        Sets whether a dynamic attribute is hidden from the UI. Static
+        (node-type defined) attributes cannot be hidden per node.
+
+        ``addAttr`` cannot edit the hidden flag, so this goes through
+        ``MFnAttribute`` and is therefore not undoable.
+        """
+        if not self.is_dynamic():
+            raise RuntimeError(
+                f"{self.name(include_node=True)} is a static attribute and cannot be edited"
+            )
+        om.MFnAttribute(self._pointer.attribute()).hidden = state
+
+    # ------------------------------------------------------------------
+    # Naming (nice name / alias)
+    # ------------------------------------------------------------------
+
+    def nice_name(self) -> str:
+        """
+        Returns the UI ("nice") name of the attribute, e.g.
+        ``"Translate X"``.
+        """
+        return cmds.attributeName(self.path(), nice=True)
+
+    def set_nice_name(self, nice_name: str) -> None:
+        """
+        Sets the UI ("nice") name of a dynamic attribute.
+        """
+        self._edit_dynamic(niceName=nice_name)
+
+    def alias(self) -> str|None:
+        """
+        Returns the alias of this attribute (e.g. a blendShape target
+        name for ``weight[0]``), or None if it has no alias.
+        """
+        return cmds.aliasAttr(self.path(), query=True) or None
+
+    def set_alias(self, alias: str|None) -> None:
+        """
+        Sets the alias of this attribute. Pass None to remove the
+        current alias.
+        """
+        if alias is None:
+            current = self.alias()
+            if current:
+                cmds.aliasAttr(f"{self.node().full_name()}.{current}", remove=True)
+            return
+        cmds.aliasAttr(alias, self.path())
+
+    # ------------------------------------------------------------------
+    # Structure (arrays / compounds)
+    # ------------------------------------------------------------------
+
+    def is_array(self) -> bool:
+        """
+        Returns True if this is an array (multi) attribute — the
+        array itself, not one of its elements.
+        """
+        return self._pointer.isArray
+
+    def is_element(self) -> bool:
+        """
+        Returns True if this plug is an element of an array attribute
+        (e.g. ``weight[0]``).
+        """
+        return self._pointer.isElement
+
+    def is_compound(self) -> bool:
+        """
+        Returns True if this is a compound attribute (one with
+        children, e.g. ``translate``).
+        """
+        return self._pointer.isCompound
+
+    def index(self) -> int|None:
+        """
+        Returns the logical index of an array element plug, or None if
+        this plug is not an array element.
+        """
+        if not self._pointer.isElement:
+            return None
+        return self._pointer.logicalIndex()
+
+    def children(self) -> mref.ReferenceList:
+        """
+        Returns the child attributes of a compound attribute (e.g.
+        ``translateX/Y/Z`` for ``translate``). Returns an empty list for
+        non-compounds, and for an array of compounds — ask one of its
+        elements for its children instead.
+        """
+        plug = self._pointer
+        if not plug.isCompound or (plug.isArray and not plug.isElement):
+            return mref.ReferenceList()
+        return mref.ReferenceList(
+            mref.get(plug.child(index))
+            for index in range(plug.numChildren())
+        )
+
+    def parent(self) -> mref.ReferencedItem|None:
+        """
+        Returns the plug this one sits under — the compound parent for
+        a child attribute (``translate`` for ``translateX``), or the
+        array plug for an element (``weight`` for ``weight[0]``).
+        Returns None for a top-level attribute.
+        """
+        plug = self._pointer
+        if plug.isChild:
+            return mref.get(plug.parent())
+        if plug.isElement:
+            return mref.get(plug.array())
+        return None
+
+    def elements(self) -> mref.ReferenceList:
+        """
+        Returns the existing elements of an array attribute in
+        physical (storage) order. Returns an empty list if this is not
+        an array.
+        """
+        plug = self._pointer
+        if not plug.isArray:
+            return mref.ReferenceList()
+        return mref.ReferenceList(
+            mref.get(plug.elementByPhysicalIndex(index))
+            for index in range(plug.numElements())
+        )
+
+    def element(self, index: int) -> mref.ReferencedItem:
+        """
+        Returns the element of an array attribute at the given logical
+        index. The element does not need to exist yet. Raises TypeError
+        if this is not an array attribute.
+        """
+        if not self._pointer.isArray:
+            raise TypeError(f"{self.name(include_node=True)} is not an array attribute")
+        return mref.get(self._pointer.elementByLogicalIndex(index))
+
+    # ------------------------------------------------------------------
+    # Connections (single source)
+    # ------------------------------------------------------------------
+
+    def is_connected(self) -> bool:
+        """
+        Returns True if this attribute has any incoming or outgoing
+        connection.
+        """
+        return self._pointer.isConnected
+
+    def source(self, skip_converters: bool = True) -> mref.ReferencedItem|None:
+        """
+        Returns the single attribute driving this one, or None if it
+        has no input. Convenience form of :meth:`inputs` — see there for
+        ``skip_converters``.
+        """
+        inputs = self.inputs(skip_converters=skip_converters)
+        return inputs[0] if inputs else None
+
+    # ------------------------------------------------------------------
+    # Deletion
+    # ------------------------------------------------------------------
+
+    def delete(self) -> None:
+        """
+        Deletes this attribute. For an array element the element is
+        removed (breaking its connections); otherwise the attribute must
+        be dynamic — static attributes raise RuntimeError.
+        """
+        if self._pointer.isElement:
+            cmds.removeMultiInstance(self.path(), b=True)
+            return
+
+        if not self.is_dynamic():
+            raise RuntimeError(
+                f"Cannot delete static attribute {self.name(include_node=True)}"
+            )
+        cmds.deleteAttr(self.path())
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _attribute_name(self) -> str:
+        """
+        Returns the long name of the underlying attribute, without any
+        parent path or array indices — the form ``attributeQuery`` and
+        ``addAttr(edit=True)`` expect.
+        """
+        return om.MFnAttribute(self._pointer.attribute()).name
+
+    def _attribute_query(self, **kwargs) -> typing.Any:
+        """
+        Runs ``cmds.attributeQuery`` for this attribute. Returns None
+        if Maya rejects the query for this attribute type.
+        """
+        try:
+            return cmds.attributeQuery(
+                self._attribute_name(),
+                node=self.node().full_name(),
+                **kwargs
+            )
+        except RuntimeError:
+            return None
+
+    def _edit_dynamic(self, **kwargs) -> None:
+        """
+        Runs ``cmds.addAttr(edit=True)`` against this attribute, raising
+        RuntimeError up front if it is not a dynamic attribute.
+        """
+        if not self.is_dynamic():
+            raise RuntimeError(
+                f"{self.name(include_node=True)} is a static attribute and cannot be edited"
+            )
+        cmds.addAttr(
+            f"{self.node().full_name()}.{self._attribute_name()}",
+            edit=True,
+            **kwargs
+        )
 
     def __repr__(self) -> str:
         """

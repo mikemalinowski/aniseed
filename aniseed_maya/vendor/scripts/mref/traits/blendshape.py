@@ -16,8 +16,13 @@ class Blendshape(mref.Trait):
     blendshape's geometry, scene-side target meshes, alias attributes,
     and a utility (:meth:`unpack`) to extract deformed result meshes
     for any targets that don't currently have an explicit source mesh
-    connected.
+    connected. Also provides target management (add / remove / rename /
+    in-betweens) addressed by name or index, target weights, and the
+    blendshape-specific paintable base and per-target weights.
     """
+
+    # -- Sits above the generic GeometryFilter trait
+    priority = 1
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -246,3 +251,268 @@ class Blendshape(mref.Trait):
             aliases[i]: aliases[i + 1]
             for i in range(0, len(aliases), 2)
         }
+
+    # ------------------------------------------------------------------
+    # Targets
+    # ------------------------------------------------------------------
+
+    def target_indices(self) -> list[int]:
+        """
+        Returns the (sparse) logical weight indices of every target, in
+        ascending order.
+        """
+        return list(self._dependency_node.findPlug("weight", False).getExistingArrayAttributeIndices())
+
+    def target_names(self) -> list[str]:
+        """
+        Returns the name (weight alias) of every target in index order.
+        A target with no alias is reported as ``"weight[i]"``.
+        """
+        names_by_index = self._names_by_index()
+        return [
+            names_by_index.get(index, f"weight[{index}]")
+            for index in self.target_indices()
+        ]
+
+    def target_index(self, name: str) -> int:
+        """
+        Returns the weight index of the target with the given name.
+
+        :raises ValueError: If no target has that name.
+        """
+        return self._resolve_index(name)
+
+    def target_weight(self, target: str|int) -> float:
+        """
+        Returns the current weight of a target, given by name or index.
+        """
+        return cmds.getAttr(f"{self.item.full_name()}.weight[{self._resolve_index(target)}]")
+
+    def set_target_weight(self, target: str|int, value: float) -> None:
+        """
+        Sets the weight of a target, given by name or index.
+        """
+        cmds.setAttr(f"{self.item.full_name()}.weight[{self._resolve_index(target)}]", value)
+
+    def zero_weights(self) -> None:
+        """
+        Sets every target weight to zero. Weights that are driven by a
+        connection or locked are left untouched.
+        """
+        weight_plug = self._dependency_node.findPlug("weight", False)
+        for index in weight_plug.getExistingArrayAttributeIndices():
+            element = weight_plug.elementByLogicalIndex(index)
+            if element.isDestination or element.isLocked:
+                continue
+            element.setFloat(0.0)
+
+    def add_target(self, mesh: mref.ReferencedItem|str, name: str = None, index: int = None) -> int:
+        """
+        Adds the given mesh as a new target, at the next free index
+        unless ``index`` is given, and returns that index. The target is
+        named after the mesh unless ``name`` is given.
+        """
+        mesh = mref.get(mesh)
+
+        if index is None:
+            indices = self.target_indices()
+            index = (max(indices) + 1) if indices else 0
+
+        cmds.blendShape(
+            self.item.full_name(),
+            edit=True,
+            target=(self._base_geometry_name(), index, mesh.full_name(), 1.0),
+        )
+
+        if name:
+            self.rename_target(index, name)
+
+        return index
+
+    def remove_target(self, target: str|int) -> None:
+        """
+        Removes a target (given by name or index) entirely, including its
+        weight, alias, in-betweens and paintable weights. Works whether or
+        not a source mesh is still connected.
+        """
+        index = self._resolve_index(target)
+
+        # -- blendShapeDeleteTargetGroup is the same proc the Shape Editor
+        # -- uses; it also cleans up the target directory bookkeeping.
+        mel.eval('source "blendShapeDeleteTargetGroup";')
+        mel.eval(f'blendShapeDeleteTargetGroup "{self.item.full_name()}" {index};')
+
+    def rename_target(self, target: str|int, new_name: str) -> None:
+        """
+        Renames a target (given by name or index) by re-aliasing its
+        weight plug.
+        """
+        index = self._resolve_index(target)
+        cmds.aliasAttr(new_name, f"{self.item.full_name()}.weight[{index}]")
+
+    def add_in_between(self, target: str|int, mesh: mref.ReferencedItem|str, weight: float) -> None:
+        """
+        Adds the given mesh as an in-between of a target (given by name
+        or index), triggered at the given weight (e.g. ``0.5``).
+        """
+        cmds.blendShape(
+            self.item.full_name(),
+            edit=True,
+            inBetween=True,
+            target=(self._base_geometry_name(), self._resolve_index(target), mref.get(mesh).full_name(), weight),
+        )
+
+    def in_between_weights(self, target: str|int) -> list[float]:
+        """
+        Returns the weights at which a target's in-betweens trigger,
+        sorted ascending. The full target (weight ``1.0``) is excluded.
+        """
+        item_plug = self._target_group_plug(self._resolve_index(target)).child(0)  # inputTargetItem
+        return [
+            round((item_index - 5000) / 1000.0, 3)
+            for item_index in sorted(item_plug.getExistingArrayAttributeIndices())
+            if item_index != _FULL_TARGET_INDEX
+        ]
+
+    # ------------------------------------------------------------------
+    # Paintable weights
+    # ------------------------------------------------------------------
+
+    def base_weights(self, shape: mref.ReferencedItem|str = None) -> list[float]:
+        """
+        Returns the per-component base weights painted on the
+        blendshape for the given shape (default: first output shape).
+
+        Where Maya stores these changed between versions — up to 2024
+        they live in ``inputTarget[n].baseWeights``, from 2025 in the
+        generic ``weightList`` (``baseWeights`` is then ignored). This
+        is an alias of ``GeometryFilter.deformer_weights``, which reads
+        whichever one drives the deformation.
+        """
+        return self.item.deformer_weights(shape)
+
+    def set_base_weights(self, weights: list[float], shape: mref.ReferencedItem|str = None) -> None:
+        """
+        Sets the per-component base weights for the given shape (default:
+        first output shape). ``weights`` must have one entry per component.
+        See :meth:`base_weights` for where they are stored.
+        """
+        self.item.set_deformer_weights(weights, shape)
+
+    def target_component_weights(self, target: str|int, shape: mref.ReferencedItem|str = None) -> list[float]:
+        """
+        Returns the per-component paintable weights of a single target
+        (``inputTargetGroup[i].targetWeights``) for the given shape
+        (default: first output shape).
+        """
+        shape, geometry_plug = self._input_target_plug(shape)
+        group_plug = self._target_group_plug(self._resolve_index(target), geometry_plug)
+        return _read_sparse_weights(group_plug.child(self._dependency_node.attribute("targetWeights")), shape)
+
+    def set_target_component_weights(
+            self,
+            target: str|int,
+            weights: list[float],
+            shape: mref.ReferencedItem|str = None,
+    ) -> None:
+        """
+        Sets the per-component paintable weights of a single target for
+        the given shape (default: first output shape). ``weights`` must
+        have one entry per component.
+        """
+        shape, geometry_plug = self._input_target_plug(shape)
+        group_plug = self._target_group_plug(self._resolve_index(target), geometry_plug)
+        _write_weights(group_plug.child(self._dependency_node.attribute("targetWeights")), shape, weights)
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _names_by_index(self) -> dict:
+        """
+        Returns ``{weight_index: alias_name}`` for every aliased target.
+        """
+        return {
+            int(plug_name[len("weight["):-1]): alias
+            for alias, plug_name in self.weight_mapping().items()
+            if plug_name.startswith("weight[")
+        }
+
+    def _resolve_index(self, target: str|int) -> int:
+        """
+        Resolves a target given by index, alias name or ``"weight[i]"``
+        to its weight index.
+        """
+        if isinstance(target, int):
+            return target
+
+        if target.startswith("weight[") and target.endswith("]"):
+            return int(target[len("weight["):-1])
+
+        for index, name in self._names_by_index().items():
+            if name == target:
+                return index
+
+        raise ValueError(f"{self.item.name()} has no target named {target!r}")
+
+    def _base_geometry_name(self) -> str:
+        """
+        Returns the name of the first base geometry, as required by the
+        ``blendShape -target`` flag.
+        """
+        geometry = cmds.blendShape(self.item.full_name(), query=True, geometry=True) or []
+        if not geometry:
+            raise RuntimeError(f"{self.item.name()} has no base geometry connected")
+        return geometry[0]
+
+    def _input_target_plug(self, shape) -> tuple:
+        """
+        Resolves the shape (default: first output shape) and returns it
+        with its ``inputTarget[n]`` element plug.
+        """
+        if shape is None:
+            outputs = self.item.output_geometry()
+            if not outputs:
+                raise RuntimeError(f"{self.item.name()} is not deforming any geometry")
+            shape = outputs[0]
+
+        shape = mref.get(shape)
+        index = self.item.geometry_index(shape)
+        plug = self._dependency_node.findPlug("inputTarget", False).elementByLogicalIndex(index)
+        return shape, plug
+
+    def _target_group_plug(self, index: int, geometry_plug: om.MPlug = None) -> om.MPlug:
+        """
+        Returns the ``inputTarget[n].inputTargetGroup[index]`` plug,
+        defaulting to the first geometry.
+        """
+        if geometry_plug is None:
+            geometry_plug = self._dependency_node.findPlug("inputTarget", False).elementByLogicalIndex(0)
+        return geometry_plug.child(0).elementByLogicalIndex(index)
+
+
+def _read_sparse_weights(plug: om.MPlug, shape: mref.ReferencedItem) -> list[float]:
+    """
+    Reads a sparse per-component float array plug, reporting Maya's
+    default of ``1.0`` for components with no stored value.
+    """
+    weights = [1.0] * shape.component_count()
+    for index in plug.getExistingArrayAttributeIndices():
+        if index < len(weights):
+            weights[index] = plug.elementByLogicalIndex(index).asFloat()
+    return weights
+
+
+def _write_weights(plug: om.MPlug, shape: mref.ReferencedItem, weights: list[float]) -> None:
+    """
+    Writes a full per-component weight list to a float array plug in a
+    single ranged ``setAttr`` call.
+    """
+    count = shape.component_count()
+    if len(weights) != count:
+        raise ValueError(
+            f"Number of components ({count}) does not "
+            f"match length of weights ({len(weights)})"
+        )
+    if count:
+        cmds.setAttr(f"{plug.name()}[0:{count - 1}]", *weights)

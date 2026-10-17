@@ -305,6 +305,173 @@ class TestDagNode(unittest.TestCase):
 
         self.assertIsInstance(ref.dag(), om.MFnDagNode)
 
+    # ------------------------------------------------------------------
+    # binding
+    # ------------------------------------------------------------------
+
+    def test_binds_to_dag_but_not_dg_node(self):
+        self.assertIn("DagNode", mref.create("transform").assigned_traits())
+        self.assertNotIn("DagNode", mref.create("multiplyDivide").assigned_traits())
+
+    # ------------------------------------------------------------------
+    # unlock_transform_attributes
+    # ------------------------------------------------------------------
+
+    def test_unlock_transform_attributes_reverses_lock(self):
+        node = mref.create("transform")
+        node.lock_transform_attributes()
+        node.unlock_transform_attributes()
+        for channel in ["t", "r", "s"]:
+            for axis in ["x", "y", "z"]:
+                self.assertFalse(cmds.getAttr(f"{node.full_name()}.{channel}{axis}", lock=True))
+
+    # ------------------------------------------------------------------
+    # dag_path / root / siblings
+    # ------------------------------------------------------------------
+
+    def test_dag_path(self):
+        cmds.createNode("transform", name="parent_xform")
+        cmds.createNode("transform", name="child_xform", parent="parent_xform")
+        path = mref.get("|parent_xform|child_xform").dag_path()
+        self.assertIsInstance(path, om.MDagPath)
+        self.assertEqual(path.fullPathName(), "|parent_xform|child_xform")
+
+    def test_root_returns_top_ancestor(self):
+        cmds.createNode("transform", name="grandparent")
+        cmds.createNode("transform", name="parent_xform", parent="grandparent")
+        cmds.createNode("transform", name="child_xform", parent="grandparent|parent_xform")
+
+        root = mref.get("|grandparent|parent_xform|child_xform").root()
+        self.assertEqual(root.full_name(), "|grandparent")
+
+    def test_root_of_root_is_self(self):
+        cmds.createNode("transform", name="root_xform")
+        ref = mref.get("root_xform")
+        self.assertEqual(ref.root(), ref)
+
+    def test_siblings_excludes_self(self):
+        cmds.createNode("transform", name="parent_xform")
+        cmds.createNode("transform", name="a", parent="parent_xform")
+        cmds.createNode("transform", name="b", parent="parent_xform")
+        cmds.createNode("transform", name="c", parent="parent_xform")
+
+        names = sorted(n.name() for n in mref.get("|parent_xform|a").siblings())
+        self.assertEqual(names, ["b", "c"])
+
+    def test_siblings_include_shapes_flag(self):
+        transform = cmds.polyCube(name="cube")[0]
+        cmds.createNode("transform", name="child_xform", parent=transform)
+        child = mref.get(f"|{transform}|child_xform")
+
+        self.assertEqual(len(child.siblings()), 1)
+        self.assertEqual(child.siblings(include_shapes=False), [])
+
+    def test_siblings_at_scene_root(self):
+        cmds.createNode("transform", name="a")
+        cmds.createNode("transform", name="b")
+        names = [n.name() for n in mref.get("a").siblings()]
+        self.assertIn("b", names)
+        self.assertNotIn("a", names)
+
+    # ------------------------------------------------------------------
+    # instance_count / is_instanced
+    # ------------------------------------------------------------------
+
+    def test_instancing(self):
+        transform = cmds.polyCube(name="cube")[0]
+        shape = mref.get(transform).shape()
+        self.assertFalse(shape.is_instanced())
+        self.assertEqual(shape.instance_count(), 1)
+
+        cmds.instance(transform)
+        self.assertTrue(shape.is_instanced())
+        self.assertEqual(shape.instance_count(), 2)
+
+    # ------------------------------------------------------------------
+    # is_visible / show / hide
+    # ------------------------------------------------------------------
+
+    def test_is_visible_respects_parent(self):
+        cmds.createNode("transform", name="parent_xform")
+        cmds.createNode("transform", name="child_xform", parent="parent_xform")
+        parent = mref.get("parent_xform")
+        child = mref.get("|parent_xform|child_xform")
+
+        self.assertTrue(child.is_visible())
+        parent.hide()
+        self.assertFalse(cmds.getAttr("parent_xform.visibility"))
+        self.assertFalse(child.is_visible())
+        self.assertTrue(cmds.getAttr(f"{child.full_name()}.visibility"))
+
+        parent.show()
+        self.assertTrue(child.is_visible())
+
+    # ------------------------------------------------------------------
+    # world_matrix
+    # ------------------------------------------------------------------
+
+    def test_world_matrix_includes_parent(self):
+        cmds.createNode("transform", name="parent_xform")
+        cmds.setAttr("parent_xform.translateX", 3)
+        cmds.createNode("transform", name="child_xform", parent="parent_xform")
+        cmds.setAttr("parent_xform|child_xform.translateY", 2)
+
+        child = mref.get("|parent_xform|child_xform")
+        matrix = child.world_matrix()
+        self.assertEqual(len(matrix), 16)
+        self.assertAlmostEqual(matrix[12], 3.0)
+        self.assertAlmostEqual(matrix[13], 2.0)
+
+        inverse = child.world_matrix(inverse=True)
+        self.assertAlmostEqual(inverse[12], -3.0)
+        self.assertAlmostEqual(inverse[13], -2.0)
+
+    def test_world_matrix_on_shape(self):
+        transform = cmds.polyCube(name="cube")[0]
+        cmds.setAttr(f"{transform}.translateZ", 4)
+        shape = mref.get(transform).shape()
+        self.assertAlmostEqual(shape.world_matrix()[14], 4.0)
+
+    # ------------------------------------------------------------------
+    # outliner colour
+    # ------------------------------------------------------------------
+
+    def test_outliner_colour_round_trip(self):
+        node = mref.create("transform")
+        self.assertIsNone(node.outliner_colour())
+
+        node.set_outliner_colour((1.0, 0.5, 0.0))
+        self.assertTrue(cmds.getAttr(f"{node.full_name()}.useOutlinerColor"))
+        for actual, expected in zip(node.outliner_colour(), (1.0, 0.5, 0.0)):
+            self.assertAlmostEqual(actual, expected, places=4)
+
+        node.set_outliner_colour(None)
+        self.assertIsNone(node.outliner_colour())
+
+    # ------------------------------------------------------------------
+    # display override
+    # ------------------------------------------------------------------
+
+    def test_display_override_round_trip(self):
+        node = mref.create("transform")
+        self.assertEqual(node.display_override(), "normal")
+
+        node.set_display_override("reference")
+        self.assertTrue(cmds.getAttr(f"{node.full_name()}.overrideEnabled"))
+        self.assertEqual(cmds.getAttr(f"{node.full_name()}.overrideDisplayType"), 2)
+        self.assertEqual(node.display_override(), "reference")
+
+        node.set_display_override("template")
+        self.assertEqual(node.display_override(), "template")
+
+        node.set_display_override("normal")
+        self.assertEqual(node.display_override(), "normal")
+
+    def test_set_display_override_invalid_raises(self):
+        node = mref.create("transform")
+        with self.assertRaises(ValueError):
+            node.set_display_override("bogus")
+
 
 if __name__ == "__main__":
     unittest.main()

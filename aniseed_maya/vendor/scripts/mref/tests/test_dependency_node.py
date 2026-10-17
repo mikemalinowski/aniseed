@@ -194,6 +194,193 @@ class TestDependencyNode(unittest.TestCase):
                     f"{channel}{axis} should be locked",
                 )
 
+    # ------------------------------------------------------------------
+    # binding
+    # ------------------------------------------------------------------
+
+    def test_binds_to_dg_node(self):
+        node = mref.create("multiplyDivide")
+        self.assertIn("DependencyNode", node.assigned_traits())
+        self.assertIn("MayaObject", node.assigned_traits())
+
+    def test_api_type(self):
+        self.assertEqual(mref.create("transform").api_type(), "kTransform")
+        self.assertEqual(mref.create("multiplyDivide").api_type(), "kMultiplyDivide")
+
+    # ------------------------------------------------------------------
+    # uuid / exists
+    # ------------------------------------------------------------------
+
+    def test_uuid_matches_ls_and_survives_rename(self):
+        node = mref.create("transform", name="foo")
+        uuid = node.uuid()
+        self.assertEqual(uuid, cmds.ls(node.full_name(), uuid=True)[0])
+        node.rename("bar")
+        self.assertEqual(node.uuid(), uuid)
+
+    def test_exists_false_after_delete(self):
+        node = mref.create("multiplyDivide")
+        self.assertTrue(node.exists())
+        node.delete()
+        self.assertFalse(node.exists())
+
+    # ------------------------------------------------------------------
+    # is_referenced / reference_node / is_default_node
+    # ------------------------------------------------------------------
+
+    def test_is_referenced_false_for_local_node(self):
+        node = mref.create("transform")
+        self.assertFalse(node.is_referenced())
+        self.assertIsNone(node.reference_node())
+
+    def test_referenced_node_reports_reference_node(self):
+        import os
+        import tempfile
+
+        cmds.createNode("transform", name="ref_me")
+        path = os.path.join(tempfile.mkdtemp(), "mref_dependency_ref.ma").replace("\\", "/")
+        cmds.file(rename=path)
+        cmds.file(save=True, type="mayaAscii", force=True)
+
+        cmds.file(newFile=True, force=True)
+        cmds.file(path, reference=True, namespace="ref")
+
+        node = mref.get("ref:ref_me")
+        self.assertTrue(node.is_referenced())
+        self.assertEqual(node.reference_node().name(), "refRN")
+
+    def test_is_default_node(self):
+        self.assertTrue(mref.get("time1").is_default_node())
+        self.assertFalse(mref.create("transform").is_default_node())
+
+    # ------------------------------------------------------------------
+    # node_namespace / set_node_namespace
+    # ------------------------------------------------------------------
+
+    def test_node_namespace_empty_in_root(self):
+        node = mref.create("transform", name="foo")
+        self.assertEqual(node.node_namespace(), "")
+
+    def test_set_node_namespace_creates_nested_namespace(self):
+        node = mref.create("transform", name="foo")
+        node.set_node_namespace("char:rig")
+        self.assertTrue(cmds.namespace(exists=":char:rig"))
+        self.assertEqual(node.name(), "char:rig:foo")
+        self.assertEqual(node.node_namespace(), "char:rig")
+
+    def test_set_node_namespace_back_to_root(self):
+        node = mref.create("transform", name="foo")
+        node.set_node_namespace("ns")
+        node.set_node_namespace("")
+        self.assertEqual(node.name(), "foo")
+        self.assertEqual(node.node_namespace(), "")
+
+    # ------------------------------------------------------------------
+    # select / duplicate
+    # ------------------------------------------------------------------
+
+    def test_select_replace_and_add(self):
+        a = mref.create("transform", name="a")
+        b = mref.create("transform", name="b")
+
+        a.select()
+        self.assertEqual(cmds.ls(selection=True), ["a"])
+
+        b.select()
+        self.assertEqual(cmds.ls(selection=True), ["b"])
+
+        a.select(add=True)
+        self.assertEqual(sorted(cmds.ls(selection=True)), ["a", "b"])
+
+    def test_duplicate_dg_node(self):
+        node = mref.create("multiplyDivide", name="md")
+        copy = node.duplicate(name="md_copy")
+        self.assertEqual(copy.name(), "md_copy")
+        self.assertEqual(copy.node_type(), "multiplyDivide")
+        self.assertNotEqual(copy, node)
+
+    def test_duplicate_dag_node_returns_root(self):
+        transform = cmds.polyCube(name="cube")[0]
+        copy = mref.get(transform).duplicate()
+        self.assertEqual(copy.node_type(), "transform")
+        self.assertIsNotNone(copy.shape())
+
+    # ------------------------------------------------------------------
+    # node_notes / set_node_notes
+    # ------------------------------------------------------------------
+
+    def test_node_notes_empty_by_default(self):
+        self.assertEqual(mref.create("transform").node_notes(), "")
+
+    def test_node_notes_round_trip(self):
+        node = mref.create("transform")
+        node.set_node_notes("hello")
+        self.assertEqual(node.node_notes(), "hello")
+        self.assertEqual(cmds.getAttr(f"{node.full_name()}.notes"), "hello")
+
+        node.set_node_notes("again")
+        self.assertEqual(node.node_notes(), "again")
+
+    # ------------------------------------------------------------------
+    # plug_connections
+    # ------------------------------------------------------------------
+
+    def test_plug_connections_pairs_are_source_to_destination(self):
+        a = mref.create("multiplyDivide", name="a")
+        b = mref.create("multiplyDivide", name="b")
+        c = mref.create("multiplyDivide", name="c")
+        cmds.connectAttr("a.outputX", "b.input1X")
+        cmds.connectAttr("b.outputY", "c.input2Y")
+
+        def names(pairs):
+            return sorted(
+                (src.name(include_node=True), dst.name(include_node=True))
+                for src, dst in pairs
+            )
+
+        self.assertEqual(
+            names(b.plug_connections()),
+            [("a.outputX", "b.input1X"), ("b.outputY", "c.input2Y")],
+        )
+        self.assertEqual(
+            names(b.plug_connections(destination=False)),
+            [("a.outputX", "b.input1X")],
+        )
+        self.assertEqual(
+            names(b.plug_connections(source=False)),
+            [("b.outputY", "c.input2Y")],
+        )
+
+    def test_plug_connections_empty_for_unconnected(self):
+        self.assertEqual(mref.create("multiplyDivide").plug_connections(), [])
+
+    # ------------------------------------------------------------------
+    # history / future
+    # ------------------------------------------------------------------
+
+    def test_history_excludes_self_and_filters_type(self):
+        transform = cmds.polyCube(name="cube")[0]
+        cmds.cluster(transform)
+        cube = mref.get(transform)
+
+        history = cube.history()
+        self.assertNotIn(cube, history)
+        self.assertTrue(any(node.node_type() == "polyCube" for node in history))
+
+        deformers = cube.history(node_type="geometryFilter")
+        self.assertEqual([node.node_type() for node in deformers], ["cluster"])
+
+    def test_future(self):
+        poly_cube = mref.get(cmds.polyCube(name="cube")[1])
+
+        future = poly_cube.future()
+        self.assertNotIn(poly_cube, future)
+        self.assertTrue(any(node.node_type() == "mesh" for node in future))
+        self.assertEqual(
+            [node.node_type() for node in poly_cube.future(node_type="mesh")],
+            ["mesh"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
