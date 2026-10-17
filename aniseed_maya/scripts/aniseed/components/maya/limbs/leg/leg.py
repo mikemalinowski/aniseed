@@ -15,8 +15,14 @@ import aniseed_toolkit
 
 foot = aniseed_toolkit.rigging.foot
 
+# -- The twist joint inputs, with the options holding how many to generate
+_LEG_TWISTS = [
+    ("Upper Twist Joints", "Upper Twist Count"),
+    ("Lower Twist Joints", "Lower Twist Count"),
+]
 
-class LegComponent(aniseed.RigComponent):
+
+class LegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     This is some documentation that the user will see. You should adjust the guides...
     """
@@ -369,24 +375,10 @@ class LegComponent(aniseed.RigComponent):
         )
         mref.delete(self.all_guides())
 
-    def user_func_create_mirror(self):
-        """
-        This will create a mirrored version of the component, including the
-        foot guides
-        """
-        aniseed.builders.mirror_component(
-            component_instance=self,
-            transforms=self.all_guides() + self.all_joints(),
-            location_label="Location",
-            config=self.config,
-            joint_parent=mref.get(self.input("Leg Root").get()).parent().name(),
-            input_overrides={"Leg Root": ""},
-        )
-
     def user_functions(self):
         """
         This is where we define what functionality we want to actually
-        expose to the user
+        expose to the user. Mirroring is offered by MirrorMixin.
         """
         menu = super(LegComponent, self).user_functions()
 
@@ -395,10 +387,104 @@ class LegComponent(aniseed.RigComponent):
         leg_joint = self.input("Leg Root").get()
         if not leg_joint or not mref.objExists(leg_joint):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
-            return menu
 
-        menu["Create Mirror"] = functools.partial(self.user_func_create_mirror)
         return menu
+
+    def _mirror_joints(self) -> list:
+        """
+        Returns the leg root to toe chain followed by the upper and then the
+        lower twist joints. Empty if the leg root or toe is missing, or the
+        toe is not below the leg root.
+        """
+        leg_root = self.input("Leg Root").get()
+        toe = self.input("Toe").get()
+
+        if not leg_root or not toe or not mref.objExists(leg_root) or not mref.objExists(toe):
+            return []
+
+        try:
+            chain = aniseed_toolkit.scene.joints.get_between(leg_root, toe)
+        except ValueError:
+            return []
+
+        return chain + [
+            joint
+            for input_name, _ in _LEG_TWISTS
+            for joint in self.input(input_name).get() or []
+            if joint
+        ]
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the foot guides (in guide tag order) followed by the leg root
+        to toe chain and the upper and lower twist joints. Empty if there are
+        no guides or joints.
+        """
+        guides = self.all_guides()
+        joints = self._mirror_joints()
+
+        if not any(guides) and not joints:
+            return []
+
+        return guides + joints
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the leg root, which is where the twin's skeleton
+        is generated. Empty if there is none.
+        """
+        leg_root = self.input("Leg Root").get()
+        if not leg_root or not mref.objExists(leg_root):
+            return ""
+
+        parent = mref.get(leg_root).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        If the other side already has its own (unused) leg joints, the twin
+        uses them, and gets foot guides of its own unless the other side has
+        those too. Otherwise the twin generates its own skeleton and guides,
+        with twist counts matching the source. Either way the space switches
+        are not created again, as the source's are mirrored with the subtree.
+        """
+        self.option("Apply Space Switches").set(False)
+
+        if self.mirror_mixin_counterparts_exist(source._mirror_joints()):
+            self.option("Build Skeleton").set(False)
+
+            if not self.mirror_mixin_counterparts_exist(source.all_guides()):
+                guides = foot.create_guides(
+                    description_prefix="",
+                    location=self.option("Location").get(),
+                    config=self.config,
+                )
+                for guide_tag, guide in guides.items():
+                    self.input(f"{guide_tag} Guide").set(guide)
+            return
+
+        self.option("Build Skeleton").set(True)
+
+        for input_name, option_name in _LEG_TWISTS:
+            self.option(option_name).set(len(source.input(input_name).get() or []))
+            self.input(input_name).set([])
+
+        self.input("Leg Root").set("")
+        self.input("Toe").set("")
+
+        for guide_tag in self.guide_tags:
+            self.input(f"{guide_tag} Guide").set("")
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        Restores the creation options the twin's on_enter_stack used to the
+        source's values, so the twin's data matches the source.
+        """
+        option_names = ["Build Skeleton", "Apply Space Switches"]
+        option_names += [option_name for _, option_name in _LEG_TWISTS]
+
+        for option_name in option_names:
+            self.option(option_name).set(source.option(option_name).get(resolved=False))
 
     def is_valid(self) -> bool:
         """

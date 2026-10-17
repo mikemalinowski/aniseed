@@ -8,7 +8,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class InsertControlComponent(aniseed.RigComponent):
+class InsertControlComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     Inserts a new control between a parent node and its existing
     children. The control is created as a child of ``Parent`` and,

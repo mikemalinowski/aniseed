@@ -13,7 +13,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class StickyPatchComponent(aniseed.RigComponent):
+class StickyPatchComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     The sticky patch is a particularly useful component when wanting to have a joint
     or target move in an organic way based on multiple joints.
@@ -363,6 +363,65 @@ class StickyPatchComponent(aniseed.RigComponent):
             surface_node,
             toSelectedBones=True,
         )
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the joint to drive and the geometry patch. Empty unless both
+        are set, so that the twin's items always pair up by position.
+        """
+        joint = self.input("Joint To Drive").get()
+        patch = self.input("Geometry Patch").get()
+
+        if not joint or not patch:
+            return []
+
+        return [joint, patch]
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the joint to drive, which is where the twin's
+        joint is created. Empty if there is no joint or it has no parent.
+        """
+        joint = self.input("Joint To Drive").get()
+        if not joint or not mref.objExists(joint):
+            return ""
+
+        parent = mref.get(joint).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        Uses the other side's joint and patch if they already exist (the
+        search and replaced names). Otherwise the twin creates its own joint
+        and patch when it enters the stack, which the mirror then moves into
+        place.
+
+        Note that a created patch is a fresh plane, so any shaping or skinning
+        of the source patch is not carried over.
+        """
+        source_nodes = [
+            source.input("Joint To Drive").get(),
+            source.input("Geometry Patch").get(),
+        ]
+        twin_nodes = [
+            self.input("Joint To Drive").get(),
+            self.input("Geometry Patch").get(),
+        ]
+
+        # -- Without both a joint and a patch on the source there is nothing
+        # -- to mirror onto created nodes, so the twin keeps its search and
+        # -- replaced inputs as they are
+        if not all(source_nodes):
+            self.option("Create Joint And Patch").set(False)
+            return
+
+        if self.mirror_mixin_counterparts_exist(source_nodes, twin_nodes):
+            self.option("Create Joint And Patch").set(False)
+            return
+
+        self.input("Joint To Drive").set("")
+        self.input("Geometry Patch").set("")
+        self.option("Create Joint And Patch").set(True)
 
 
 class AngledStickyPatchComponent(StickyPatchComponent):

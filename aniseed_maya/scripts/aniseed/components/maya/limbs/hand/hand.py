@@ -3,7 +3,7 @@ Provides the "Limb : Hand" component, which builds a hand control with fk
 finger and thumb controls driven from the hand joint and finger/thumb tip
 inputs, with optional metacarpals. It adds hand level attributes (such as
 spread) weighted per finger, can generate and remove the hand skeleton and
-can create a mirrored copy of itself.
+supports mirroring.
 """
 import os
 import mref
@@ -11,7 +11,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class HandComponent(aniseed.RigComponent):
+class HandComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     identifier = "Limb : Hand"
     icon = os.path.join(
         os.path.dirname(__file__),
@@ -180,9 +180,7 @@ class HandComponent(aniseed.RigComponent):
 
         if not self.input("Hand Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
-            return menu
 
-        menu["Create Mirror"] = self.user_func_create_mirror
         return menu
 
     def is_valid(self):
@@ -591,20 +589,130 @@ class HandComponent(aniseed.RigComponent):
         # -- Now we set our inputs
         self.input("Hand Joint").set(output_hand)
 
-    def user_func_create_mirror(self):
+    def _mirror_digit_joints(self) -> list:
         """
-        Creates a mirrored copy of this component, mirroring all the hand and
-        finger joints under the mirrored parent of the hand joint. The hand
-        joint and finger tip inputs are cleared on the new component.
+        Returns the joints of each digit (thumb first), each walked up from
+        its tip to the hand joint (exclusive) and given root first. A joint
+        shared between digits (such as a shared metacarpal) is only given
+        once. If a tip is not below the hand joint, only its Digit Count
+        joints (plus the metacarpal of a finger) are taken.
         """
-        aniseed.builders.mirror_component(
-            component_instance=self,
-            transforms=self.all_joints(),
-            location_label="Location",
-            config=self.config,
-            joint_parent=mref.get(self.input("Hand Joint").get()).parent().name(),
-            input_overrides={"Hand Joint": "", "Finger Tips": []},
-        )
+        hand_joint = self.input("Hand Joint").get()
+        thumb_tip = self.input("Thumb Tip").get()
+        finger_tips = self.input("Finger Tips").get() or list()
+        digit_count = self.option("Digit Count").get()
+        use_metacarpals = self.option("Use Metacarpals").get()
+
+        joints = []
+
+        for tip in [thumb_tip] + finger_tips:
+            if not tip or not mref.objExists(tip):
+                continue
+
+            digit = []
+            node = tip
+            while node and node != hand_joint:
+                digit.insert(0, node)
+                parent = mref.get(node).parent()
+                node = parent.name() if parent else ""
+
+            # -- The walk never reached the hand joint
+            if not node:
+                depth = digit_count
+                if use_metacarpals and tip != thumb_tip:
+                    depth += 1
+                digit = digit[-depth:]
+
+            joints.extend(joint for joint in digit if joint not in joints)
+
+        return joints
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the hand joint (unless Omit Hand Joint is set, in which case
+        it belongs to another component) followed by the digit joints, thumb
+        first. Empty if the hand joint is missing.
+        """
+        hand_joint = self.input("Hand Joint").get()
+        if not hand_joint or not mref.objExists(hand_joint):
+            return []
+
+        joints = self._mirror_digit_joints()
+
+        if self.option("Omit Hand Joint").get():
+            return joints
+
+        return [hand_joint] + joints
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the hand joint, which is where the twin's hand
+        skeleton is generated. With Omit Hand Joint the hand joint belongs to
+        another component (such as an arm), so the hand joint itself is
+        returned and the twin's digits are generated under its mirror.
+        """
+        hand_joint = self.input("Hand Joint").get()
+        if not hand_joint or not mref.objExists(hand_joint):
+            return ""
+
+        if self.option("Omit Hand Joint").get():
+            return hand_joint
+
+        parent = mref.get(hand_joint).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        If the other side already has its own (unused) hand joints, the twin
+        uses them. Otherwise the twin generates its own hand skeleton. The
+        tip inputs are cleared first, as the skeleton generation appends to
+        them.
+        """
+        if self.mirror_mixin_counterparts_exist(source.mirror_mixin_items_to_mirror()):
+            self.option("Create Joints").set(False)
+
+            # -- An omitted hand joint belongs to another component, so use
+            # -- whatever that became in this mirror
+            if self.option("Omit Hand Joint").get():
+                self.input("Hand Joint").set(
+                    self.mirror_mixin_mirrored_node(source.input("Hand Joint").get()),
+                )
+            return
+
+        finger_tips = source.input("Finger Tips").get() or list()
+        finger_labels = list(self.option("Finger Labels").get() or list())
+
+        # -- The skeleton generation makes a finger per label. If there are
+        # -- more labels than the source has fingers (a build appends the
+        # -- thumb label to the stored labels), generate with just the first
+        # -- ones and put the labels back afterwards.
+        if finger_tips and len(finger_labels) > len(finger_tips):
+            self._mirror_finger_labels = finger_labels
+            self.option("Finger Labels").set(finger_labels[:len(finger_tips)])
+
+        elif len(finger_tips) != len(finger_labels):
+            print(
+                f"Mirror : {source.label()} has {len(finger_tips)} finger tips but "
+                f"{len(finger_labels)} finger labels. {self.label()} is generated "
+                f"with {len(finger_labels)} fingers."
+            )
+
+        self.option("Create Joints").set(True)
+        self.input("Hand Joint").set("")
+        self.input("Thumb Tip").set("")
+        self.input("Finger Tips").set([])
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        Restores the Create Joints option (and any finger labels trimmed for
+        the skeleton generation) so the twin's data matches the source.
+        """
+        self.option("Create Joints").set(source.option("Create Joints").get(resolved=False))
+
+        finger_labels = getattr(self, "_mirror_finger_labels", None)
+        if finger_labels is not None:
+            self.option("Finger Labels").set(finger_labels)
+            del self._mirror_finger_labels
 
     @classmethod
     def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None, min=-1.0, max=1.0) -> str:

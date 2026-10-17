@@ -242,16 +242,22 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_items_to_mirror(self) -> list:
         """
-        Return the list of scene-node names representing this component's
-        bones. These transforms will be reflected across the mirror plane
-        onto the twin side using ``aniseed_toolkit.scene.mirror.mirror_transforms``.
+        Returns the joint this component drives, which is mirrored onto the
+        twin's joint. Empty if no joint is set.
         """
-        return [
-            self.input("Joint").get()
-        ]
+        joint = self.input("Joint").get()
+        if not joint:
+            return []
+        return [joint]
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the name of the node the mirrored joint should be parented to
+        Returns the parent of the joint, which is where the twin's joint is
+        created. Empty if there is no joint or it has no parent.
         """
-        return mref.get(self.input("Joint").get()).parent().name()
+        joint = self.input("Joint").get()
+        if not joint or not mref.objExists(joint):
+            return ""
+
+        parent = mref.get(joint).parent()
+        return parent.name() if parent else ""

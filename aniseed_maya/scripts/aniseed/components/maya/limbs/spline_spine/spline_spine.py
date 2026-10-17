@@ -10,6 +10,7 @@ This plugin contains three different modules:
         a bezier curve.
 """
 import os
+import copy
 import mref
 import typing
 import aniseed
@@ -20,7 +21,7 @@ from PySide6 import QtWidgets
 import maya.api.OpenMaya as om
 
 
-class SplineSpine(aniseed.RigComponent):
+class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     This is a spline setup with any number of controls and joints.
     """
@@ -837,6 +838,174 @@ class SplineSpine(aniseed.RigComponent):
             self.input("Root Joint").get(),
             self.input("Tip Joint").get(),
         )
+
+    def _mirror_joints(self) -> list:
+        """
+        Returns all the joints between the root and the tip, or an empty
+        list if either is missing or the tip is not below the root.
+        """
+        root_joint = self.input("Root Joint").get()
+        tip_joint = self.input("Tip Joint").get()
+
+        if not root_joint or not tip_joint:
+            return []
+
+        if not mref.objExists(root_joint) or not mref.objExists(tip_joint):
+            return []
+
+        try:
+            return self.all_joints()
+        except ValueError:
+            return []
+
+    def _mirror_guides(self) -> list:
+        """
+        Returns the control guides (sorted, as user_func_remove_guide reads
+        them) if there is an active guide, otherwise an empty list.
+        """
+        if not self.has_guide():
+            return []
+
+        return sorted(
+            aniseed_toolkit.rig.tagging.all_children(
+                self.guide_data()["LinkedGuide"],
+                "ControlGuide",
+            )
+        )
+
+    def _mirror_control_matrices(self) -> list:
+        """
+        Returns the world matrix of each spline control point: from the
+        guides if there is an active guide, otherwise from the stored guide
+        data (which is relative to the root joint).
+        """
+        guides = self._mirror_guides()
+        if guides:
+            return [
+                mref.xform(guide, query=True, matrix=True, worldSpace=True)
+                for guide in guides
+            ]
+
+        root_matrix = om.MMatrix(
+            mref.xform(self.input("Root Joint").get(), query=True, matrix=True, worldSpace=True),
+        )
+        relative_matrices = (
+            self.guide_data().get("control_transforms")
+            or self.default_guide_data()["control_transforms"]
+        )
+
+        matrices = []
+        for relative_matrix in relative_matrices:
+            world_matrix = om.MMatrix(relative_matrix) * root_matrix
+            matrices.append(
+                [world_matrix.getElement(row, column) for row in range(4) for column in range(4)],
+            )
+        return matrices
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the joints from the root to the tip, followed by the control
+        guides if there is an active guide. The joints come first because a
+        twin always has a guide after entering the stack, even when the
+        source does not.
+        """
+        return self._mirror_joints() + self._mirror_guides()
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the root joint, which is where the twin creates
+        its joints.
+        """
+        root_joint = self.input("Root Joint").get()
+        if not root_joint or not mref.objExists(root_joint):
+            return ""
+
+        parent = mref.get(root_joint).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        The copied guide data still links to the source's guide, which would
+        stop the twin creating its own, so that link is removed. If the
+        other side joints already exist the twin uses them, otherwise it
+        creates a chain of the same length as the source's.
+        """
+        guide_data = copy.deepcopy(self.guide_data())
+        guide_data["LinkedGuide"] = ""
+        self.option("GuideData").set(guide_data)
+
+        source_joints = source._mirror_joints()
+
+        if self.mirror_mixin_counterparts_exist(source_joints, self._mirror_joints()):
+            self.option("Joint Count").set(0)
+            return
+
+        self.option("Joint Count").set(len(source_joints) if len(source_joints) >= 2 else 0)
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        While the twin's guide is active its joints follow the guide, with
+        offsets taken from where the joints were when the guide was made, so
+        they do not take the mirrored transforms exactly. The guide is
+        therefore removed, the joints mirrored directly and the guide data
+        set to the mirror of the source's control points. The guide is then
+        made again (with the joints in place) if the source has one.
+        """
+        source_joints = source._mirror_joints()
+        twin_joints = self._mirror_joints()
+
+        if not source_joints or len(source_joints) != len(twin_joints):
+            return
+
+        source_matrices = source._mirror_control_matrices()
+
+        self.user_func_remove_guide()
+
+        aniseed_toolkit.scene.mirror.mirror_transforms(
+            transforms=source_joints,
+            targets=twin_joints,
+            across=self.MIRROR_PLANE,
+            behaviour=True,
+        )
+
+        # -- Mirror each control point, then store it relative to the twin's
+        # -- root joint. The spline's upvectors are offset along each control
+        # -- point's X axis. A behaviour mirror negates that axis, which would
+        # -- put the twin's upvectors on the other side of its curve and twist
+        # -- it slightly differently from the source as it bends. So after the
+        # -- behaviour mirror each control point is turned 180 degrees about
+        # -- its Z axis, which mirrors its X (and Y) axis instead.
+        root_joint = self.input("Root Joint").get()
+        buffer = mref.create("transform")
+        control_transforms = []
+
+        for matrix in source_matrices:
+            mref.xform(buffer.full_name(), matrix=matrix, worldSpace=True)
+            aniseed_toolkit.scene.mirror.mirror_transforms(
+                transforms=[buffer.full_name()],
+                across=self.MIRROR_PLANE,
+                behaviour=True,
+            )
+
+            mirrored_matrix = mref.xform(buffer.full_name(), query=True, matrix=True, worldSpace=True)
+            for index in range(8):
+                if index % 4 != 3:
+                    mirrored_matrix[index] *= -1
+            mref.xform(buffer.full_name(), matrix=mirrored_matrix, worldSpace=True)
+
+            control_transforms.append(
+                aniseed_toolkit.scene.transforms.get_relative_matrix(buffer.full_name(), root_joint),
+            )
+
+        buffer.delete()
+
+        guide_data = self.guide_data()
+        guide_data["control_transforms"] = control_transforms
+        guide_data["LinkedGuide"] = ""
+        self.option("GuideData").set(guide_data)
+
+        if source.has_guide():
+            self.user_func_create_guide()
 
 
 class QuadSplineSpine(SplineSpine):

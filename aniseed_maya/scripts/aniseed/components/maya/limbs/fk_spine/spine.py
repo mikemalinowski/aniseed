@@ -12,7 +12,7 @@ import qtility
 import aniseed_toolkit
 
 
-class FKSpineComponent(aniseed.RigComponent):
+class FKSpineComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     This component will create a rig where all controls are sequential except the
     hip sway which can be manipulated without adjusting the children.
@@ -313,3 +313,94 @@ class FKSpineComponent(aniseed.RigComponent):
             match_to=parent,
             config=self.config,
         )
+
+    def _mirror_chain(self) -> list:
+        """
+        Returns the joints from the hip to the chest, or an empty list if
+        either is missing or the chest is not below the hip.
+        """
+        hip = self.input("Hip").get()
+        chest = self.input("Chest").get()
+
+        if not hip or not chest or not mref.objExists(hip) or not mref.objExists(chest):
+            return []
+
+        try:
+            return aniseed_toolkit.scene.joints.get_between(hip, chest)
+        except ValueError:
+            return []
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the joints from the hip to the chest.
+        """
+        return self._mirror_chain()
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the hip, which is where the twin creates its
+        joints.
+        """
+        hip = self.input("Hip").get()
+        if not hip or not mref.objExists(hip):
+            return ""
+
+        parent = mref.get(hip).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        If the other side joints already exist the twin uses them. Otherwise
+        it creates a chain of the same length as the source's when it
+        enters the stack.
+        """
+        source_chain = source._mirror_chain()
+
+        if self.mirror_mixin_counterparts_exist(source_chain, self._mirror_chain()):
+            self.option("Joint Count").set(0)
+            return
+
+        self.option("Joint Count").set(len(source_chain) if len(source_chain) >= 2 else 0)
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        The mirror reflects the joints' behaviour, which negates their local
+        translations, so the chain would point down negative X (which
+        is_valid rejects). Each joint is turned 180 degrees about its own Z
+        axis, so the chain points down positive X again.
+
+        Children mirrored by this mirror (such as a child component's
+        joints) keep their mirrored transforms. Any other children (for
+        instance when the twin uses existing joints) keep their place
+        relative to their parent joint.
+        """
+        chain = self._mirror_chain()
+        if len(chain) < 2:
+            return
+
+        mirrored_nodes = set(self.mirror_mixin_mirrored_nodes().values())
+
+        held = []
+        for joint in chain:
+            for child in mref.get(joint).children(include_shapes=False):
+                if child.name() in mirrored_nodes and child.name() not in chain:
+                    held.append(
+                        (child, mref.xform(child.full_name(), query=True, matrix=True, worldSpace=True)),
+                    )
+
+        # -- Work out every new matrix before changing any, then apply them
+        # -- from the hip down. Turning 180 degrees about Z negates the X
+        # -- and Y axes, which are the first two rows of the world matrix.
+        matrices = []
+        for joint in chain:
+            matrix = mref.xform(joint, query=True, matrix=True, worldSpace=True)
+            for index in range(8):
+                if index % 4 != 3:
+                    matrix[index] *= -1
+            matrices.append(matrix)
+
+        for joint, matrix in zip(chain, matrices):
+            mref.xform(joint, matrix=matrix, worldSpace=True)
+
+        for child, matrix in held:
+            mref.xform(child.full_name(), matrix=matrix, worldSpace=True)

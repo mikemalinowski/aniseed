@@ -12,7 +12,7 @@ import aniseed_toolkit
 
 
 # noinspection PyInterpreter
-class SimpleIKFKComponent(aniseed.RigComponent):
+class SimpleIKFKComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     Builds a two-bone IK/FK rig for a three-joint chain (e.g. an arm
     or leg). Creates an FK chain (upper / lower / end controls), an IK
@@ -454,3 +454,78 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         self.output("Blended Upper").set(self.nk_joints[0])
         self.output("Blended Lower").set(self.nk_joints[1])
         self.output("Blended Tip").set(self.nk_joints[2])
+
+    def _mirror_chain(self) -> list:
+        """
+        Returns the joints from the root joint to the tip joint, or an empty
+        list if either is missing or the tip is not below the root.
+        """
+        root_joint = self.input("Root Joint").get()
+        tip_joint = self.input("Tip Joint").get()
+
+        if not root_joint or not tip_joint:
+            return []
+
+        if not mref.objExists(root_joint) or not mref.objExists(tip_joint):
+            return []
+
+        try:
+            return aniseed_toolkit.scene.joints.get_between(
+                start=root_joint,
+                end=tip_joint,
+            )
+
+        except ValueError:
+            return []
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the chain from the root joint to the tip joint.
+        """
+        return self._mirror_chain()
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the root joint. Empty if there is no root joint
+        or it has no parent.
+        """
+        root_joint = self.input("Root Joint").get()
+        if not root_joint or not mref.objExists(root_joint):
+            return ""
+
+        parent = mref.get(root_joint).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        Uses the other side's chain if it already exists (the search and
+        replaced names), otherwise copies the source chain (only the joints
+        from the root to the tip) into the mirrored hierarchy for this twin
+        to drive.
+
+        The "IK Control Transform" option is left to the search and replace,
+        with a warning if it does not give an other side node.
+        """
+        ik_transform = self.option("IK Control Transform").get()
+        if ik_transform:
+            if not mref.objExists(ik_transform):
+                print(
+                    f"Mirror : {self.label()} IK Control Transform {ik_transform} "
+                    f"does not exist"
+                )
+            elif ik_transform == source.option("IK Control Transform").get():
+                print(
+                    f"Mirror : {self.label()} IK Control Transform {ik_transform} "
+                    f"is the same node as the source's"
+                )
+
+        source_chain = source._mirror_chain()
+        if not source_chain:
+            return
+
+        if self.mirror_mixin_counterparts_exist(source_chain, self._mirror_chain()):
+            return
+
+        copies = self.mirror_mixin_copy_nodes(source_chain)
+        self.input("Root Joint").set(copies[0])
+        self.input("Tip Joint").set(copies[-1])

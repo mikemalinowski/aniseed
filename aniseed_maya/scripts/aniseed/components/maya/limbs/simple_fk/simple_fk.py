@@ -5,11 +5,12 @@ are chained (or flat, if Flat Hierarchy is set) and can optionally have an
 offset control. It is also heavily commented as an example component.
 """
 import os
+import mref
 import aniseed
 import aniseed_toolkit
 
 
-class SimpleFkComponent(aniseed.RigComponent):
+class SimpleFkComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     identifier = "Limb : Simple Fk"
     icon = os.path.join(
@@ -216,3 +217,40 @@ class SimpleFkComponent(aniseed.RigComponent):
             self.output(f"Fk Control {idx}").set(control.ctl)
 
         return True
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the joints to drive, in order. Empty if none are set.
+        """
+        return list(self.input("Joints To Drive").get() or [])
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the first joint to drive. Empty if there is
+        no joint or it has no parent.
+        """
+        joints = self.input("Joints To Drive").get() or []
+        if not joints or not mref.objExists(joints[0]):
+            return ""
+
+        parent = mref.get(joints[0]).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        Uses the other side's joints if they already exist (the search and
+        replaced names), otherwise copies the source joints into the mirrored
+        hierarchy for this twin to drive.
+        """
+        source_joints = list(source.input("Joints To Drive").get() or [])
+        twin_joints = list(self.input("Joints To Drive").get() or [])
+
+        if not source_joints:
+            return
+
+        if self.mirror_mixin_counterparts_exist(source_joints, twin_joints):
+            return
+
+        self.input("Joints To Drive").set(
+            self.mirror_mixin_copy_nodes(source_joints),
+        )

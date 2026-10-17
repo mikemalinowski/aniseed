@@ -7,7 +7,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class JointlessSingular(aniseed.RigComponent):
+class JointlessSingular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     A basic component which creates a single control placed at a guide,
     without driving a joint
@@ -175,3 +175,34 @@ class JointlessSingular(aniseed.RigComponent):
             self.output("Offset Control").set(offset_control.ctl)
 
         return True
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the guide, which is mirrored onto the twin's guide. Empty if
+        no guide is set.
+        """
+        guide = self.input("Guide").get()
+        if not guide:
+            return []
+        return [guide]
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Nothing is created from the selection, so there is no parent item.
+        """
+        return ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        Uses the other side's guide if it already exists (the search and
+        replaced name), otherwise copies the source guide into the mirrored
+        hierarchy for this twin.
+        """
+        source_guide = source.input("Guide").get()
+        if not source_guide:
+            return
+
+        if self.mirror_mixin_counterparts_exist([source_guide], [self.input("Guide").get()]):
+            return
+
+        self.input("Guide").set(self.mirror_mixin_copy_nodes([source_guide])[0])

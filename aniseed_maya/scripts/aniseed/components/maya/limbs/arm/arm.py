@@ -15,7 +15,14 @@ import collections
 import aniseed_toolkit
 
 
-class ArmComponent(aniseed.RigComponent):
+# -- The twist joint inputs, with the options holding how many to generate
+_ARM_TWISTS = [
+    ("Upper Twist Joints", "Upper Twist Count"),
+    ("Lower Twist Joints", "Lower Twist Count"),
+]
+
+
+class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     identifier = "Limb : Arm"
     icon = os.path.join(
@@ -245,23 +252,10 @@ class ArmComponent(aniseed.RigComponent):
             self.all_joints(),
         )
 
-    def user_func_create_mirror(self):
-        """
-        This will create a mirrored version of the component
-        """
-        aniseed.builders.mirror_component(
-            component_instance=self,
-            transforms=self.all_joints(),
-            location_label="Location",
-            config=self.config,
-            joint_parent=mref.get(self.input("Shoulder").get()).parent().name(),
-            input_overrides={"Shoulder": ""},
-        )
-
     def user_functions(self) -> typing.Dict[str, callable]:
         """
         These are functions that will be exposed to the user if they
-        right click the component
+        right click the component. Mirroring is offered by MirrorMixin.
         """
         menu = super(ArmComponent, self).user_functions()
         shoulder_joint = self.input("Shoulder").get()
@@ -270,10 +264,85 @@ class ArmComponent(aniseed.RigComponent):
         # -- to allow the user to have one generated
         if not shoulder_joint or not mref.objExists(shoulder_joint):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
-            return menu
 
-        menu["Create Mirrored Component"] = functools.partial(self.user_func_create_mirror)
         return menu
+
+    def _mirror_arm_chain(self) -> list:
+        """
+        Returns the shoulder to hand joints, or an empty list if either is
+        missing or the hand is not below the shoulder.
+        """
+        shoulder = self.input("Shoulder").get()
+        hand = self.input("Hand").get()
+
+        if not shoulder or not hand or not mref.objExists(shoulder) or not mref.objExists(hand):
+            return []
+
+        try:
+            return aniseed_toolkit.scene.joints.get_between(shoulder, hand)
+        except ValueError:
+            return []
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the shoulder to hand chain followed by the upper and then the
+        lower twist joints. Empty if the shoulder or hand is missing.
+        """
+        chain = self._mirror_arm_chain()
+        if not chain:
+            return []
+
+        return chain + [
+            joint
+            for input_name in ["Upper Twist Joints", "Lower Twist Joints"]
+            for joint in self.input(input_name).get() or []
+            if joint
+        ]
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the shoulder joint, which is where the twin's
+        skeleton is generated. Empty if there is none.
+        """
+        shoulder = self.input("Shoulder").get()
+        if not shoulder or not mref.objExists(shoulder):
+            return ""
+
+        parent = mref.get(shoulder).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        If the other side already has its own (unused) arm joints, the twin
+        uses them. Otherwise the twin generates its own skeleton, with twist
+        counts matching the source. Either way the space switches are not
+        created again, as the source's are mirrored with the subtree.
+        """
+        self.option("Apply Space Switches").set(False)
+
+        if self.mirror_mixin_counterparts_exist(source.mirror_mixin_items_to_mirror()):
+            self.option("Build Skeleton").set(False)
+            return
+
+        self.option("Build Skeleton").set(True)
+
+        for input_name, option_name in _ARM_TWISTS:
+            self.option(option_name).set(len(source.input(input_name).get() or []))
+            self.input(input_name).set([])
+
+        self.input("Shoulder").set("")
+        self.input("Hand").set("")
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        Restores the creation options the twin's on_enter_stack used to the
+        source's values, so the twin's data matches the source.
+        """
+        option_names = ["Build Skeleton", "Apply Space Switches"]
+        option_names += [option_name for _, option_name in _ARM_TWISTS]
+
+        for option_name in option_names:
+            self.option(option_name).set(source.option(option_name).get(resolved=False))
 
     def is_valid(self):
         """

@@ -28,6 +28,7 @@ def mirror_transforms(
     behaviour: bool = True,
     rotate_flip: bool = False,
     name_replacement: list = None,
+    targets: list = None,
 ):
     """
     This function is taken from github with a minor modification. The
@@ -51,6 +52,10 @@ def mirror_transforms(
             name the first is replaced with the second to find the node the
             mirrored matrix is applied to. If empty or None, each
             transform's mirrored matrix is applied to the transform itself.
+        targets: Optional list of node names, parallel to transforms. When
+            given, each transform's mirrored matrix is applied to the target
+            at the same index (and name_replacement is ignored). It must be
+            the same length as transforms.
 
     Returns:
         None
@@ -66,6 +71,12 @@ def mirror_transforms(
     if across not in ('XY', 'YZ', 'XZ'):
         raise ValueError(
             "Keyword Argument: 'across' not of accepted value ('XY', 'YZ', 'XZ').")
+
+    if targets is not None and len(targets) != len(transforms):
+        raise ValueError("targets must be the same length as transforms")
+
+    # -- Map each transform to the node its mirrored matrix is applied to
+    target_lookup = dict(zip(transforms, targets)) if targets is not None else dict()
 
     stored_matrices = collections.OrderedDict()
 
@@ -124,7 +135,10 @@ def mirror_transforms(
         for transform in stored_matrices:
             target = transform
 
-            if name_replacement:
+            if targets is not None:
+                target = target_lookup[transform]
+
+            elif name_replacement:
                 target = target.replace(
                     name_replacement[0],
                     name_replacement[1],

@@ -26,6 +26,16 @@ SIDE_INPUTS = [
 ]
 
 
+# -- The joint inputs of the single eye component, in the order they are
+# -- mirrored
+EYE_JOINT_INPUTS = [
+    "Eye Joint",
+    "Upper Eye Lid Joint",
+    "Lower Eye Lid Joint",
+    "Pupil Joint",
+]
+
+
 def get_cross_axis(forward_axis: str, up_axis: str) -> str:
     """
     Returns the axis (X, Y or Z) which is neither the forward nor the up axis
@@ -34,6 +44,37 @@ def get_cross_axis(forward_axis: str, up_axis: str) -> str:
     all_axis.remove(forward_axis)
     all_axis.remove(up_axis)
     return all_axis[0]
+
+
+def flip_joint(joint: str, axis: str, hold: typing.Iterable = ()) -> None:
+    """
+    Rotates the joint 180 degrees about its own given axis (X, Y or Z),
+    without moving its position. Children named in hold keep their world
+    transforms; any other children turn with the joint.
+    """
+    if not joint or not mref.objExists(joint):
+        return
+
+    node = mref.get(joint)
+    hold = set(hold)
+
+    held = [
+        (child, mref.xform(child.full_name(), query=True, matrix=True, worldSpace=True))
+        for child in node.children(include_shapes=False)
+        if child.name() in hold
+    ]
+
+    # -- Turning 180 degrees about one axis negates the other two axes,
+    # -- which are rows of the world matrix
+    matrix = mref.xform(node.full_name(), query=True, matrix=True, worldSpace=True)
+    for row, row_axis in enumerate("XYZ"):
+        if row_axis != axis.upper():
+            for column in range(3):
+                matrix[row * 4 + column] *= -1
+    mref.xform(node.full_name(), matrix=matrix, worldSpace=True)
+
+    for child, child_matrix in held:
+        mref.xform(child.full_name(), matrix=child_matrix, worldSpace=True)
 
 
 class EyesComponent(aniseed.RigComponent):
@@ -457,11 +498,15 @@ class EyesComponent(aniseed.RigComponent):
             mref.get(root_joint).set_parent(parent)
 
 
-class EyeComponent(aniseed.RigComponent):
+class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     This is a single eye component
     """
     identifier = "Limb : Eye"
+
+    # -- Set on a twin during a mirror when it should use the existing
+    # -- other side joints it was given, rather than creating its own
+    _mirror_keep_joints = False
 
     def __init__(self, *args, **kwargs):
         """
@@ -619,8 +664,12 @@ class EyeComponent(aniseed.RigComponent):
 
     def on_enter_stack(self):
         """
-        Creates the eye joints under the current selection.
+        Creates the eye joints under the current selection (unless this is
+        a mirrored twin which uses existing other side joints).
         """
+        if self._mirror_keep_joints:
+            return
+
         self.user_func_create_skeleton()
 
     def input_widget(self, requirement_name: str):
@@ -716,6 +765,84 @@ class EyeComponent(aniseed.RigComponent):
             aniseed_toolkit.scene.transforms.snap_position(eye_joint, parent)
 
         return eye_joint
+
+    def mirror_mixin_items_to_mirror(self) -> list:
+        """
+        Returns the eye, upper lid, lower lid and pupil joints, in that
+        order. Each is a fixed slot, so an unset joint is an empty string
+        (which the mirror skips). Empty if there is no eye joint.
+        """
+        if not self.input("Eye Joint").get():
+            return []
+
+        return [
+            self.input(input_name).get() or ""
+            for input_name in EYE_JOINT_INPUTS
+        ]
+
+    def mirror_mixin_parent_item(self) -> str:
+        """
+        Returns the parent of the eye joint, which is where the twin's eye
+        joint is created.
+        """
+        eye_joint = self.input("Eye Joint").get()
+        if not eye_joint or not mref.objExists(eye_joint):
+            return ""
+
+        parent = mref.get(eye_joint).parent()
+        return parent.name() if parent else ""
+
+    def mirror_mixin_prepare_twin(self, source) -> None:
+        """
+        If the other side joints already exist the twin uses them. Otherwise
+        its joint inputs are cleared, and it creates its own joints when it
+        enters the stack (from the options copied from the source).
+        """
+        pairs = [
+            (source_joint, twin_joint)
+            for source_joint, twin_joint in zip(
+                source.mirror_mixin_items_to_mirror(),
+                self.mirror_mixin_items_to_mirror(),
+            )
+            if source_joint
+        ]
+
+        if self.mirror_mixin_counterparts_exist(
+            [source_joint for source_joint, _ in pairs],
+            [twin_joint for _, twin_joint in pairs],
+        ):
+            self._mirror_keep_joints = True
+            return
+
+        for input_name in EYE_JOINT_INPUTS:
+            self.input(input_name).set("")
+
+    def mirror_mixin_post_mirror(self, source) -> None:
+        """
+        The mirror reflects the eye joint's behaviour, which negates its
+        axes. The aim control is placed along the forward axis, so that
+        would put it behind the eye. The eye joint is therefore turned 180
+        degrees about its cross axis, so its forward and up axes face the
+        mirrored directions. The lid and pupil joints keep the behaviour
+        mirror, which their rotation based setup (such as the blink) needs.
+
+        Children mirrored by this mirror keep their mirrored transforms.
+        Any other children (for instance those of another component, when
+        the twin uses existing joints) keep their place relative to the
+        eye joint.
+        """
+        self._mirror_keep_joints = False
+
+        mirrored_nodes = self.mirror_mixin_mirrored_nodes().values()
+
+        flip_joint(
+            self.input("Eye Joint").get(),
+            get_cross_axis(
+                self.option("Forward Axis").get(),
+                self.option("Up Axis").get(),
+            ),
+            hold=mirrored_nodes,
+        )
 
     def run(self):
         """

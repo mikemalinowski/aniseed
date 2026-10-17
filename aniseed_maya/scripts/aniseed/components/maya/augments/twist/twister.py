@@ -9,7 +9,7 @@ import aniseed
 import aniseed_toolkit
 
 
-class TwisterComponent(aniseed.RigComponent):
+class TwisterComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     Builds a twist setup along a chain of joints driven by a Root and
     Tip driver. The augment creates a twist rig (via

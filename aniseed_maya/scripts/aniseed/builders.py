@@ -1,14 +1,14 @@
 """
 Helpers which build aniseed components programmatically on behalf of other
-components: space switches, fk world space switches, twisters, mirrored
-components and joints created under the current selection.
+components: space switches, fk world space switches, twisters and joints
+created under the current selection. Mirroring is handled by
+aniseed.mixins.MirrorMixin.
 """
 import uuid
 
 import mref
 
 from aniseed_toolkit.rig import control as _control
-from aniseed_toolkit.scene import mirror as _mirror
 from aniseed_toolkit.scene import shapes as _shapes
 from aniseed_toolkit.rig import space as _space
 
@@ -117,41 +117,6 @@ def _setup_fk_switches(nodes, rig, orientation_only: bool, default_space: str):
         space_switch_component.run()
 
         parent = node
-
-
-def mirror_component(component_instance, transforms, location_label, config, joint_parent=None, input_overrides=None, option_overrides=None):
-    original_location = component_instance.option(location_label).get()
-
-    if original_location not in [config.left, config.right]:
-        print("You can only mirror if the component is left or right")
-        return
-
-    # -- Get the opposite location
-    new_location = config.left if original_location == config.right else config.right
-
-    # -- Select the parent joint and duplicate ourselves (setting hte label so
-    # -- we know its mirrored. Note that we clear the root bone as this will
-    # -- trigger the duplcated component to generate the skeleton too.
-    if joint_parent:
-        mref.select(joint_parent)
-
-    option_overrides = option_overrides or dict()
-    option_overrides.update({location_label: new_location})
-
-    mirrored_component = component_instance.duplicate(
-        input_overrides=input_overrides or dict(),
-        option_overrides=option_overrides,
-    )
-    mirrored_component.set_label(f"{component_instance.label()} (Mirrored)")
-
-    # -- Now we do an in-place mirror
-    _mirror.mirror_transforms(
-        transforms=transforms,
-        name_replacement=[
-            config.resolved_location(original_location),
-            config.resolved_location(new_location),
-        ],
-    )
 
 
 def add_twister(rig, joints, parent, root, tip, prefix, location, shape_rotation=None):
