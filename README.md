@@ -1,6 +1,24 @@
-# Aniseed (Version 3.*)
+# Aniseed (Version 4.*)
 
 Aniseed is an application embedded (Maya) rigging tool. 
+
+## What's New in Version 4
+
+Version 4 restructures the Aniseed Toolkit (the library of rigging functions which
+components and tools are built on). Rigs built with Aniseed are unaffected, but any of
+your own code which imports from the toolkit will need updating.
+
+* The toolkit is now organised into layers, each of which only uses the layers before it:
+    * `aniseed_toolkit.core` : units, naming, maths, attributes, selection and directions
+    * `aniseed_toolkit.scene` : transforms, joints, constraints, shapes, skin, surfaces and node maths
+    * `aniseed_toolkit.rig` : controls, guides, tagging, pinning, spaces and the pose mixer
+    * `aniseed_toolkit.rigging` : ik/fk, soft ik, foot roll, blend chains, twist, spline and ribbon setups
+* The old module locations (such as `aniseed_toolkit.joints` or `aniseed_toolkit.lib.*`)
+  have been removed. For example, `aniseed_toolkit.joints` is now `aniseed_toolkit.scene.joints`
+  and `aniseed_toolkit.control` is now `aniseed_toolkit.rig.control`.
+* Tools are still run by name, exactly as before, using `aniseed_toolkit.run("<tool name>")`.
+* Duplicating a component through the UI now lets you rename it and apply a search and
+  replace to its values as part of the duplication.
 
 You can view a quick introduction video here:
 https://youtu.be/rNy7F64nDiw

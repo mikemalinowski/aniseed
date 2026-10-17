@@ -372,6 +372,8 @@ on its own.
 
 ## D22. Shims stay until 4.0 (phase 7 not done)
 
+**Superseded by D24:** phase 7 was done in 4.0.0 at the user's request.
+
 - **Chosen:** phase 7 (removing the old module paths) is deliberately not done.
   - The plan keeps the shims for at least one minor release.
   - All code in this repo now uses the new paths. A strict build that turns the
@@ -406,3 +408,19 @@ on its own.
 - **Alternative:** a toolkit function that declares the shared attributes on a
   component passed in (e.g. `declare_singular_attributes(component, ...)`). That
   avoids duplicated declarations but is a mixin in all but name.
+
+
+## D24. Shims removed in 4.0.0 (phase 7, user request)
+
+- **Chosen:** the user confirmed that aniseed and its components are the only
+  users of aniseed_toolkit, so the compatibility layer was deleted on `main`:
+  - the `aniseed_toolkit/lib` package (all module shims and `lib/rigging`);
+  - the `aniseed_toolkit/app` package (old location of the toolkit UI, now `ui.app`);
+  - the `aniseed_toolkit/_legacy` package (dead code only reachable through the shims);
+  - the top-level `_OLD_MODULES` map and the `app` / `lib` lazy names in
+    `aniseed_toolkit/__init__.py`;
+  - the moved-module map and legacy `__getattr__` in `aniseed_toolkit/rigging`.
+- No code in the repo used those paths, so no component changed. The only other
+  edit was the Spring "Control Shape" description, which named the old path.
+- aniseed and aniseed_toolkit are both 4.0.0, and the README describes the change.
+- **Alternative:** keep the shims for external scripts. Not needed, as there are none.

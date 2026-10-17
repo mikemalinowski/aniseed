@@ -113,7 +113,7 @@ class Spring(aniseed.RigComponent):
         self.declare_option(
             name="Control Shape",
             value="core_cube",
-            description="Shape name passed to aniseed_toolkit.control.create for every control.",
+            description="Shape name passed to aniseed_toolkit.rig.control.create for every control.",
         )
 
         self.declare_option(

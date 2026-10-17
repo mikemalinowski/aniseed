@@ -65,25 +65,3 @@ __all__ = [
     "TwistSetup",
     "TwoBoneIKFK",
 ]
-
-# -- Old names for modules which moved or merged
-_MOVED_MODULES = {
-    "node_math": "aniseed_toolkit.scene.node_math",
-    "softik": "aniseed_toolkit.rigging.soft_ik",
-    "multi_bone_softik": "aniseed_toolkit.rigging.soft_ik",
-}
-
-
-def __getattr__(name):
-    if name in _MOVED_MODULES:
-        import warnings
-        import importlib
-        warnings.warn(
-            f"{__name__}.{name} is deprecated, use {_MOVED_MODULES[name]}",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return importlib.import_module(_MOVED_MODULES[name])
-
-    from .._legacy import resolve
-    return resolve(__name__, name)
