@@ -27,6 +27,6 @@ class CalculateFourPointSplineFromJoints(aniseed_toolkit.Tool):
         Args:
             joints: List of joints
         """
-        return aniseed_toolkit.transformation.calculate_four_point_spline_positions(
+        return aniseed_toolkit.core.maths.calculate_four_point_spline_positions(
             nodes=joints,
         )

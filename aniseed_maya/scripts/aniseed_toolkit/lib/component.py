@@ -1,38 +1,30 @@
-from maya import cmds
+"""
+Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
 
-from . import mirror as _mirror
+Everything here now lives in: aniseed.builders, aniseed.dialogs
+"""
+import warnings
 
 
-def mirror(component_instance, transforms, location_label, config, joint_parent=None, input_overrides=None, option_overrides=None):
-    original_location = component_instance.option(location_label).get()
+warnings.warn(
+    f"{__name__} is deprecated, use aniseed.builders, aniseed.dialogs",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
-    if original_location not in [config.left, config.right]:
-        print("You can only mirror if the component is left or right")
-        return
+_LAZY = {
+    'add_twister': ('aniseed.builders', 'add_twister'),
+    'mirror': ('aniseed.builders', 'mirror_component'),
+    'request_count': ('aniseed.dialogs', 'request_count'),
+}
 
-    # -- Get the opposite location
-    new_location = config.left if original_location == config.right else config.right
 
-    # -- Select the parent joint and duplicate ourselves (setting hte label so
-    # -- we know its mirrored. Note that we clear the root bone as this will
-    # -- trigger the duplcated component to generate the skeleton too.
-    if joint_parent:
-        cmds.select(joint_parent)
-
-    option_overrides = option_overrides or dict()
-    option_overrides.update({location_label: new_location})
-
-    mirrored_component = component_instance.duplicate(
-        input_overrides=input_overrides or dict(),
-        option_overrides=option_overrides,
-    )
-    mirrored_component.set_label(f"{component_instance.label()} (Mirrored)")
-
-    # -- Now we do an in-place mirror
-    _mirror.global_mirror(
-        transforms=transforms,
-        name_replacement=[
-            config.resolved_location(original_location),
-            config.resolved_location(new_location),
-        ],
-    )
+def __getattr__(name):
+    # -- Names which moved into aniseed are resolved on first use so
+    # -- that the toolkit never imports aniseed when it is loaded
+    if name in _LAZY:
+        import importlib
+        module, attribute = _LAZY[name]
+        return getattr(importlib.import_module(module), attribute)
+    from .._legacy import resolve
+    return resolve(__name__, name)

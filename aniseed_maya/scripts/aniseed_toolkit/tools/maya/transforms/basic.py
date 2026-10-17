@@ -61,7 +61,7 @@ class ScaleTranslationFromSnapshot(aniseed_toolkit.Tool):
             for idx, axis in enumerate(SnapshotNodeTranslation.axis):
                 node_to_scale.attr(f"translate{axis}").set(base_translation[idx])
 
-            aniseed_toolkit.transformation.scale_translation(node_to_scale, scale_by)
+            aniseed_toolkit.scene.transforms.scale_translation(node_to_scale, scale_by)
 
 
 class ScaleNodeTranslation(aniseed_toolkit.Tool):
@@ -83,7 +83,7 @@ class ScaleNodeTranslation(aniseed_toolkit.Tool):
             nodes = mc.ls(selection=True)
 
         for node in nodes:
-            aniseed_toolkit.transformation.scale_translation(node, scale_by)
+            aniseed_toolkit.scene.transforms.scale_translation(node, scale_by)
 
 
 class ScaleHierarchyTranslation(aniseed_toolkit.Tool):
@@ -105,4 +105,4 @@ class ScaleHierarchyTranslation(aniseed_toolkit.Tool):
             nodes = mc.ls(selection=True)
 
         for node in nodes:
-            aniseed_toolkit.transformation.scale_translation_of_hierarchy(node, scale_by)
+            aniseed_toolkit.scene.transforms.scale_translation_of_hierarchy(node, scale_by)

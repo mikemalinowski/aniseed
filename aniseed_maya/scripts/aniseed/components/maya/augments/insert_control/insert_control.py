@@ -1,7 +1,11 @@
+"""
+Provides the "Augment : Insert Control" component, which creates a control
+beneath a parent node and optionally moves the parent's existing transform
+children under that control.
+"""
+import mref
 import aniseed
 import aniseed_toolkit
-
-from maya import cmds
 
 
 class InsertControlComponent(aniseed.RigComponent):
@@ -16,6 +20,10 @@ class InsertControlComponent(aniseed.RigComponent):
     identifier = "Augment : Insert Control"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent" input, the "Move All Children Under Control",
+        match, naming and shape options, and the "Control" output.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -83,6 +91,11 @@ class InsertControlComponent(aniseed.RigComponent):
         )
 
     def option_widget(self, option_name: str):
+        """
+        Returns a location selector for "Location", a shape selector for
+        "Shape" and an object selector for "Match Transform To", or None
+        otherwise.
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(config=self.config)
 
@@ -94,39 +107,53 @@ class InsertControlComponent(aniseed.RigComponent):
         if option_name == "Match Transform To":
             return aniseed.widgets.ObjectSelector(component=self)
 
-    def input_widget(self, requirement_name: str):
-        if requirement_name == "Parent":
-            return aniseed.widgets.ObjectSelector(component=self)
-
-        return None
-
     def suggested_label(self):
+        """
+        Builds a label from the "Name" and upper-cased "Location" options.
+        """
         name = self.option("Name").get()
         location = self.option("Location").get().upper()
 
         return f"Insert {name} Control {location}"
 
+    def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the "Parent" input, or None otherwise.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
+        if requirement_name == "Parent":
+            return aniseed.widgets.ObjectSelector(component=self)
+
+        return None
+
     def run(self) -> bool:
+        """
+        Creates a control beneath the parent (matched to the parent unless a
+        match node is given) and, if enabled, moves the parent's transform
+        children under it. The children are gathered before the control is
+        created so the control itself is not re-parented.
+        """
 
-        parent = self.input("Parent").get()
-        children = cmds.listRelatives(parent, children=True, type="transform") or list()
+        parent = mref.get(self.input("Parent").get())
 
-        control = aniseed_toolkit.run("Create Control",
+        # -- Gather the children before the control is added beneath the parent
+        children = parent.children(node_type="transform")
+
+        control = aniseed_toolkit.rig.control.create(
             description=self.option("Name").get(),
             location=self.option("Location").get(),
-            parent=parent,
+            parent=parent.full_name(),
             config=self.config,
             shape=self.option("Shape").get(),
-            match_to=self.option("Match Transform To").get(),
+            match_to=self.option("Match Transform To").get() or parent.full_name(),
         )
+        self.output("Control").set(control.ctl)
 
-        self.output("Control").set(control)
+        control = mref.get(control.ctl)
 
         if self.option("Move All Children Under Control").get():
-            for child in children:
-                cmds.parent(
-                    child,
-                    control,
-                )
+            control.add_children(children)
 
         return True

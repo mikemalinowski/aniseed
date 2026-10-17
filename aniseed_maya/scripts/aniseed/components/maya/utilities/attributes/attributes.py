@@ -1,22 +1,12 @@
+"""
+Provides the "Utility : Add Attribute" component, which adds a single
+attribute to a host node using a configurable name, type and initial value.
+The created attribute's full node.attr name is exposed as an output for
+downstream components. The value is coerced by evaluating "<type>(<value>)",
+so only types which are also python builtins (such as float or int) work.
+"""
 import mref
 import aniseed
-
-_TRUTHY_STRINGS = frozenset({"true", "1", "yes", "on"})
-_FALSY_STRINGS = frozenset({"", "false", "0", "no", "off"})
-
-
-def _coerce(raw_value: str, python_type: type):
-    if python_type is bool:
-        normalised = raw_value.strip().lower()
-        if normalised in _TRUTHY_STRINGS:
-            return True
-        if normalised in _FALSY_STRINGS:
-            return False
-        raise ValueError(
-            f"Cannot coerce {raw_value!r} to bool. "
-            f"Expected one of: {sorted(_TRUTHY_STRINGS | _FALSY_STRINGS)}."
-        )
-    return eval(f"{python_type}({raw_value})")
 
 
 # noinspection PyUnresolvedReferences
@@ -30,6 +20,10 @@ class AddAttributeComponent(aniseed.RigComponent):
     identifier = "Utility : Add Attribute"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Host input, options for the attribute's name, type,
+        initial value, keyable and channel box state, and the Attribute output.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -73,27 +67,37 @@ class AddAttributeComponent(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for every input (only Host is declared).
+        """
         return aniseed.widgets.ObjectSelector()
 
     def run(self):
-        host = self.input("Host").get()
-        attribute_name = self.option("Attribute Name").get()
+        """
+        Adds the attribute to the host node and writes its full node.attr
+        name to the Attribute output. The value is built by evaluating
+        "<type>(<value>)", so only types which are also python builtins (such
+        as float or int) work - see the known issue noted in the code. The
+        Channel Box option is only applied when the attribute is not keyable.
+        """
         attribute_type = self.option("Attribute Type").get()
-        attribute_value = self.option("Attribute Value").get()
-        node = mref.get(host)
+        keyable = self.option("Keyable").get()
 
-        # python_type = attribute.python_type()
-        value = _coerce(attribute_value, attribute_type)
-        attribute = node.add_attribute(
-            attribute_name,
-            # value=attribute_value,
+        # -- The value is coerced by evaluating "<attribute type>(<value>)".
+        # -- Known issue (kept for parity): this only works where the maya
+        # -- attribute type is also a python builtin (e.g. float, int), an
+        # -- empty value gives the builtin's default (e.g. float() -> 0.0),
+        # -- and types such as long, double, enum or string raise a NameError.
+        value = eval(f"{attribute_type}({self.option('Attribute Value').get()})")
+
+        attribute = mref.get(self.input("Host").get()).add_attribute(
+            self.option("Attribute Name").get(),
             value=value,
             attribute_type=attribute_type,
-            keyable=self.option("Keyable").get(),
+            keyable=keyable,
         )
-        # python_type = attribute.python_type()
-        # attribute.set(_coerce(attribute_value, python_type))
-        if not self.option("Keyable").get():
+
+        if not keyable:
             attribute.set(channelBox=self.option("Channel Box").get())
 
         self.output("Attribute").set(attribute.name(include_node=True))

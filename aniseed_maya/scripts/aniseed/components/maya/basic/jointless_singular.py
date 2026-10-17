@@ -1,17 +1,26 @@
+"""
+Provides the "Basic : Singular (Jointless)" component, which creates a single
+control placed at a guide without driving a joint.
+"""
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class JointlessSingular(aniseed.RigComponent):
     """
-    A basic component which creates a single joint and a single control
+    A basic component which creates a single control placed at a guide,
+    without driving a joint
     """
 
     identifier = "Basic : Singular (Jointless)"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent" and "Guide" inputs, the naming, shape, offset and
+        world alignment options, and the "Control" and "Offset Control"
+        outputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -92,11 +101,11 @@ class JointlessSingular(aniseed.RigComponent):
             is_default=False,
         )
 
-    def suggested_label(self):
-        return self.option("Description").get()
-
     def option_widget(self, option_name):
-
+        """
+        Returns a shape selector for "Shape" and a location selector for
+        "Location", or None otherwise.
+        """
         if option_name == "Shape":
             return aniseed.widgets.ShapeSelector(default_item=self.option("Shape").get() or "")
 
@@ -106,63 +115,63 @@ class JointlessSingular(aniseed.RigComponent):
         return None
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the "Parent" and "Guide" inputs, or
+        None otherwise.
+        """
         if requirement_name in ["Parent", "Guide"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
         return None
 
-    def on_enter_stack(self):
-        super().on_enter_stack()
-        self.input("Parent").hook_to_parent()
-
     def is_valid(self) -> bool:
+        """
+        Checks that a parent is given and that the guide exists.
+        """
         if not self.input("Parent").get(resolved=False):
             print("You must specify a Parent")
             return False
 
         guide = self.input("Guide").get()
-        if not guide or not cmds.objExists(guide):
+        if not guide or not mref.objExists(guide):
             print("You must specify a valid Guide")
             return False
 
         return True
 
+    def suggested_label(self):
+        """
+        Returns the "Description" option as the suggested label.
+        """
+        return self.option("Description").get()
+
+    def on_enter_stack(self):
+        """
+        Hooks the "Parent" input up to the parent component's default output.
+        """
+        super().on_enter_stack()
+        self.input("Parent").hook_to_parent()
+
     def run(self):
-
-        # -- Lets read our inputs
-        description = self.option("Description").get()
-        location = self.option("Location").get()
-        shape = self.option("Shape").get()
-        parent = self.input("Parent").get()
-        guide = self.input("Guide").get()
-
-        control = aniseed_toolkit.control.create(
-            description=description,
-            location=location,
+        """
+        Creates the singular control at the guide, without an offset visibility
+        toggle.
+        """
+        control, offset_control = aniseed_toolkit.rig.control.create_with_offset(
+            description=self.option("Description").get(),
+            location=self.option("Location").get(),
             config=self.config,
-            shape=shape,
-            parent=parent,
-            match_to=guide,
+            shape=self.option("Shape").get(),
+            parent=self.input("Parent").get(),
+            match_to=self.input("Guide").get(),
+            align_to_world=self.option("Align Control To World").get(),
+            add_offset=self.option("Add Offset Control").get(),
+            offset_visibility_toggle=False,
         )
-        driving_control = control
-
-        if self.option("Align Control To World").get():
-            cmds.xform(
-                driving_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
-
-        if self.option("Add Offset Control").get():
-            driving_control = aniseed_toolkit.control.create(
-                description=description + "_offset",
-                location=location,
-                config=self.config,
-                shape=shape,
-                parent=control.ctl,
-                match_to=guide,
-            )
-            self.output("Offset Control").set(driving_control.ctl)
 
         self.output("Control").set(control.ctl)
+
+        if offset_control:
+            self.output("Offset Control").set(offset_control.ctl)
+
         return True

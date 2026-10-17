@@ -1,6 +1,6 @@
 import qtility
 import aniseed_toolkit
-from aniseed_toolkit.app.widgets import ToolWidget
+from aniseed_toolkit.ui.app import ToolWidget
 import maya.cmds as mc
 from Qt import QtCore, QtWidgets, QtGui
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin

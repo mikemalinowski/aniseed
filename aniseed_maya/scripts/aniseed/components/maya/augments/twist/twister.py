@@ -1,14 +1,19 @@
+"""
+Provides the "Augment : Twister" component, which builds a twist setup between
+a root and tip driver and parent constrains each given joint to a twist
+transform blended by its distance along the chain.
+"""
 import os
+import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class TwisterComponent(aniseed.RigComponent):
     """
     Builds a twist setup along a chain of joints driven by a Root and
-    Tip driver. The augment creates a twist rig (via the
-    ``Create Twist Setup`` toolkit action), aligns its org to the root
+    Tip driver. The augment creates a twist rig (via
+    ``aniseed_toolkit.rigging.twist.create_twist_setup``), aligns its org to the root
     driver and its tip to the tip driver, optionally parent-constrains
     those ends to the drivers, and then distributes the supplied joints
     along the twist by their normalised distance from root to tip.
@@ -25,6 +30,11 @@ class TwisterComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent", "Joints", "Root" and "Tip" inputs, the naming
+        and constraint options and the "Twisters" output. The twist builder
+        from the last run is kept on self.builder.
+        """
         super().__init__(*args, **kwargs)
 
         self.builder = None
@@ -113,6 +123,12 @@ class TwisterComponent(aniseed.RigComponent):
         )
 
     def option_widget(self, option_name):
+        """
+        Returns a location selector for the "Location" option.
+
+        Args:
+            option_name: The name of the option to return a widget for.
+        """
 
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(
@@ -120,6 +136,13 @@ class TwisterComponent(aniseed.RigComponent):
             )
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object list for the "Joints" input and object selectors for
+        the "Root" and "Tip" inputs.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name == "Joints":
             return aniseed.widgets.ObjectList()
 
@@ -130,6 +153,10 @@ class TwisterComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def is_valid(self) -> bool:
+        """
+        Checks that joints have been given and that the chain from the first to
+        the last joint has a known facing direction.
+        """
 
         joints = self.input("Joints").get()
 
@@ -137,8 +164,7 @@ class TwisterComponent(aniseed.RigComponent):
             print("No joints given to drive")
             return False
 
-        facing_direction = aniseed_toolkit.run(
-            "Get Chain Facing Direction",
+        facing_direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=joints[0],
             end=joints[-1],
         )
@@ -149,99 +175,74 @@ class TwisterComponent(aniseed.RigComponent):
         return True
 
     def run(self):
+        """
+        Creates a twist setup with one twist per joint, places its org at the
+        root driver and its tip at the tip driver, and optionally constrains the
+        root and tip to their drivers. Each twist's blend factor is set from its
+        joint's distance from the root driver relative to the root to tip
+        distance, and the joint is parent constrained to the twist. The twists
+        are written to the "Twisters" output.
+        """
 
         joints_to_drive = self.input("Joints").get()
         root_driver = self.input("Root").get()
         tip_driver = self.input("Tip").get()
         parent = self.input("Parent").get()
 
-        twist_builder = aniseed_toolkit.run(
-            "Create Twist Setup",
+        twist_builder = aniseed_toolkit.rigging.twist.create_twist_setup(
             twist_count=len(joints_to_drive),
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
             config=self.config,
         )
 
-        cmds.parent(
-            twist_builder.org(),
-            parent,
-        )
+        # -- Place the org at the root driver and the tip at the tip
+        # -- driver, keeping the tip aligned to the org
+        twist_org = mref.get(twist_builder.org())
+        twist_org.set_parent(parent)
+        twist_org.match_to(root_driver)
 
-        cmds.xform(
-            twist_builder.org(),
-            matrix=cmds.xform(
-                root_driver,
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
+        twist_tip = mref.get(twist_builder.tip())
+        twist_tip.set_position(
+            mref.get(tip_driver).get_position(space="world"),
+            space="world",
         )
-
-        cmds.xform(
-            twist_builder.tip(),
-            translation=cmds.xform(
-                tip_driver,
-                query=True,
-                translation=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
-
-        cmds.xform(
-            twist_builder.tip(),
-            rotation=cmds.xform(
-                twist_builder.org(),
-                query=True,
-                rotation=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
+        twist_tip.set_rotation(
+            twist_org.get_rotation(space="world"),
+            space="world",
         )
 
         if self.option("Constrain Root").get():
-            cmds.parentConstraint(
+            mref.parentConstraint(
                 root_driver,
                 twist_builder.root(),
                 maintainOffset=True,
             )
 
         if self.option("Constrain Tip").get():
-            cmds.parentConstraint(
+            mref.parentConstraint(
                 tip_driver,
-                twist_builder.tip(),
+                twist_tip,
                 maintainOffset=True,
             )
 
         twist_builder.reset_aim()
 
-        total_distance = aniseed_toolkit.run(
-            "Distance Between",
+        # -- Each twist is blended by its joint's distance along the twist
+        total_distance = aniseed_toolkit.core.maths.distance_between(
             root_driver,
             tip_driver,
-            print_result=False,
         )
 
-        for idx, joint in enumerate(joints_to_drive):
-
-            root_distance = aniseed_toolkit.run(
-                "Distance Between",
-                root_driver,
-                joint,
-                print_result=False,
-            )
-
-            factor = root_distance / total_distance
+        for idx, (joint, twist) in enumerate(zip(joints_to_drive, twist_builder.twists())):
 
             twist_builder.set_blend_factor(
                 idx,
-                factor,
+                aniseed_toolkit.core.maths.distance_between(root_driver, joint) / total_distance,
             )
 
-            cmds.parentConstraint(
-                twist_builder.twists()[idx],
+            mref.parentConstraint(
+                twist,
                 joint,
                 maintainOffset=True,
             )

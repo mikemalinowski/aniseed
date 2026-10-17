@@ -1,10 +1,14 @@
+"""
+Provides the "Utility : Apply IK Bias Data" component, which stores the
+spring angle bias data of a set of ik handles on the component and
+re-applies it to those handles on every build. The data is captured from
+the scene with the Snapshot Bias Data button, and can also be cleared or
+saved to and loaded from json files.
+"""
 import os
-import json
+import mref
 import aniseed
-import qtility
-import functools
-
-from maya import cmds
+import aniseed_toolkit
 
 
 # noinspection PyUnresolvedReferences
@@ -26,6 +30,10 @@ class ApplyIKBiasData(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the IK Handles input, the Apply Data toggle, the hidden Bias
+        Data cache and the snapshot/clear/save/load button options.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_option(
@@ -72,38 +80,39 @@ class ApplyIKBiasData(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object list widget for the IK Handles input, and None for
+        anything else.
+        """
         if requirement_name == "IK Handles":
             return aniseed.widgets.ObjectList()
         return None
 
     def option_widget(self, option_name):
-        if option_name == "Snapshot Bias Data":
+        """
+        Returns a button widget for each of the snapshot, clear, save and load
+        options (labelled with the option name), and None for anything else.
+        """
+        # -- Each button option shares its name with its button label
+        buttons = {
+            "Snapshot Bias Data": self.snapshot_bias_data,
+            "Clear Bias Data": self.clear_bias_data,
+            "Save Bias Data File": self.save_bias_data_file,
+            "Load Bias Data File": self.load_bias_data_file,
+        }
+        if option_name in buttons:
             return aniseed.widgets.ButtonWidget(
-                button_name="Snapshot Bias Data",
-                func=functools.partial(self.snapshot_bias_data),
-            )
-
-        if option_name == "Clear Bias Data":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Clear Bias Data",
-                func=functools.partial(self.clear_bias_data),
-            )
-
-        if option_name == "Save Bias Data File":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Save Bias Data File",
-                func=functools.partial(self.save_bias_data_file),
-            )
-
-        if option_name == "Load Bias Data File":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Load Bias Data File",
-                func=functools.partial(self.load_bias_data_file),
+                button_name=option_name,
+                func=buttons[option_name],
             )
 
         return None
 
     def run(self) -> bool:
+        """
+        Applies the cached bias data to each ik handle in the cache that exists
+        in the scene. Does nothing when Apply Data is off or the cache is empty.
+        """
         if not self.option("Apply Data").get():
             return True
 
@@ -114,70 +123,77 @@ class ApplyIKBiasData(aniseed.RigComponent):
             return True
 
         for ikh, bias_data in stored_bias_data.items():
-            if not cmds.objExists(ikh):
+            if not mref.objExists(ikh):
                 continue
             self._apply_bias_data(ikh, bias_data)
 
         return True
 
     def snapshot_bias_data(self):
+        """
+        Reads the spring angle bias data from every existing handle in the IK
+        Handles input and replaces the Bias Data cache with it.
+        """
         data = {}
         for ikh in self.input("IK Handles").get():
-            if not cmds.objExists(ikh):
+            if not mref.objExists(ikh):
                 continue
             data[ikh] = self._read_bias_data(ikh)
         self.option("Bias Data").set(data)
 
     def clear_bias_data(self):
-        confirmation = qtility.request.confirmation(
+        """
+        Empties the Bias Data cache after asking the user for confirmation.
+        """
+        aniseed.dialogs.clear_option(
+            self.option("Bias Data"),
             title="Clear Bias Data",
             message="Are you sure you want to clear the bias data?",
+            empty_value=dict(),
         )
-        if not confirmation:
-            return
-        self.option("Bias Data").set(dict())
 
     def save_bias_data_file(self):
-        filepath = qtility.request.filepath(
+        """
+        Prompts for a file path and writes the Bias Data cache to it as json.
+        """
+        aniseed.dialogs.save_json_file(
             title="Save Bias Data File",
-            path=os.path.dirname(cmds.file(query=True, sceneName=True)),
-            save=True,
+            get_data=self.option("Bias Data").get,
         )
-        if not filepath:
-            return
-
-        bias_data = self.option("Bias Data").get()
-        with open(filepath, "w") as f:
-            json.dump(bias_data, f, sort_keys=True, indent=4)
 
     def load_bias_data_file(self):
-        filepath = qtility.request.filepath(
+        """
+        Prompts for a json file and replaces the Bias Data cache with its
+        contents.
+        """
+        aniseed.dialogs.load_json_file(
             title="Load Bias Data File",
-            path=os.path.dirname(cmds.file(query=True, sceneName=True)),
-            save=False,
+            option=self.option("Bias Data"),
         )
-        if not filepath:
-            return
-
-        with open(filepath, "r") as f:
-            self.option("Bias Data").set(json.load(f))
 
     @staticmethod
     def _read_bias_data(ikh):
-        point_count = cmds.getAttr(f"{ikh}.springAngleBias", size=True)
-        output = []
-        for i in range(point_count):
-            entry = {}
-            for recordable_attribute in ApplyIKBiasData._RECORDABLE_ATTRIBUTES:
-                attribute = f"{ikh}.springAngleBias[{i}].{recordable_attribute}"
-                entry[recordable_attribute] = cmds.getAttr(attribute)
-            output.append(entry)
-        return output
+        """
+        Returns the spring angle bias entries of the given ik handle as a
+        list of {attribute name: value} dictionaries.
+        """
+        point_count = mref.get(f"{ikh}.springAngleBias").get(size=True)
+        return [
+            {
+                name: mref.get(f"{ikh}.springAngleBias[{idx}].{name}").get()
+                for name in ApplyIKBiasData._RECORDABLE_ATTRIBUTES
+            }
+            for idx in range(point_count)
+        ]
 
     @staticmethod
     def _apply_bias_data(ikh, data):
+        """
+        Applies the given spring angle bias entries to the given ik handle,
+        unlocking each attribute before setting it.
+        """
         for idx, entry in enumerate(data):
             for name, value in entry.items():
-                attribute_address = f"{ikh}.springAngleBias[{idx}].{name}"
-                cmds.setAttr(attribute_address, lock=False)
-                cmds.setAttr(attribute_address, value)
+                attribute = mref.get(f"{ikh}.springAngleBias[{idx}].{name}")
+                attribute.set(lock=False)
+                attribute.set(value)

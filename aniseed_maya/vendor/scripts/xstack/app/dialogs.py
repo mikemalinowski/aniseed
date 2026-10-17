@@ -1,3 +1,4 @@
+import re
 import qtility
 from Qt import QtWidgets, QtCore, QtGui
 
@@ -390,3 +391,102 @@ class SwitchComponentTypeDialog(QtWidgets.QDialog):
         Triggered when the user cancels
         """
         self.window().close()
+
+# --------------------------------------------------------------------------------------
+# noinspection PyUnresolvedReferences
+class DuplicateComponentDialog(QtWidgets.QDialog):
+    """
+    Asks the user for the name of a duplicated component, along with an
+    optional search and replace to apply to the duplicate's values.
+
+    Read the results from label(), search_for() and replace_with() once the
+    dialog has been accepted.
+    """
+
+    # ----------------------------------------------------------------------------------
+    def __init__(self, component, app_config, parent=None):
+        super().__init__(parent)
+
+        self.component = component
+        self.app_config = app_config
+
+        self.setLayout(QtWidgets.QVBoxLayout())
+
+        # -- The name of the duplicate, defaulting to the source component's label
+        self.label_field = QtWidgets.QLineEdit()
+        self.label_field.setText(component.label())
+        self.label_field.setPlaceholderText("Name")
+
+        # -- The search and replace sit side by side beneath the name
+        self.search_field = QtWidgets.QLineEdit()
+        self.search_field.setPlaceholderText("Search For")
+
+        self.replace_field = QtWidgets.QLineEdit()
+        self.replace_field.setPlaceholderText("Replace With")
+
+        # -- Our logical buttons
+        self.duplicate_button = QtWidgets.QPushButton("Duplicate")
+        self.cancel_button = QtWidgets.QPushButton("Cancel")
+        self.duplicate_button.setDefault(True)
+
+        # -- Add our items to our layout
+        self.layout().addWidget(QtWidgets.QLabel("Name"))
+        self.layout().addWidget(self.label_field)
+
+        search_layout = QtWidgets.QHBoxLayout()
+        search_layout.addWidget(self.search_field)
+        search_layout.addWidget(self.replace_field)
+        self.layout().addLayout(search_layout)
+
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addWidget(self.duplicate_button)
+        button_layout.addWidget(self.cancel_button)
+        self.layout().addLayout(button_layout)
+
+        self.duplicate_button.clicked.connect(self.validate_and_accept)
+        self.cancel_button.clicked.connect(self.reject)
+
+        # -- Start with the name selected so the user can type straight over it
+        self.label_field.selectAll()
+        self.label_field.setFocus()
+
+        # -- Set our window branding
+        self.setWindowTitle(f"Duplicate {self.app_config.component_label}")
+
+        self.setWindowIcon(
+            QtGui.QIcon(
+                self.app_config.icon,
+            ),
+        )
+
+    # ----------------------------------------------------------------------------------
+    def label(self):
+        return self.label_field.text()
+
+    # ----------------------------------------------------------------------------------
+    def search_for(self):
+        return self.search_field.text()
+
+    # ----------------------------------------------------------------------------------
+    def replace_with(self):
+        return self.replace_field.text()
+
+    # ----------------------------------------------------------------------------------
+    def validate_and_accept(self):
+        """
+        The search is treated as a regular expression, so an invalid pattern
+        is reported here rather than failing part way through the duplicate.
+        """
+        if self.search_for():
+            try:
+                re.compile(self.search_for())
+
+            except re.error as error:
+                qtility.request.message(
+                    title="Invalid Search",
+                    message=f"The search is not a valid regular expression: {error}",
+                    parent=self,
+                )
+                return
+
+        self.accept()

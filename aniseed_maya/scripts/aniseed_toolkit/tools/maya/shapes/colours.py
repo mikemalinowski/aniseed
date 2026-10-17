@@ -21,7 +21,7 @@ class ApplyShapeColorPrompt(aniseed_toolkit.Tool):
             return
 
         for node in mc.ls(sl=True):
-            aniseed_toolkit.shapes.apply_color(
+            aniseed_toolkit.scene.shapes.apply_color(
                 node=node,
                 r=user_provided_color[0],
                 g=user_provided_color[1],
@@ -60,8 +60,8 @@ class ApplyShapeColor(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        for node in mc.ls(selection=True):
-            aniseed_toolkit.shapes.apply_color(
+        for node in [node] if node else mc.ls(selection=True):
+            aniseed_toolkit.scene.shapes.apply_color(
                 node=node,
                 r=r,
                 g=g,

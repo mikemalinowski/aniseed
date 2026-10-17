@@ -1,6 +1,11 @@
+"""
+Provides the "Utility : Expose Controls As XRay" component, which adds a
+boolean toggle attribute to a host node and connects it to the
+alwaysDrawOnTop attribute of every control shape in the scene, allowing
+X-Ray display of all controls to be toggled from the channel box.
+"""
 import mref
 import aniseed
-from maya import cmds
 
 
 class XRayNodesExposure(aniseed.RigComponent):
@@ -19,6 +24,9 @@ class XRayNodesExposure(aniseed.RigComponent):
     identifier = "Utility : Expose Controls As XRay"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Attribute Host and Attribute Name inputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -34,19 +42,26 @@ class XRayNodesExposure(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the Attribute Host input.
+        """
         if requirement_name == "Attribute Host":
             return aniseed.widgets.ObjectSelector()
 
     def run(self) -> bool:
-        host = self.input("Attribute Host").get()
+        """
+        Adds the toggle attribute to the host (or reuses it if it already
+        exists) and force connects it to the alwaysDrawOnTop attribute of every
+        shape of every controller-linked transform in the scene.
+        """
+        host = mref.get(self.input("Attribute Host").get())
         attribute_name = self.input("Attribute Name").get()
 
-        # 1. Add the toggle attribute on the host (channelBox on, keyable off)
-        #    or reuse it if it already exists from a previous build.
-        if cmds.attributeQuery(attribute_name, node=host, exists=True):
-            host_attribute = mref.get(host).attr(attribute_name)
-        else:
-            host_attribute = mref.get(host).add_attribute(
+        # -- Add the toggle attribute on the host (channelBox on, keyable off)
+        # -- or reuse it if it already exists from a previous build.
+        host_attribute = host.attr(attribute_name)
+        if host_attribute is None:
+            host_attribute = host.add_attribute(
                 attribute_name,
                 value=False,
                 attribute_type="bool",
@@ -54,10 +69,10 @@ class XRayNodesExposure(aniseed.RigComponent):
             )
             host_attribute.set(channelBox=True)
 
-        # 2. For every "controller" dependency node in the scene, follow its
-        #    controllerObject plug back to the linked transform and connect the
-        #    host toggle into every shape's alwaysShowOnTop. force=True so
-        #    re-runs cleanly overwrite any existing connections.
+        # -- For every "controller" dependency node in the scene, follow its
+        # -- controllerObject plug back to the linked transform and connect the
+        # -- host toggle into every shape's alwaysDrawOnTop. force=True so
+        # -- re-runs cleanly overwrite any existing connections.
         for controller_node in mref.ls(type="controller"):
             for transform in controller_node.controllerObject.inputs():
                 for shape in transform.node().shapes():

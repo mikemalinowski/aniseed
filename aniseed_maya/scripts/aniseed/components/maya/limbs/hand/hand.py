@@ -1,8 +1,14 @@
+"""
+Provides the "Limb : Hand" component, which builds a hand control with fk
+finger and thumb controls driven from the hand joint and finger/thumb tip
+inputs, with optional metacarpals. It adds hand level attributes (such as
+spread) weighted per finger, can generate and remove the hand skeleton and
+can create a mirrored copy of itself.
+"""
 import os
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class HandComponent(aniseed.RigComponent):
@@ -13,6 +19,12 @@ class HandComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, hand joint, finger tips and thumb tip inputs, the
+        naming options (prefix, location, finger and thumb labels), the
+        metacarpal, digit count and attribute exposure behaviour options and
+        the joint creation options. The single (default) output is the hand.
+        """
         super(HandComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -113,7 +125,7 @@ class HandComponent(aniseed.RigComponent):
 
     def on_enter_stack(self):
         """
-        When the user adds this componen to the stack, build the skeleton for them
+        When the user adds this component to the stack, build the skeleton for them
         if they want to.
         """
         if self.option("Create Joints").get():
@@ -128,15 +140,14 @@ class HandComponent(aniseed.RigComponent):
     def on_removed_from_stack(self):
         """
         When the component is removed from the stack we need to remove the
-        guide and bones too.
+        bones too.
         """
         # -- Remove the joints (re-parenting any children)
         new_parent = mref.get(self.input("Hand Joint").get()).parent()
-        aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
+        aniseed_toolkit.scene.joints.reparent_unknown_children(self.all_joints(), new_parent)
 
-        # -- Now delete our leg chain and joints
-        cmds.delete(self.all_joints())
-
+        # -- Now delete our joints
+        mref.delete(self.all_joints())
 
     def input_widget(self, requirement_name: str):
         """
@@ -204,81 +215,54 @@ class HandComponent(aniseed.RigComponent):
         """
         # -- Read our input data
         hand_joint = self.input("Hand Joint").get()
-        parent = self.input("Parent").get()
         finger_tips = self.input("Finger Tips").get() or list()
+        thumb_tip = self.input("Thumb Tip").get()
 
         # -- Read our option data
-        prefix = self.option('Descriptive Prefix').get()
         location = self.option("Location").get()
-        assume_metacarpals = self.option("Use Metacarpals").get()
         finger_depth = self.option("Digit Count").get()
+        proxy_to = self.option("Expose Attributes To Nodes").get()
 
-        # -- Read our option data
-
-        finger_roots = [
-            self.get_parent(tip, finger_depth - 1)
-            for tip in finger_tips
-        ]
-
-        # -- This is the default rotation of our shapes based on X down the chain
+        # -- This is the default rotation of our shapes based on X down the chain.
+        # -- Note: this is switched (for this and all subsequent fingers) the
+        # -- first time a finger is found to face down negative X.
         shape_rotation = [90, 90, 0]
-        hand_shape_rotation = [0, -90, 0]
 
         # -- Create our hand control
-        hand = aniseed_toolkit.control.create(
+        hand = aniseed_toolkit.rig.control.create(
             description=f"{self.option('Descriptive Prefix').get()}Hand",
             location=location,
-            parent=parent,
+            parent=self.input("Parent").get(),
             shape="core_arrow_handle",
             config=self.config,
             match_to=hand_joint,
             shape_scale=45.0,
-            rotate_shape=hand_shape_rotation,
+            rotate_shape=[0, -90, 0],
         )
 
         # -- Clear any constraints on the hand
-        aniseed_toolkit.containts.remove_all(nodes=[hand_joint])
+        aniseed_toolkit.scene.constraints.remove_all(nodes=[hand_joint])
 
         # -- Constrain the hand bone to the hand control and set the output
-        cmds.parentConstraint(hand.ctl, hand_joint, maintainOffset=False)
-        cmds.scaleConstraint(hand.ctl, hand_joint, maintainOffset=False)
+        aniseed_toolkit.scene.constraints.parent_and_scale(hand.ctl, hand_joint, maintain_offset=False)
         self.output("Hand").set(hand.ctl)
 
         # -- Start adding our custom attributes
-        aniseed_toolkit.attributes.add_separator(hand.ctl)
+        aniseed_toolkit.core.attributes.add_separator(hand.ctl)
 
         # -- Add our finger control attributes
-        cmds.addAttr(
-            hand.ctl,
-            shortName="finger_visibility",
-            attributeType='bool',
+        finger_visibility = mref.get(hand.ctl).add_attribute(
+            "finger_visibility",
+            value=None,
+            attribute_type="bool",
             defaultValue=1,
             keyable=False,
         )
-        finger_visibility_attr = f"{hand.ctl}.finger_visibility"
-        cmds.setAttr(finger_visibility_attr, channelBox=True)
+        finger_visibility.set(channelBox=True)
 
-        curl_attr = self._add_multiplied_attr(
-            hand.ctl,
-            "curl",
-            90,
-            min=-0.25,
-            proxy_to=self.option("Expose Attributes To Nodes").get(),
-        )
-
-        spread_attr = self._add_multiplied_attr(
-            hand.ctl,
-            "spread",
-            90,
-            proxy_to=self.option("Expose Attributes To Nodes").get(),
-        )
-
-        cup_attr = self._add_multiplied_attr(
-            hand.ctl,
-            "cup",
-            90,
-            proxy_to=self.option("Expose Attributes To Nodes").get(),
-        )
+        curl_attr = self._add_multiplied_attr(hand.ctl, "curl", 90, min=-0.25, proxy_to=proxy_to)
+        spread_attr = self._add_multiplied_attr(hand.ctl, "spread", 90, proxy_to=proxy_to)
+        cup_attr = self._add_multiplied_attr(hand.ctl, "cup", 90, proxy_to=proxy_to)
 
         finger_index_excluding_thumb = -1
 
@@ -286,12 +270,11 @@ class HandComponent(aniseed.RigComponent):
         # -- there is also a lot that is the same. Thus we use the same
         # -- iteration to deal with them all
         all_tips_including_thumb = finger_tips[:]
-        all_tips_including_thumb.append(self.input("Thumb Tip").get())
+        all_tips_including_thumb.append(thumb_tip)
 
         # -- Get a list of all the finger labels as well as the thumb label
         finger_labels = self.option("Finger Labels").get()
         finger_labels.append(self.option("Thumb Label").get())
-        finger_depth = self.option("Digit Count").get()
 
         # -- We now cycle over all the fingers (and thumb)
         for finger_idx, finger_tip in enumerate(all_tips_including_thumb):
@@ -306,44 +289,39 @@ class HandComponent(aniseed.RigComponent):
             # -- If this is not the thumb, increment this value - as we
             # -- use this variable to specifically track the number of
             # -- normal fingers.
-            if finger_tip != self.input("Thumb Tip").get():
+            if finger_tip != thumb_tip:
                 finger_index_excluding_thumb += 1
 
             # -- Get the full finger chain
-            finger_joints = aniseed_toolkit.joints.get_between(finger_root, finger_tip)
+            finger_joints = aniseed_toolkit.scene.joints.get_between(finger_root, finger_tip)
 
             # -- Determine the facing direction of the fingers so that we
             # -- can adjust the default controls if required.
-            facing_dir = aniseed_toolkit.direction.get_chain_facing_direction(
+            facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
                 finger_joints[-2],
                 finger_joints[-1],
             )
             if facing_dir == facing_dir.NegativeX:
                 shape_rotation = [0, 0, 90]
 
-            # -- Check whether we need to assume there are metacarpal bones. These
-            # -- are bones that are parents of the fingers and give functionality
-            # -- like spreading and cupping.
-            # -- Check if this finger has a metacarpal
-            finger_root_parent = cmds.listRelatives(finger_root, parent=True)[0]
-            assume_metacarpals = False
-            if finger_root_parent != hand_joint:
-                assume_metacarpals = True
+            # -- If the finger root is not a direct child of the hand then its
+            # -- parent is a metacarpal bone. These give functionality like
+            # -- spreading and cupping.
+            m_metacarpal = mref.get(finger_root).parent()
             metacarpal = None
-            if assume_metacarpals:
-                m_finger_root = mref.get(finger_root)
-                m_metacarpal = m_finger_root.parent()
-                metacarpal_joint = m_metacarpal.full_name()
 
-                description = self.config.extract_description(m_metacarpal.name())
-                # -- If this metacarpal joint is already built, skip it. This is because
-                # -- multiple fingers can share a metacarpal
+            if m_metacarpal.name() != hand_joint:
+
+                # -- Multiple fingers can share a metacarpal, so if this
+                # -- metacarpal is already driven then we use its control
                 if m_metacarpal.constraints():
-                    metacarpal = aniseed_toolkit.control.get(m_metacarpal.constraints()[0].drivers()[0].name())
+                    metacarpal = aniseed_toolkit.rig.control.get(
+                        m_metacarpal.constraints()[0].drivers()[0].name(),
+                    )
 
                 else:
-                    metacarpal = aniseed_toolkit.control.create(
-                        description=description,
+                    metacarpal = aniseed_toolkit.rig.control.create(
+                        description=self.config.extract_description(m_metacarpal.name()),
                         location=location,
                         parent=hand.ctl,
                         shape="core_paddle",
@@ -352,14 +330,13 @@ class HandComponent(aniseed.RigComponent):
                         shape_scale=5.0,
                         rotate_shape=shape_rotation,
                     )
-                    # -- Constrain the joint
-                    cmds.parentConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
-                    cmds.scaleConstraint(metacarpal.ctl, metacarpal_joint, maintainOffset=False)
 
-            # -- We're now going to create the fk hierarchy - so start by defining
-            # -- the hand as the parent, and we will update this as we go.
-            control_parent = metacarpal.ctl if metacarpal else hand.ctl
-            finger_controls = []
+                    # -- Constrain the joint
+                    aniseed_toolkit.scene.constraints.parent_and_scale(
+                        metacarpal.ctl,
+                        m_metacarpal,
+                        maintain_offset=False,
+                    )
 
             # -- The ranged value gives us a float denoting how much influence
             # -- this finger should get from features that spread etc.
@@ -371,20 +348,25 @@ class HandComponent(aniseed.RigComponent):
             # -- Create the attribute for curling the individual finger
             finger_label = finger_labels[finger_idx]
 
-            m_hand = mref.get(hand.ctl)
             finger_curl_attribute = self._add_multiplied_attr(
                 hand.ctl,
                 f"{finger_label}_curl",
                 90,
                 min=-0.25,
-                proxy_to=self.option("Expose Attributes To Nodes").get(),
+                proxy_to=proxy_to,
             )
 
-            # -- Cycle all the digits
-            for idx, finger_joint in enumerate(finger_joints):
+            # -- We're now going to create the fk hierarchy - so start by defining
+            # -- the hand (or metacarpal) as the parent, and we will update this
+            # -- as we go.
+            control_parent = metacarpal.ctl if metacarpal else hand.ctl
+            finger_controls = []
 
-                finger_control = aniseed_toolkit.control.create(
-                    description=finger_labels[finger_idx],
+            # -- Cycle all the digits
+            for finger_joint in finger_joints:
+
+                finger_control = aniseed_toolkit.rig.control.create(
+                    description=finger_label,
                     location=location,
                     parent=control_parent,
                     shape="core_paddle",
@@ -396,31 +378,23 @@ class HandComponent(aniseed.RigComponent):
                 finger_controls.append(finger_control)
 
                 # -- Connect the finger visibility
-                cmds.connectAttr(
-                    finger_visibility_attr,
-                    f"{finger_control.off}.visibility",
-                    force=True
+                finger_visibility.connect(
+                    mref.get(finger_control.off).attr("visibility"),
+                    force=True,
                 )
 
                 # -- Constrain the joint
-                cmds.parentConstraint(finger_control.ctl, finger_joint, maintainOffset=False)
-                cmds.scaleConstraint(finger_control.ctl, finger_joint, maintainOffset=False)
-
-                # -- If this is a thumb, we are done, as we do not apply
-                # -- any of the attribute drivers to it
-                if finger_tip == self.input("Thumb Tip").get():
-                    control_parent = finger_control.ctl
-                    continue
+                aniseed_toolkit.scene.constraints.parent_and_scale(
+                    finger_control.ctl,
+                    finger_joint,
+                    maintain_offset=False,
+                )
 
                 control_parent = finger_control.ctl
 
             if is_thumb:
                 self.setup_thumb(
                     finger_controls,
-                    ranged_value,
-                    cup_attr,
-                    curl_attr,
-                    spread_attr,
                     finger_curl_attribute,
                 )
             else:
@@ -435,7 +409,10 @@ class HandComponent(aniseed.RigComponent):
                     is_last=finger_idx == len(all_tips_including_thumb) - 2
                 )
 
-    def setup_thumb(self, finger_controls, cup_attr, ranged_value, curl_attr, spread_attr, finger_curl_attribute):
+    def setup_thumb(self, finger_controls, finger_curl_attribute):
+        """
+        Drives the curl of the thumb controls from the thumb curl attribute
+        """
         for control in finger_controls:
             self._connect_with_inversion(
                 [finger_curl_attribute],
@@ -444,8 +421,11 @@ class HandComponent(aniseed.RigComponent):
             )
 
     def setup_finger(self, finger_controls, metacarpal, ranged_value, cup_attr, curl_attr, spread_attr, finger_curl_attribute, is_last):
-
-        # -- Setup the cup
+        """
+        Drives the curl, cup and spread of the finger controls (and the
+        metacarpal if there is one) from the hand attributes
+        """
+        # -- Setup the curl
         for control in finger_controls:
             self._connect_with_inversion(
                 [curl_attr, finger_curl_attribute],
@@ -484,13 +464,12 @@ class HandComponent(aniseed.RigComponent):
             multiplier=ranged_value * spread_factor,
         )
 
-
     def get_parent(self, node: str, parent_index: int) -> str:
         """
         This will return the parent with the given index
         """
         while parent_index > 0 and node:
-            node = cmds.listRelatives(node, parent=True)[0]
+            node = mref.get(node).parent().name()
             parent_index -= 1
         return node
 
@@ -499,7 +478,7 @@ class HandComponent(aniseed.RigComponent):
         This will generate a skeleton for us.
         """
         # -- Determine the parent for the hand bones
-        parent = parent or aniseed_toolkit.mutils.first_selected()
+        parent = parent or aniseed_toolkit.core.selection.first_selected()
 
         # -- Get the finger labels
         omit_hand = self.option("Omit Hand Joint").get()
@@ -509,45 +488,42 @@ class HandComponent(aniseed.RigComponent):
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
         thumb_label = self.option("Thumb Label").get()
-        all_joints = []
 
         if prefix:
             prefix += "_"
 
-        # -- Create the hand bone if required
-        hand = aniseed_toolkit.joints.create(
+        # -- Create the hand bone (if we are omitting it, it is removed
+        # -- once the fingers are built)
+        hand = aniseed_toolkit.scene.joints.create(
             description=f"{prefix}hand",
             location=location,
             parent=parent,
             config=self.config,
         )
-        all_joints.append(hand)
         spread = 5.0
-
-        # -- Track all the finger tips we create
 
         for finger_index, label in enumerate([thumb_label] + finger_labels):
             ranged_value = self._get_ranged_value(finger_index, finger_labels)
 
             # -- By default the parent for our digits will be the
-            # -- give parent
+            # -- hand
             digit_parent = hand
-            planar_offset = aniseed_toolkit.units.to_cm(ranged_value * (spread / 4))
+            planar_offset = aniseed_toolkit.core.units.to_cm(ranged_value * (spread / 4))
+
             # -- Before we build the finger digits, build the metacarpal if we
             # -- need to
             if finger_index and use_metacarpals:
-                metacarpal = aniseed_toolkit.joints.create(
+                metacarpal = aniseed_toolkit.scene.joints.create(
                     description=f"{prefix}metacarpal_{label}",
                     location=location,
                     parent=hand,
                     config=self.config,
                 )
-                all_joints.append(metacarpal)
 
                 # -- Adjust the transform of the metacarpal
-                cmds.setAttr(f"{metacarpal}.translateZ", planar_offset)
-                cmds.setAttr(f"{metacarpal}.translateX", aniseed_toolkit.units.to_cm(1))
-                # cmds.setAttr(f"{metacarpal}.rotateY", ranged_value)
+                m_metacarpal = mref.get(metacarpal)
+                m_metacarpal.translateZ.set(planar_offset)
+                m_metacarpal.translateX.set(aniseed_toolkit.core.units.to_cm(1))
 
                 # -- Ensure the metacarpal is the parent of the subsequent
                 # -- digits
@@ -556,35 +532,34 @@ class HandComponent(aniseed.RigComponent):
             # -- Now we can start building our digits
             for digit_index in range(digit_count):
 
-                digit = aniseed_toolkit.joints.create(
+                digit = aniseed_toolkit.scene.joints.create(
                     description=f"{prefix}finger_{label}",
                     location=location,
                     parent=digit_parent,
                     config=self.config,
                 )
-                all_joints.append(digit)
+                m_digit = mref.get(digit)
 
                 # -- Match just the translate to the parent
-                cmds.xform(
-                    digit,
-                    translation=cmds.xform(digit_parent, query=True, translation=True, worldSpace=True),
-                    worldSpace=True,
+                m_digit.set_position(
+                    mref.get(digit_parent).get_position(space="world"),
+                    space="world",
                 )
 
-                length = aniseed_toolkit.units.to_cm(spread * 2 if not digit_index else spread)
-                cmds.setAttr(f"{digit}.translateX", length)
+                length = aniseed_toolkit.core.units.to_cm(spread * 2 if not digit_index else spread)
+                m_digit.translateX.set(length)
 
                 if finger_index == 0:  # -- Thumb
-                    cmds.setAttr(f"{digit}.rotateX", 90)
+                    m_digit.rotateX.set(90)
 
                 if digit_index == 0:
                     if finger_index == 0:  # -- First thumb
-                        cmds.setAttr(f"{digit}.translateX", length / 2.0)
-                        cmds.setAttr(f"{digit}.translateZ", planar_offset * 1.6)
-                        cmds.setAttr(f"{digit}.translateY", -length * 0.25)
+                        m_digit.translateX.set(length / 2.0)
+                        m_digit.translateZ.set(planar_offset * 1.6)
+                        m_digit.translateY.set(-length * 0.25)
 
                     else:  # -- First Finger
-                        cmds.setAttr(f"{digit}.translateZ", planar_offset)
+                        m_digit.translateZ.set(planar_offset)
 
                 # -- Mark this digit as the parent for the next digit
                 digit_parent = digit
@@ -597,32 +572,32 @@ class HandComponent(aniseed.RigComponent):
             else:
                 self.input("Thumb Tip").set(digit)
 
-        # -- If we're not omiting the hand, then snap the hand to the parent
-        if omit_hand:
-            all_joints.remove(hand)
-            cmds.xform(
-                hand,
-                translation=cmds.xform(parent, query=True, translation=True, worldSpace=True),
-                worldSpace=True,
-            )
+        # -- Snap the hand to the parent
+        m_hand = mref.get(hand)
+        m_hand.set_position(
+            mref.get(parent).get_position(space="world"),
+            space="world",
+        )
 
-            for child in cmds.listRelatives(hand, children=True):
-                cmds.parent(child, parent)
-            cmds.delete(hand)
+        # -- If we're omitting the hand, then move its children to the
+        # -- parent and remove it
+        output_hand = hand
+        if omit_hand:
+            for child in m_hand.children():
+                child.set_parent(parent)
+            m_hand.delete()
             output_hand = parent
-        else:
-            cmds.xform(
-                hand,
-                translation=cmds.xform(parent, query=True, translation=True, worldSpace=True),
-                worldSpace=True,
-            )
-            output_hand = hand
 
         # -- Now we set our inputs
         self.input("Hand Joint").set(output_hand)
 
     def user_func_create_mirror(self):
-        aniseed_toolkit.component.mirror(
+        """
+        Creates a mirrored copy of this component, mirroring all the hand and
+        finger joints under the mirrored parent of the hand joint. The hand
+        joint and finger tip inputs are cleared on the new component.
+        """
+        aniseed.builders.mirror_component(
             component_instance=self,
             transforms=self.all_joints(),
             location_label="Location",
@@ -632,78 +607,74 @@ class HandComponent(aniseed.RigComponent):
         )
 
     @classmethod
-    def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None, min=-1.0, max=1.0):
-
-        cmds.addAttr(
-            host,
-            shortName=name,
-            attributeType='float',
+    def _add_multiplied_attr(cls, host, name, multiplier, proxy_to=None, min=-1.0, max=1.0) -> str:
+        """
+        Adds a keyable float attribute to the host, and returns the output
+        of a node which multiplies that attribute by the given multiplier.
+        A proxy of the attribute is added to every node in proxy_to.
+        """
+        attribute = mref.get(host).add_attribute(
+            name,
+            value=None,
+            attribute_type="float",
             minValue=min,
             maxValue=max,
             defaultValue=0,
             keyable=True,
         )
 
-        multiply_node = cmds.createNode("floatMath")
-        cmds.setAttr(multiply_node + ".operation", 2)  # -- Multiply
-        cmds.setAttr(multiply_node + ".floatB", multiplier)
-        cmds.connectAttr(
-            f"{host}.{name}",
-            f"{multiply_node}.floatA",
+        multiplied_attr = aniseed_toolkit.scene.node_math.multiply(
+            attribute.full_name(),
+            multiplier,
         )
 
         for proxy in proxy_to or list():
-            cmds.addAttr(
-                proxy,
-                shortName=name,
-                proxy=f"{host}.{name}",
-                keyable=True,
-            )
+            mref.get(proxy).add_proxy(name, attribute)
 
-        return f"{multiply_node}.outFloat"
+        return multiplied_attr
 
     @classmethod
     def _connect_with_inversion(cls, connect_these, to_this, inversion, multiplier=1.0):
-
+        """
+        Sums the given attributes, multiplies the sum by the inversion and the
+        multiplier and connects the result into to_this.
+        """
         # -- Create an add node
         add_node = mref.create("plusMinusAverage")
 
         for connect_this in connect_these:
-            # -- Connect_this needs to go into the add node
             mref.get(connect_this).connect_next(add_node.attr("input1D"))
 
-            # --
-            inversion_node = cmds.createNode("floatMath")
-            cmds.setAttr(inversion_node + ".operation", 2)  # -- Multiply
-            cmds.setAttr(inversion_node + ".floatB", inversion)
-
-            # -- connect_this here needs switching to the add node
-            cmds.connectAttr(
-                add_node.attr("output1D").path(),
-                f"{inversion_node}.floatA",
+            # -- Note: the inversion and multiply nodes are created for every
+            # -- input (rather than once for the sum) and only the first
+            # -- connection into to_this can succeed - any subsequent ones
+            # -- fail silently. The extra nodes are kept for output parity.
+            inverted_attr = aniseed_toolkit.scene.node_math.multiply(
+                add_node.attr("output1D").full_name(),
+                inversion,
+            )
+            multiplied_attr = aniseed_toolkit.scene.node_math.multiply(
+                inverted_attr,
+                multiplier,
             )
 
-            multiply_node = cmds.createNode("floatMath")
-            cmds.setAttr(multiply_node + ".operation", 2)  # -- Multiply
-            cmds.setAttr(multiply_node + ".floatB", multiplier)
-
-            cmds.connectAttr(
-                f"{inversion_node}.outFloat",
-                f"{multiply_node}.floatA"
-            )
-
-            try:
-                cmds.connectAttr(
-                    f"{multiply_node}.outFloat",
-                    to_this
-                )
-            except:
-                pass
-
-        return multiply_node
+            # -- This silently does nothing if to_this is already connected
+            mref.get(multiplied_attr).connect(to_this)
 
     @classmethod
     def _get_ranged_value(cls, idx, items):
+        """
+        Maps an index linearly into the range 1.0 to -1.0, where index 0
+        gives 1.0 and index len(items) - 1 gives -1.0. Used to weight how
+        much each finger is affected by features such as spread.
+
+        Args:
+            idx: The index of the finger
+            items: The list the index relates to (only its length is used)
+
+        Returns:
+            The ranged float value
+        """
         increment = 1.0 / (len(items) - 1)
         v = ((idx + 1) / (len(items) - 1)) - increment
         v = 1.0 - (v * 2.0)
@@ -724,7 +695,7 @@ class HandComponent(aniseed.RigComponent):
 
         for finger_tip in [thumb_tip] + finger_tips:
             finger_root = self.get_parent(finger_tip, search_distance - 1)
-            all_joints.extend(aniseed_toolkit.joints.get_between(finger_root, finger_tip))
+            all_joints.extend(aniseed_toolkit.scene.joints.get_between(finger_root, finger_tip))
 
         if not omit_hand:
             all_joints.append(self.input("Hand Joint").get())

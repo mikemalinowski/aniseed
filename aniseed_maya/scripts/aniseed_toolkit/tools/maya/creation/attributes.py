@@ -17,4 +17,4 @@ class AddSeparator(aniseed_toolkit.Tool):
         Return:
             None
         """
-        aniseed_toolkit.attributes.add_separator(node)
+        aniseed_toolkit.core.attributes.add_separator(node)

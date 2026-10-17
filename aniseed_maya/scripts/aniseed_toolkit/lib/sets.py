@@ -1,25 +1,14 @@
-from maya import cmds
+"""
+Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
 
+Everything here now lives in: aniseed_toolkit.scene.sets
+"""
+import warnings
 
-def add_to(nodes: str or list[str], set_name: str) -> None:
-    """
-    This will add the given object or objects to the set with the given
-    name. Note, this will create the set if one does not exist.
+from ..scene.sets import add_to
 
-    Args:
-        nodes: A node or list of nodes to add to the set with the given
-            name.
-
-        set_name: The name of the set to add the nodes to
-    """
-    # -- Check we have a set
-    if cmds.objExists(set_name):
-        if not cmds.nodeType(set_name) == 'objectSet':
-            raise Exception(f"{set_name} is not a set!")
-    else:
-        cmds.sets(name=set_name, empty=True)
-
-    cmds.sets(
-        nodes,
-        add=set_name,
-    )
+warnings.warn(
+    f"{__name__} is deprecated, use aniseed_toolkit.scene.sets",
+    DeprecationWarning,
+    stacklevel=2,
+)

@@ -32,7 +32,7 @@ class DistanceBetweenTool(aniseed_toolkit.Tool):
         Returns:
             The distance between two objects
         """
-        return aniseed_toolkit.transformation.distance_between(
+        return aniseed_toolkit.core.maths.distance_between(
             node_a=node_a,
             node_b=node_b,
             print_result=True,
@@ -61,7 +61,7 @@ class FactorBetween(aniseed_toolkit.Tool):
         Returns:
             The factor for how close the given node is between the from_this and to_this
         """
-        return aniseed_toolkit.transformation.factor_between(
+        return aniseed_toolkit.core.maths.factor_between(
             node=node,
             from_this=from_this,
             to_this=to_this,
@@ -69,35 +69,30 @@ class FactorBetween(aniseed_toolkit.Tool):
         )
 
 
-class DirectionBetween(aniseed_toolkit.Tool):
+@aniseed_toolkit.tool(
+    "Direction Between",
+    classification="Rigging",
+    categories=["Math"],
+    user_facing=False,
+)
+def direction_between(node_a: str = "",
+    node_b: str = "",
+    print_result: bool = True,
+) -> list[float]:
+    """
+    This will return a direction vector (normalised vector) between the
+    two nodes
 
-    identifier = "Direction Between"
-    classification = "Rigging"
-    user_facing = False
-    categories = [
-        "Math",
-    ]
+    Args:
+        node_a: The object to measure from
+        node_b: The object to measure to
+        print_result: If true, the result will be printed
 
-    def run(
-        self,
-        node_a: str = "",
-        node_b: str = "",
-        print_result: bool = True,
-    ) -> list[float]:
-        """
-        This will return a direction vector (normalised vector) between the
-        two nodes
-
-        Args:
-            node_a: The object to measure from
-            node_b: The object to measure to
-            print_result: If true, the result will be printed
-
-        Returns:
-            The direction vector between the two nodes
-        """
-        return aniseed_toolkit.transformation.direction_between(
-            node_a=node_a,
-            node_b=node_b,
-            print_result=True,
-        )
+    Returns:
+        The direction vector between the two nodes
+    """
+    return aniseed_toolkit.core.maths.direction_between(
+        node_a=node_a,
+        node_b=node_b,
+        print_result=True,
+    )

@@ -1,8 +1,12 @@
+"""
+Provides the "Basic : Singular" component, which creates a single control
+that parent and scale constrains a joint. It can create the joint from the
+current selection when added to the stack and supports mirroring.
+"""
 import re
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
@@ -13,6 +17,11 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     identifier = "Basic : Singular"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Parent" and "Joint" inputs, the naming, shape, offset,
+        joint creation and world alignment options, and the "Control" and
+        "Offset Control" outputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -105,7 +114,50 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             is_default=False,
         )
 
+    def option_widget(self, option_name):
+        """
+        Returns a shape selector for "Shape" and a location selector for
+        "Location", or None otherwise.
+        """
+        if option_name == "Shape":
+            return aniseed.widgets.ShapeSelector(default_item=self.option("Shape").get() or "")
+
+        if option_name == "Location":
+            return aniseed.widgets.LocationSelector(self.config)
+
+        return None
+
+    def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the "Parent" and "Joint" inputs, or
+        None otherwise.
+        """
+        if requirement_name in ["Parent", "Joint"]:
+            return aniseed.widgets.ObjectSelector(component=self)
+
+        return None
+
+    def is_valid(self) -> bool:
+        """
+        Checks that a parent is given and that the joint exists.
+        """
+        if not self.input("Parent").get(resolved=False):
+            print("You must specify a Parent")
+            return False
+
+        joint = self.input("Joint").get()
+        if not joint or not mref.objExists(joint):
+            print("You must specify a valid joint")
+            return False
+
+        return True
+
     def suggested_label(self):
+        """
+        Builds a label from the title-cased description, the location and a two
+        digit counter. Note that the existing label check omits the space before
+        the counter, so it never matches and the counter is always 01.
+        """
         description = self.option("Description").get()
         description = re.sub(
             r"(?<!^)(?=[A-Z])",
@@ -128,23 +180,14 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             counter += 1
         return f"{label} {counter:02d}"
 
-    def option_widget(self, option_name):
-
-        if option_name == "Shape":
-            return aniseed.widgets.ShapeSelector(default_item=self.option("Shape").get() or "")
-
-        if option_name == "Location":
-            return aniseed.widgets.LocationSelector(self.config)
-
-        return None
-
-    def input_widget(self, requirement_name):
-        if requirement_name in ["Parent", "Joint"]:
-            return aniseed.widgets.ObjectSelector(component=self)
-
-        return None
-
     def on_enter_stack(self):
+        """
+        Hides the "Create Joint" option and, if it is enabled, creates the joint
+        from the current selection (matched to its parent), sets the "Joint"
+        input and hooks the "Parent" input up to the parent component. There is
+        no one-shot guard, so this repeats whenever the component enters the
+        stack with "Create Joint" enabled.
+        """
         super().on_enter_stack()
 
         joint_option = self.option("Create Joint")
@@ -153,106 +196,55 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         if not joint_option.get():
             return
 
-        selection = mref.selected()
-        parent = selection[0] if selection else None
-
-        joint = mref.create("joint", parent=parent)
-        joint.rename(
-            self.config.generate_name(
+        joint = aniseed.builders.create_joint_from_selection(
+            name=self.config.generate_name(
                 classification=self.config.joint,
                 description=self.option("Description").get(),
                 location=self.option("Location").get(),
             ),
+            match_to_parent=True,
         )
-        if parent:
-            joint.match_to(parent)
-
         self.input("Joint").set(joint.name())
 
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
-    def is_valid(self) -> bool:
-        if not self.input("Parent").get(resolved=False):
-            print("You must specify a Parent")
-            return False
-
-        joint = self.input("Joint").get()
-        if not joint or not cmds.objExists(joint):
-            print("You must specify a valid joint")
-            return False
-
-        return True
-
     def run(self):
-
-        # -- Lets read our inputs
-        description = self.option("Description").get()
-        location = self.option("Location").get()
-        shape = self.option("Shape").get()
-        parent = self.input("Parent").get()
-        joint = self.input("Joint").get()
-
-        control = aniseed_toolkit.control.create(
-            description=description,
-            location=location,
+        """
+        Creates the singular control (with an offset visibility toggle) and
+        parent and scale constrains the joint to the driving control.
+        """
+        control, offset_control = aniseed_toolkit.rig.control.create_with_offset(
+            description=self.option("Description").get(),
+            location=self.option("Location").get(),
             config=self.config,
-            shape=shape,
-            parent=parent,
-            match_to=joint,
-        )
-        driving_control = control
-
-        if self.option("Align Control To World").get():
-            cmds.xform(
-                driving_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
-
-        if self.option("Add Offset Control").get():
-            attribute = mref.get(control.ctl).add_attribute(
-                "show_offset",
-                value=False,
-                attribute_type="bool",
-                keyable=False,
-            )
-            attribute.set(channelBox=True)
-
-            driving_control = aniseed_toolkit.control.create(
-                description=description + "_offset",
-                location=location,
-                config=self.config,
-                shape=shape,
-                parent=control.ctl,
-                match_to=joint,
-            )
-            self.output("Offset Control").set(driving_control.ctl)
-
-            for shape in mref.get(driving_control.ctl).shapes():
-                attribute.connect(shape.visibility)
-
-        cmds.parentConstraint(
-            driving_control.ctl,
-            joint,
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            driving_control.ctl,
-            joint,
-            maintainOffset=True,
+            shape=self.option("Shape").get(),
+            parent=self.input("Parent").get(),
+            match_to=self.input("Joint").get(),
+            align_to_world=self.option("Align Control To World").get(),
+            add_offset=self.option("Add Offset Control").get(),
+            offset_visibility_toggle=True,
         )
 
         self.output("Control").set(control.ctl)
+
+        # -- The offset control, when there is one, drives the joint
+        driving_control = control
+        if offset_control:
+            self.output("Offset Control").set(offset_control.ctl)
+            driving_control = offset_control
+
+        aniseed_toolkit.scene.constraints.parent_and_scale(
+            driving_control.ctl,
+            self.input("Joint").get(),
+        )
+        return True
 
     def mirror_mixin_items_to_mirror(self) -> list:
         """
         Return the list of scene-node names representing this component's
         bones. These transforms will be reflected across the mirror plane
-        onto the twin side using ``aniseed_toolkit.mirror.global_mirror``.
-
-        Default: empty list (no scene-side mirroring).
+        onto the twin side using ``aniseed_toolkit.scene.mirror.mirror_transforms``.
         """
         return [
             self.input("Joint").get()
@@ -260,5 +252,6 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
+        Returns the name of the node the mirrored joint should be parented to
         """
         return mref.get(self.input("Joint").get()).parent().name()

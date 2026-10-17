@@ -1,6 +1,11 @@
+"""
+Provides the "Rig Configuration : Standard" naming configuration, which
+produces names in the form CLASSIFICATION_Description_##_LOCATION (for
+example CTL_LeftArm_01_LF) and extracts each token back out of such names.
+"""
+import mref
 import aniseed
 from aniseed.config import NamingConventionError
-from maya import cmds
 
 
 class StandardConfig(aniseed.RigConfiguration):
@@ -61,21 +66,26 @@ class StandardConfig(aniseed.RigConfiguration):
         if hasattr(self, classification):
             classification = getattr(self, classification)
 
+        formatted_description = "".join(
+            part[0].upper() + part[1:]
+            for part in description.split("_")
+        )
+
         while True:
             formatted_counter = str(counter).rjust(2, "0")
-            formatted_description = "".join(
-                [
-                    part[0].upper() + part[1:]
-                    for part in description.split("_")
-                ],
-            )
-
             name = f"{classification.upper()}_{formatted_description}_{formatted_counter}_{location.upper()}"
-            if not unique or not cmds.objExists(name):
+            if not unique or not mref.objExists(name):
                 return name
             counter += 1
 
     def extract_location(self, name: str) -> str:
+        """
+        Returns the location token, which is the last underscore separated part
+        of the name.
+
+        Args:
+            name: The name to extract from.
+        """
         try:
             return name.split("_")[-1]
         except (IndexError, ValueError) as exc:
@@ -84,6 +94,13 @@ class StandardConfig(aniseed.RigConfiguration):
             ) from exc
 
     def extract_classification(self, name: str) -> str:
+        """
+        Returns the classification token, which is the first underscore separated
+        part of the name.
+
+        Args:
+            name: The name to extract from.
+        """
         try:
             return name.split("_")[0]
         except (IndexError, ValueError) as exc:
@@ -92,6 +109,16 @@ class StandardConfig(aniseed.RigConfiguration):
             ) from exc
 
     def extract_description(self, name: str) -> str:
+        """
+        Returns the description token, which is the second underscore separated
+        part of the name.
+
+        Args:
+            name: The name to extract from.
+
+        Raises:
+            NamingConventionError: If the name has no second part.
+        """
         # -- generate_name CamelCases the description on underscore
         # -- boundaries, so the description always occupies a single
         # -- token in the produced name.
@@ -103,6 +130,16 @@ class StandardConfig(aniseed.RigConfiguration):
             ) from exc
 
     def extract_counter(self, name: str) -> int:
+        """
+        Returns the counter, which is the second to last underscore separated
+        part of the name, as an integer.
+
+        Args:
+            name: The name to extract from.
+
+        Raises:
+            NamingConventionError: If the part is missing or not an integer.
+        """
         try:
             return int(name.split("_")[-2])
         except (IndexError, ValueError) as exc:

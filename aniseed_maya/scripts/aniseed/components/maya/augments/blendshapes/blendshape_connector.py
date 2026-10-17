@@ -1,24 +1,43 @@
+"""
+Provides the "Utility : Blendshape Connector" component, which drives
+blendshape weights from driver attributes, each divided by a value and
+optionally clamped to a zero to one range. Also provides the BlendShapeEditor
+table widget used to author the connection data.
+"""
+import mref
 import aniseed
 import qtility
-import maya.cmds as mc
 
-from Qt import QtCore, QtWidgets, QtGui
-"""
-[
-    {
-        "driver": "bone.rotateX",
-        "shape": "shape_track_name",
-        "divide_by": 1.0,
-        "clamp": True
-    }
-]
-"""
+from Qt import QtCore, QtWidgets
+from maya import cmds
+
+
 class BlendShapeConnectorComponent(aniseed.RigComponent):
+    """
+    Drives blendshape weights from driver attributes. Each driver is divided
+    by a value and optionally clamped to a zero to one range before driving
+    the shape.
+
+    The connection data takes the form of:
+
+        [
+            {
+                "driver": "bone.rotateX",
+                "shape": "blendshape_node.shape_track_name",
+                "divide_by": 1.0,
+                "clamp": True
+            }
+        ]
+    """
 
     identifier = "Utility : Blendshape Connector"
 
     def __init__(self, *args, **kwargs):
-        super(BlendShapeConnectorComponent, self).__init__(*args, **kwargs)
+        """
+        Declares the "BlendShape Node" input and the "BlendShape Connection Data"
+        option, which holds the list of driver to shape connections.
+        """
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="BlendShape Node",
@@ -32,74 +51,64 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the "BlendShape Node" input.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name == "BlendShape Node":
             return aniseed.widgets.ObjectSelector()
 
     def option_widget(self, option_name: str):
+        """
+        Returns a BlendShapeEditor bound to this component for the
+        "BlendShape Connection Data" option.
+
+        Args:
+            option_name: The name of the option to return a widget for.
+        """
         if option_name == "BlendShape Connection Data":
             return BlendShapeEditor(component=self)
 
     def run(self):
+        """
+        For each connection entry, divides the driver by its divide_by value
+        through a floatMath node, optionally clamps the result to zero to one
+        through a clamp node, and force-connects it into the shape weight.
+        Entries whose driver or shape does not exist are skipped with a message.
+        """
 
         for data in self.option("BlendShape Connection Data").get():
 
-            if not mc.objExists(data["shape"]):
+            if not mref.objExists(data["shape"]):
                 print(f'{data["shape"]} does not exist')
                 continue
 
-            if not mc.objExists(data["driver"]):
+            if not mref.objExists(data["driver"]):
                 print(f'{data["driver"]} does not exist')
                 continue
 
-            math_node = mc.createNode("floatMath")
+            # -- connectAttr is used rather than Attribute.connect so that
+            # -- a failed connection still raises
+            math_node = mref.create("floatMath")
+            mref.connectAttr(data["driver"], math_node.floatA)
+            math_node.floatB.set(data["divide_by"])
+            math_node.attr("operation").set(3)  # -- Divide
 
-            mc.connectAttr(
-                data["driver"],
-                f"{math_node}.floatA",
-            )
+            output = math_node.outFloat
 
-            mc.setAttr(
-                f"{math_node}.floatB",
-                data["divide_by"],
-            )
+            if data["clamp"]:
+                clamp = mref.create("clamp")
+                mref.connectAttr(output, clamp.inputR)
+                clamp.minR.set(0)
+                clamp.maxR.set(1)
+                output = clamp.outputR
 
-            mc.setAttr(
-                f"{math_node}.operation",
-                3,  # -- Divide
-            )
+            mref.connectAttr(output, data["shape"], force=True)
 
-            if not data["clamp"]:
+        return True
 
-                mc.connectAttr(
-                    f"{math_node}.outFloat",
-                    data["shape"],
-                    force=True,
-                )
-                continue
-
-            else:
-                clamp = mc.createNode("clamp")
-
-                mc.connectAttr(
-                    f"{math_node}.outFloat",
-                    f"{clamp}.inputR",
-                )
-
-                mc.setAttr(
-                    f"{clamp}.minR",
-                    0,
-                )
-
-                mc.setAttr(
-                    f"{clamp}.maxR",
-                    1,
-                )
-
-                mc.connectAttr(
-                    f"{clamp}.outputR",
-                    data["shape"],
-                    force=True,
-                )
 
 # noinspection PyUnresolvedReferences
 class BlendShapeEditor(QtWidgets.QWidget):
@@ -107,7 +116,15 @@ class BlendShapeEditor(QtWidgets.QWidget):
     changed = QtCore.Signal()
 
     def __init__(self, component, parent=None):
-        super(BlendShapeEditor, self).__init__(parent=parent)
+        """
+        Builds a four column table (driver, shape, divide by, clamp) with add
+        and remove buttons. Edits to the table emit the changed signal.
+
+        Args:
+            component: The BlendShapeConnectorComponent being edited.
+            parent: Optional parent widget.
+        """
+        super().__init__(parent=parent)
 
         self.component = component
 
@@ -115,12 +132,9 @@ class BlendShapeEditor(QtWidgets.QWidget):
             QtWidgets.QVBoxLayout(),
         )
 
+        # -- Columns are: Driver, Shape, Divide By, Clamp
         self.table = QtWidgets.QTableWidget()
-
-        self.table.insertColumn(0, )#"Clamp")
-        self.table.insertColumn(0, )#"Multiplier")
-        self.table.insertColumn(0, )#"Shape")
-        self.table.insertColumn(0, )#"Driver")
+        self.table.setColumnCount(4)
 
         self.add_button = QtWidgets.QPushButton("+")
         self.remove_button = QtWidgets.QPushButton("-")
@@ -135,15 +149,24 @@ class BlendShapeEditor(QtWidgets.QWidget):
         self.table.itemChanged.connect(self.changed)
 
     def add_connection_flow(self):
+        """
+        Prompts the user for a shape on the component's blendshape node, a
+        driver attribute (defaulting to the name of the first selected node),
+        a divide by value and whether to clamp, then adds the connection.
+        Relies on the current selection for the default driver. Cancelling the
+        shape or driver prompt aborts; the divide by text is converted with
+        float() without validation.
+        """
 
-        blendhsape_node = self.component.input("BlendShape Node").get()
+        blendshape_node = self.component.input("BlendShape Node").get()
 
-        default_driver = ""
-        if mc.ls(sl=True):
-            default_driver = mc.ls(sl=True)[0]
+        selection = mref.selected()
+        default_driver = selection[0].name() if selection else ""
 
-        shape_names = mc.listAttr(
-            f"{blendhsape_node}.w",
+        # -- cmds rather than mref, as mref would try to wrap the returned
+        # -- attribute names as nodes
+        shape_names = cmds.listAttr(
+            f"{blendshape_node}.w",
             multi=True,
         )
 
@@ -194,39 +217,41 @@ class BlendShapeEditor(QtWidgets.QWidget):
 
         self.add_connection(
             driver,
-            f"{blendhsape_node}.{blendshape_name}",
+            f"{blendshape_node}.{blendshape_name}",
             division,
             clamp,
         )
 
     def add_connection(self, driver, shape, division, clamp):
+        """
+        Inserts a connection as a new row at the top of the table and emits
+        changed. Because rows go in at the top, loading data via set_value
+        reverses its order.
 
-        new_row = self.table.insertRow(0)
+        Args:
+            driver: The driver attribute, such as "bone.rotateX".
+            shape: The blendshape weight attribute to drive.
+            division: The value the driver is divided by.
+            clamp: Whether the result is clamped to a zero to one range.
+        """
 
-        self.table.setItem(
-            0,
-            0,
-            QtWidgets.QTableWidgetItem(driver),
-        )
-        self.table.setItem(
-            0,
-            1,
-            QtWidgets.QTableWidgetItem(shape),
-        )
-        self.table.setItem(
-            0,
-            2,
-            QtWidgets.QTableWidgetItem(str(division)),
-        )
-        self.table.setItem(
-            0,
-            3,
-            QtWidgets.QTableWidgetItem(str(clamp)),
-        )
+        # -- Note that new connections are inserted at the top, so loading
+        # -- data via set_value reverses its order
+        self.table.insertRow(0)
+
+        for column, value in enumerate([driver, shape, str(division), str(clamp)]):
+            self.table.setItem(
+                0,
+                column,
+                QtWidgets.QTableWidgetItem(value),
+            )
 
         self.changed.emit()
 
     def remove_connection(self):
+        """
+        Removes the currently selected row from the table and emits changed.
+        """
 
         self.table.removeRow(
             self.table.currentRow()
@@ -234,6 +259,14 @@ class BlendShapeEditor(QtWidgets.QWidget):
         self.changed.emit()
 
     def set_value(self, value):
+        """
+        Adds a table row for each connection dictionary given. Existing rows are
+        not cleared, and the rows end up in reverse order (see add_connection).
+
+        Args:
+            value: List of connection dictionaries with driver, shape, divide_by
+                and clamp keys.
+        """
         for connection_data in value:
             self.add_connection(
                 connection_data["driver"],
@@ -243,13 +276,23 @@ class BlendShapeEditor(QtWidgets.QWidget):
             )
 
     def get_value(self):
+        """
+        Reads the table back into a list of connection dictionaries. Note that
+        the completeness check tests the first row rather than each row, so every
+        row is skipped if the first row is incomplete.
+
+        Returns:
+            List of dictionaries with driver, shape, divide_by and clamp keys.
+        """
         data = list()
 
         for row_idx in range(self.table.rowCount()):
 
+            # -- Note this tests the first row rather than row_idx, so
+            # -- every row is skipped if the first row is incomplete
             if not self.table.item(0, 3):
                 continue
-                
+
             data.append(
                 dict(
                     driver=self.table.item(row_idx, 0).text(),

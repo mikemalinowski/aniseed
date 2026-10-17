@@ -1,3 +1,9 @@
+"""
+Defines the "Rig Configuration : Snake" component. It is a placeholder rig
+configuration which currently inherits all of its naming and default stack
+behaviour from the base aniseed RigConfiguration, so projects can adopt it
+now and diverge from the standard configuration later.
+"""
 import aniseed
 
 

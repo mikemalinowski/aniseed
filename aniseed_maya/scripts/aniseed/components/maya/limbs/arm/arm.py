@@ -1,17 +1,20 @@
+"""
+Provides the "Limb : Arm" component, which builds a shoulder control and a
+blended two bone ik/fk arm (with optional soft ik) driven from shoulder and
+hand joint inputs. It also adds ik/fk snapping, optional upper and lower twist
+setups, world fk switches and space switches for the ik hand and upvector, and
+can generate the arm skeleton when added to the stack.
+"""
 import os
 import mref
-import uuid
 import snappy
 import typing
 import aniseed
-import qtility
 import functools
 import collections
 import aniseed_toolkit
-from maya import cmds
 
 
-# noinspection PyInterpreter
 class ArmComponent(aniseed.RigComponent):
 
     identifier = "Limb : Arm"
@@ -22,6 +25,13 @@ class ArmComponent(aniseed.RigComponent):
 
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, shoulder and hand inputs along with the optional
+        upper and lower twist joint lists, the naming and behaviour options
+        (alignment, soft ik, space switches) and the skeleton generation
+        options. Outputs expose the blended arm joints, the ik hand,
+        upvector and shoulder controls.
+        """
         super(ArmComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -109,12 +119,12 @@ class ArmComponent(aniseed.RigComponent):
             pre_expose=True,
         )
 
-        # -- Delcare our options which make it easier and quicker to generate
+        # -- Declare our options which make it easier and quicker to generate
         # -- a skeleton if needed
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Lower Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Build Skeleton", value=True, pre_expose=True)
-        
+
         # -- Declare our outputs so other components can access them
         self.declare_output(
             name="Blended Upper Arm",
@@ -133,15 +143,20 @@ class ArmComponent(aniseed.RigComponent):
         self.declare_output("Ik Hand")
         self.declare_output("Shoulder")
 
-        # -- Declare our build properties - this is only required because i have
-        # -- chosen within this component to break up the long build script
-        # -- into functions, and therefore we use this to access items created
-        # -- from other functions.
+        # -- The build is broken up into functions, so these properties hold
+        # -- the items which are shared between them
+        self._clear_values()
+
+    def _clear_values(self):
+        """
+        Resets the build properties (controls, joint lists, prefix, location
+        etc) which are shared between the build functions, so that each run
+        starts from a clean state.
+        """
         self.prefix: str = ""
         self.location: str = ""
         self.org: str = ""
         self.arm_joints: list[str] = []
-        self.chain_direction: "Direction" = None
         self.shoulder_control: "Control" = None
         self.config_control: "Control" = None
         self.upvector_control: "Control" = None
@@ -150,10 +165,8 @@ class ArmComponent(aniseed.RigComponent):
         self.fk_lower_control: "Control" = None
         self.fk_hand_control: "Control" = None
 
-        self.controls: list[str] = []
         self.fk_controls: list[str] = []
         self.ik_controls: list[str] = []
-        self.ik_joints: list[str] = []
         self.nk_joints: list[str] = []
         self.shape_rotation = [0, 0, 90]
 
@@ -168,8 +181,8 @@ class ArmComponent(aniseed.RigComponent):
         lower_twist_count = self.option("Lower Twist Count")
         apply_spaceswitches = self.option("Apply Space Switches")
 
-        # -- To reach here, we have not - so lets mark this as being processed
-        # -- regardless of whether or not we need to build the skeleton
+        # -- These options are only used when entering the stack, so we
+        # -- hide them regardless of whether we build the skeleton
         build_skeleton.set_hidden(True)
         upper_twist_count.set_hidden(True)
         lower_twist_count.set_hidden(True)
@@ -179,13 +192,8 @@ class ArmComponent(aniseed.RigComponent):
         if not build_skeleton.get():
             return
 
-        # -- To reach here we need to build the skeleton
-        parent = None
-        if cmds.ls(selection=True):
-            parent = cmds.ls(selection=True)[0]
-
         self.user_func_create_skeleton(
-            parent=parent,
+            parent=aniseed_toolkit.core.selection.first_selected(),
             upper_twist_count=upper_twist_count.get(),
             lower_twist_count=lower_twist_count.get(),
         )
@@ -196,19 +204,6 @@ class ArmComponent(aniseed.RigComponent):
         if apply_spaceswitches.get():
             self.setup_spaceswitches()
 
-    def on_removed_from_stack(self):
-        """
-        This is triggered when we remove the item from the stack, so we take
-        a moment to clear the joints and reparent any joints from outside
-        the component.
-        """
-        # -- Remove the joints (re-parenting any children)
-        new_parent = mref.get(self.input("Shoulder").get()).parent()
-        aniseed_toolkit.joints.reparent_unknown_children(self.all_joints(), new_parent)
-
-        # -- Now delete our leg chain and joints
-        cmds.delete(self.input("Shoulder").get())
-    
     def option_widget(self, option_name: str):
         """
         This allows us to provide dedicate widgets for specific options
@@ -220,21 +215,48 @@ class ArmComponent(aniseed.RigComponent):
         """
         This allows us to provide dedicate widgets for specific inputs
         """
-
-        object_list = [
-            "Parent",
-            "Shoulder",
-            "Hand",
-        ]
-
-        if requirement_name in object_list:
+        if requirement_name in ["Parent", "Shoulder", "Hand"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
-        if requirement_name == "Upper Twist Joints":
+        if requirement_name in ["Upper Twist Joints", "Lower Twist Joints"]:
             return aniseed.widgets.ObjectList()
 
-        if requirement_name == "Lower Twist Joints":
-            return aniseed.widgets.ObjectList()
+    def all_joints(self):
+        """
+        Returns all the joints this component affects: the shoulder to hand
+        chain followed by the upper and lower twist joints.
+        """
+        return aniseed_toolkit.scene.joints.get_chain(
+            self.input("Shoulder").get(),
+            self.input("Hand").get(),
+            extra_joints=(
+                (self.input("Upper Twist Joints").get() or [])
+                + (self.input("Lower Twist Joints").get() or [])
+            ),
+        )
+
+    def on_removed_from_stack(self):
+        """
+        When the component is removed from the stack we remove its joints,
+        re-parenting any children which do not belong to the component.
+        """
+        aniseed_toolkit.scene.joints.remove_chain(
+            self.input("Shoulder").get(),
+            self.all_joints(),
+        )
+
+    def user_func_create_mirror(self):
+        """
+        This will create a mirrored version of the component
+        """
+        aniseed.builders.mirror_component(
+            component_instance=self,
+            transforms=self.all_joints(),
+            location_label="Location",
+            config=self.config,
+            joint_parent=mref.get(self.input("Shoulder").get()).parent().name(),
+            input_overrides={"Shoulder": ""},
+        )
 
     def user_functions(self) -> typing.Dict[str, callable]:
         """
@@ -246,7 +268,7 @@ class ArmComponent(aniseed.RigComponent):
 
         # -- If there is no shoulder joint we expose the option
         # -- to allow the user to have one generated
-        if not shoulder_joint or not cmds.objExists(shoulder_joint):
+        if not shoulder_joint or not mref.objExists(shoulder_joint):
             menu["Create Joints"] = functools.partial(self.user_func_create_skeleton)
             return menu
 
@@ -258,12 +280,12 @@ class ArmComponent(aniseed.RigComponent):
         This gives us the chance to validate the skeleton
         before we commit to building.
         """
-        arm_joints = aniseed_toolkit.joints.get_between(
+        arm_joints = aniseed_toolkit.scene.joints.get_between(
             self.input("Shoulder").get(),
             self.input("Hand").get(),
         )[1:]
 
-        direction = aniseed_toolkit.direction.get_chain_facing_direction(
+        direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             arm_joints[0],
             arm_joints[-1],
         )
@@ -284,7 +306,7 @@ class ArmComponent(aniseed.RigComponent):
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.org = aniseed_toolkit.transforms.create(
+        self.org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=f"{self.prefix}Arm",
             location=self.location,
@@ -292,7 +314,7 @@ class ArmComponent(aniseed.RigComponent):
             parent=self.input("Parent").get(),
             match_to=self.input("Parent").get()
         )
-        self.arm_joints = aniseed_toolkit.joints.get_between(
+        self.arm_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input('Shoulder').get(),
             end=self.input("Hand").get(),
         )
@@ -309,13 +331,14 @@ class ArmComponent(aniseed.RigComponent):
             soft_ik_host=self.ik_hand_control.ctl,
         )
 
-        # -- Move the config control under the end root
-        mref.get(self.config_control.org).set_parent(ikfk_setup.blend_chain[-1])
-        mref.get(self.config_control.org).match_to(ikfk_setup.blend_chain[-1])
+        # -- Move the config control under the end of the blend chain
+        config_org = mref.get(self.config_control.org)
+        config_org.set_parent(ikfk_setup.blend_chain[-1])
+        config_org.match_to(ikfk_setup.blend_chain[-1])
         mref.get(self.config_control.ctl).lock_transform_attributes(hide=True)
 
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             self.upvector_control.ctl,
             ikfk_setup.ik_chain[1].name(),
         )
@@ -329,57 +352,33 @@ class ArmComponent(aniseed.RigComponent):
                 ),
             )
 
-
-        cmds.parentConstraint(
+        mref.parentConstraint(
             self.ik_hand_control.ctl,
-            ikfk_setup.ik_target.name(),
+            ikfk_setup.ik_target,
             maintainOffset=True,
         )
-        cmds.parentConstraint(
+        mref.parentConstraint(
             self.upvector_control.ctl,
-            ikfk_setup.ik_upvector.name(),
+            ikfk_setup.ik_upvector,
             maintainOffset=False,
         )
 
-        for idx, fk_marker in enumerate(ikfk_setup.fk_chain):
-            cmds.parentConstraint(
-                self.fk_controls[idx],
-                fk_marker.name(),
+        for fk_control, fk_marker in zip(self.fk_controls, ikfk_setup.fk_chain):
+            mref.parentConstraint(
+                fk_control,
+                fk_marker,
                 maintainOffset=True,
             )
 
-        ikfk_attribute = mref.get(f"{self.config_control.ctl}.ikfk")
+        aniseed_toolkit.rigging.ikfk.create_ikfk_visibility(
+            f"{self.config_control.ctl}.ikfk",
+            ik_controls=self.ik_controls,
+            fk_controls=self.fk_controls,
+        )
 
-        ik_condition = mref.create("lessThan")
-        fk_condition = mref.create("greaterThan")
-
-        ikfk_attribute.connect(ik_condition.input1)
-        ikfk_attribute.connect(fk_condition.input1)
-
-        ik_condition.input2.set(0.9)
-        fk_condition.input2.set(0.1)
-        ik_visibility_attribute = ik_condition.output.full_name()
-        fk_visibility_attribute = fk_condition.output.full_name()
-
-        for ik_control in self.ik_controls:
-            ik_control = aniseed_toolkit.control.get(ik_control)
-            cmds.connectAttr(
-                ik_visibility_attribute,
-                f"{ik_control.off}.visibility",
-                force=True,
-            )
-
-        for fk_control in self.fk_controls:
-            fk_control = aniseed_toolkit.control.get(fk_control)
-            cmds.connectAttr(
-                fk_visibility_attribute,
-                f"{fk_control.off}.visibility",
-                force=True,
-            )
-
-        # -- Set up the space switches on teh fk controls
+        # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -390,12 +389,9 @@ class ArmComponent(aniseed.RigComponent):
         """
         Here we create all the controls for the arm
         """
-        prefix = self.option('Descriptive Prefix').get()
-        location = self.option("Location").get()
-
-        self.shoulder_control = aniseed_toolkit.control.create(
-            description=f"{prefix}Shoulder",
-            location=location,
+        self.shoulder_control = aniseed_toolkit.rig.control.create(
+            description=f"{self.prefix}Shoulder",
+            location=self.location,
             parent=self.org,
             shape="core_half_circle",
             config=self.config,
@@ -405,16 +401,12 @@ class ArmComponent(aniseed.RigComponent):
         )
 
         if self.option("Align Shoulder To World").get():
-            cmds.xform(
-                self.shoulder_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            mref.get(self.shoulder_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.control.create(
-            description=f"{prefix}ArmConfig",
-            location=location,
+        self.config_control = aniseed_toolkit.rig.control.create(
+            description=f"{self.prefix}ArmConfig",
+            location=self.location,
             parent=self.shoulder_control.ctl,
             shape="core_floating_config",
             config=self.config,
@@ -423,60 +415,33 @@ class ArmComponent(aniseed.RigComponent):
             rotate_shape=self.shape_rotation,
         )
 
-        cmds.parentConstraint(
+        aniseed_toolkit.scene.constraints.parent_and_scale(
             self.shoulder_control.ctl,
             self.arm_joints[0],
-            maintainOffset=True,
         )
 
-        cmds.scaleConstraint(
-            self.shoulder_control.ctl,
-            self.arm_joints[0],
-            maintainOffset=True,
-        )
+        # -- Create the fk controls, each one parented under the last
+        fk_parent = self.shoulder_control.ctl
+        fk_controls = []
+        for label, joint in zip(["UpperArmFK", "LowerArmFK", "HandFK"], self.arm_joints[1:4]):
+            fk_control = aniseed_toolkit.rig.control.create(
+                description=f"{self.prefix}{label}",
+                location=self.location,
+                parent=fk_parent,
+                shape="core_rounded_square",
+                config=self.config,
+                match_to=joint,
+                shape_scale=20.0,
+                rotate_shape=self.shape_rotation,
+            )
+            fk_controls.append(fk_control)
+            fk_parent = fk_control.ctl
 
-        self.fk_upper_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}UpperArmFK",
-            location=self.location,
-            parent=self.shoulder_control.ctl,
-            shape="core_rounded_square",
-            config=self.config,
-            match_to=self.arm_joints[1],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
-
-        self.fk_lower_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}LowerArmFK",
-            location=self.location,
-            parent=self.fk_upper_control.ctl,
-            shape="core_rounded_square",
-            config=self.config,
-            match_to=self.arm_joints[2],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
-
-        self.fk_hand_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}HandFK",
-            location=self.location,
-            parent=self.fk_lower_control.ctl,
-            shape="core_rounded_square",
-            config=self.config,
-            match_to=self.arm_joints[3],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
-
-        # -- We'll iterate over our fk joints, so place them all in a list
-        self.fk_controls = [
-            self.fk_upper_control.ctl,
-            self.fk_lower_control.ctl,
-            self.fk_hand_control.ctl,
-        ]
+        self.fk_upper_control, self.fk_lower_control, self.fk_hand_control = fk_controls
+        self.fk_controls = [fk_control.ctl for fk_control in fk_controls]
 
         # -- Now create the main IK control
-        self.ik_hand_control = aniseed_toolkit.control.create(
+        self.ik_hand_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Hand",
             location=self.location,
             parent=self.shoulder_control.ctl,
@@ -487,15 +452,12 @@ class ArmComponent(aniseed.RigComponent):
             rotate_shape=[-90, 0 ,0],
         )
         self.ik_controls.append(self.ik_hand_control.ctl)
+
         if self.option("Align Hand To World").get():
-            cmds.xform(
-                self.ik_hand_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            mref.get(self.ik_hand_control.org).set_rotation([0, 0, 0], space="world")
 
         # -- Create the upvector control for the arm
-        self.upvector_control = aniseed_toolkit.control.create(
+        self.upvector_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}ArmUpvector",
             location=self.location,
             parent=self.shoulder_control.ctl,
@@ -506,41 +468,32 @@ class ArmComponent(aniseed.RigComponent):
             rotate_shape=None,
         )
         self.ik_controls.append(self.upvector_control.ctl)
-        cmds.xform(
-            self.upvector_control.org,
-            translation=aniseed_toolkit.transformation.calculate_upvector_position(
+
+        upvector_org = mref.get(self.upvector_control.org)
+        upvector_org.set_position(
+            aniseed_toolkit.core.maths.calculate_upvector_position(
                 point_a=self.arm_joints[1],
                 point_b=self.arm_joints[2],
                 point_c=self.arm_joints[3],
                 length=1,
             ),
-            worldSpace=True,
+            space="world",
         )
         if self.option("Align Upvector To World").get():
-            cmds.xform(
-                self.upvector_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            upvector_org.set_rotation([0, 0, 0], space="world")
 
     def _create_snap(self):
-        ikfk_group = "IKFK_Arm_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-        ikonly_group = "IKOnly_Arm_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-        fkonly_group = "FKOnly_Arm_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-
-        snappy.set_data(
-            data_name="ikfk_attribute",
-            data_value=f"{self.config_control.ctl}.ikfk",
-            group=[ikfk_group, fkonly_group, ikonly_group],
+        """
+        Creates the snappy ikfk, ik only and fk only snap groups for the arm.
+        The ik hand and upvector controls snap to the blended joints, as do
+        the fk controls, and each control set is added as empty members to
+        the opposing "only" group.
+        """
+        ikfk_group, ikonly_group, fkonly_group = aniseed_toolkit.rigging.ikfk.create_snap_groups(
+            label="Arm",
+            prefix=self.prefix,
+            location=self.location,
+            ikfk_attribute=f"{self.config_control.ctl}.ikfk",
         )
 
         snappy.new(
@@ -555,30 +508,15 @@ class ArmComponent(aniseed.RigComponent):
             group=[ikfk_group, ikonly_group],
         )
 
-        snappy.new(
-            node=self.fk_upper_control.ctl,
-            target=self.nk_joints[0],
-            group=[ikfk_group, fkonly_group],
-        )
-
-        snappy.new(
-            node=self.fk_lower_control.ctl,
-            target=self.nk_joints[1],
-            group=[ikfk_group, fkonly_group],
-        )
-
-        snappy.new(
-            node=self.fk_hand_control.ctl,
-            target=self.nk_joints[2],
-            group=[ikfk_group, fkonly_group],
-        )
+        for fk_control, nk_joint in zip(self.fk_controls, self.nk_joints):
+            snappy.new(
+                node=fk_control,
+                target=nk_joint,
+                group=[ikfk_group, fkonly_group],
+            )
 
         snappy.add_empty_members(
-            nodes=[
-                self.fk_upper_control.ctl,
-                self.fk_lower_control.ctl,
-                self.fk_hand_control.ctl,
-            ],
+            nodes=self.fk_controls,
             group=ikonly_group,
         )
         snappy.add_empty_members(
@@ -590,6 +528,12 @@ class ArmComponent(aniseed.RigComponent):
         )
 
     def _create_twist_setup(self):
+        """
+        Creates a rotator half way between the upper and lower blended arm
+        joints (to prevent flips when the elbow bends a lot) and then adds
+        twisters for the upper and lower twist joints if any are given. The
+        upper twist uses the rotator as its tip.
+        """
 
         upper_twist_joints = self.input("Upper Twist Joints").get()
         lower_twist_joints = self.input("Lower Twist Joints").get()
@@ -606,57 +550,35 @@ class ArmComponent(aniseed.RigComponent):
             config=self.config,
         )
 
-
         if upper_twist_joints:
-            twist_component = self.rig.component_library.request("Augment : Twister")(
-                "",
-                stack=self.rig,
+            aniseed.builders.add_twister(
+                rig=self.rig,
+                joints=upper_twist_joints,
+                parent=self.shoulder_control.ctl,
+                root=self.nk_joints[0],
+                tip=rotator,
+                prefix="UpperTwist",
+                location=self.location,
+                shape_rotation=self.shape_rotation,
             )
-
-            twist_component.input("Joints").set(upper_twist_joints)
-            twist_component.input("Parent").set(self.shoulder_control.ctl)
-            twist_component.input("Root").set(self.nk_joints[0])
-            twist_component.input("Tip").set(rotator)
-
-            twist_component.option("Constrain Root").set(False)
-            twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("UpperTwist")
-            twist_component.option("Location").set(self.option("Location").get())
-
-            twist_component.run()
-
-            for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.shapes.rotate(
-                    twist,
-                    *self.shape_rotation,
-                )
 
         if lower_twist_joints:
-
-            twist_component = self.rig.component_library.request("Augment : Twister")(
-                "",
-                stack=self.rig,
+            aniseed.builders.add_twister(
+                rig=self.rig,
+                joints=lower_twist_joints,
+                parent=self.nk_joints[1],
+                root=self.nk_joints[1],
+                tip=self.nk_joints[2],
+                prefix="LowerTwist",
+                location=self.location,
+                shape_rotation=self.shape_rotation,
             )
 
-            twist_component.input("Joints").set(lower_twist_joints)
-            twist_component.input("Parent").set(self.nk_joints[1])
-            twist_component.input("Root").set(self.nk_joints[1])
-            twist_component.input("Tip").set(self.nk_joints[2])
-
-            twist_component.option("Constrain Root").set(False)
-            twist_component.option("Constrain Tip").set(True)
-            twist_component.option("Descriptive Prefix").set("LowerTwist")
-            twist_component.option("Location").set(self.option("Location").get())
-
-            twist_component.run()
-
-            for twist in twist_component.builder.all_controls():
-                aniseed_toolkit.shapes.rotate(
-                    twist,
-                    *self.shape_rotation,
-                )
-
     def _set_outputs(self):
+        """
+        Sets the upvector, ik hand and shoulder control outputs along with
+        the blended upper arm, lower arm and hand joint outputs.
+        """
 
         self.output("Upvector").set(self.upvector_control.ctl)
         self.output("Ik Hand").set(self.ik_hand_control.ctl)
@@ -670,228 +592,101 @@ class ArmComponent(aniseed.RigComponent):
         """
         This will create a skeleton structure automatically
         """
-        if not parent and cmds.ls(selection=True):
-            parent = cmds.ls(selection=True)[0]
+        if not parent:
+            parent = aniseed_toolkit.core.selection.first_selected()
 
-        if upper_twist_count is None:
-            upper_twist_count = qtility.request.text(
-                title="Upper Twist Count",
-                message="How many twist joints do you want on the upper arm?"
-            )
-            upper_twist_count = int(upper_twist_count)
+        upper_twist_count = aniseed.dialogs.request_count(
+            upper_twist_count,
+            title="Upper Twist Count",
+            message="How many twist joints do you want on the upper arm?",
+        )
+        lower_twist_count = aniseed.dialogs.request_count(
+            lower_twist_count,
+            title="Upper Twist Count",
+            message="How many twist joints do you want on the lower arm?",
+        )
 
-        if lower_twist_count is None:
-            lower_twist_count = qtility.request.text(
-                title="Upper Twist Count",
-                message="How many twist joints do you want on the lower arm?"
-            )
-            lower_twist_count = int(lower_twist_count)
+        prefix = self.option("Descriptive Prefix").get()
+        location = self.option("Location").get()
 
-        # # -- Joint transform attributes
-        joint_data = collections.OrderedDict()
-        joint_data["shoulder"] = {"jointOrientX": -90}
-        joint_data["upperarm"] = {"tx": aniseed_toolkit.units.to_cm(9), "jointOrientX": 7, "jointOrientY": 50}
-        joint_data["lowerarm"] = {"tx": aniseed_toolkit.units.to_cm(24), "jointOrientZ": -20,}
-        joint_data["hand"] = {"tx": aniseed_toolkit.units.to_cm(24)}
-
+        # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["shoulder"] = {}
-        joint_data["upperarm"] = {"tx": aniseed_toolkit.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
-        joint_data["lowerarm"] = {"tx": aniseed_toolkit.units.to_cm(24), "jointOrientY": -20,}
-        joint_data["hand"] = {"tx": aniseed_toolkit.units.to_cm(24)}
+        joint_data["upperarm"] = {"tx": aniseed_toolkit.core.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
+        joint_data["lowerarm"] = {"tx": aniseed_toolkit.core.units.to_cm(24), "jointOrientY": -20,}
+        joint_data["hand"] = {"tx": aniseed_toolkit.core.units.to_cm(24)}
 
-        all_joints = aniseed_toolkit.joints.chain_from_ordered_dict(
+        all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
-            location=self.option("Location").get(),
+            location=location,
             config=self.config,
             parent=parent,
-            prefix=self.option("Descriptive Prefix").get(),
+            prefix=prefix,
         )
 
         self.input("Shoulder").set(all_joints[0])
         self.input("Hand").set(all_joints[-1])
-        upper_twists = []
-        lower_twists = []
 
         if upper_twist_count:
-            upper_twists = aniseed_toolkit.joints.create_twist_joints(
+            upper_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[1],
                 all_joints[2],
                 upper_twist_count,
-                description=self.option("Descriptive Prefix").get() + "ArmUpperTwist",
-                location=self.option("Location").get(),
+                description=prefix + "ArmUpperTwist",
+                location=location,
                 config=self.config,
                 down_bone_axis="x",
             )
             self.input("Upper Twist Joints").set(upper_twists)
 
         if lower_twist_count:
-            lower_twists = aniseed_toolkit.joints.create_twist_joints(
+            lower_twists = aniseed_toolkit.scene.joints.create_twist_joints(
                 all_joints[2],
                 all_joints[3],
                 lower_twist_count,
-                description=self.option("Descriptive Prefix").get() + "ArmLowerTwist",
-                location=self.option("Location").get(),
+                description=prefix + "ArmLowerTwist",
+                location=location,
                 config=self.config,
                 down_bone_axis="x",
             )
             self.input("Lower Twist Joints").set(lower_twists)
 
-    def user_func_create_mirror(self):
-        """
-        This will create a mirrored version of the component
-        """
-        aniseed_toolkit.component.mirror(
-            component_instance=self,
-            transforms=self.all_joints(),
-            location_label="Location",
-            config=self.config,
-            joint_parent=mref.get(self.input("Shoulder").get()).parent().name(),
-            input_overrides={"Shoulder": ""},
-        )
-
-    def all_joints(self):
-        """
-        This is a convenience function for returning all the joints that this
-        component affects
-        """
-        # -- Get the start and end point
-        root_joint = self.input("Shoulder").get()
-        end_joint = self.input("Hand").get()
-
-        if not cmds.objExists(root_joint) or not cmds.objExists(end_joint):
-            return []
-
-        # -- Resolve the whole chain betweenm
-        arm_joints = aniseed_toolkit.joints.get_between(root_joint, end_joint)
-
-        # -- Include the twisters
-        upper_twists = self.input("Upper Twist Joints").get() or []
-        lower_twists = self.input("Lower Twist Joints").get() or []
-        all_joints = arm_joints + upper_twists + lower_twists
-
-        return [joint for joint in all_joints if joint]
-
     def setup_spaceswitches(self):
+        """
+        Adds space switch components for the ik hand (World, Component Parent,
+        Shoulder - defaulting to World) and the upvector (World, Parent,
+        Shoulder, Hand - defaulting to Hand). Does nothing if the stack has no
+        "Core : Global Control Root" component.
+        """
         global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
 
         if not global_srt_component:
             print("No global srt found, skipping spaceswitch setup")
             return
 
-        hand_spaceswitch = self.stack.add_component(
-            component_type="Augment : Space Switch",
+        world = global_srt_component.output("Main Control").address()
+
+        aniseed.builders.add_space_switch(
+            component=self,
             label=self.label() + " Hand Space Switch",
-            parent=self,
-            inputs={
-                "To Be Driven": self.output("Ik Hand").address(),
-                "Attribute Host": self.output("Ik Hand").address(),
-            },
+            driven=self.output("Ik Hand").address(),
+            default_space="World",
+            spaces=[
+                ("World", world),
+                ("Component Parent", self.input("Parent").address()),
+                ("Shoulder", self.input("Shoulder").address()),
+            ],
         )
-        hand_spaceswitch.option("_Data").set(
-            {
-                "default_space": "World",
-                "spaces": [
-                    {
-                        "target": global_srt_component.output("Main Control").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "World",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                    {
-                        "target": self.input("Parent").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "Component Parent",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                    {
-                        "target": self.input("Shoulder").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "Shoulder",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                ]
-            }
-        )
-        upvector_spaceswitch = self.stack.add_component(
-            component_type="Augment : Space Switch",
+
+        aniseed.builders.add_space_switch(
+            component=self,
             label=self.label() + " Upvector Space Switch",
-            parent=self,
-            inputs={
-                "To Be Driven": self.output("Upvector").address(),
-                "Attribute Host": self.output("Upvector").address(),
-            },
+            driven=self.output("Upvector").address(),
+            default_space="Hand",
+            spaces=[
+                ("World", world),
+                ("Parent", self.input("Parent").address()),
+                ("Shoulder", self.input("Shoulder").address()),
+                ("Hand", self.output("Ik Hand").address()),
+            ],
         )
-        upvector_spaceswitch.option("_Data").set(
-            {
-                "default_space": "Hand",
-                "spaces": [
-                    {
-                        "target": global_srt_component.output("Main Control").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "World",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                    {
-                        "target": self.input("Parent").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "Parent",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                    {
-                        "target": self.input("Shoulder").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "Shoulder",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                    {
-                        "target": self.output("Ik Hand").address(),
-                        "position_only": False,
-                        "orientation_only": False,
-                        "target_transform": "",
-                        "label": "Hand",
-                        "include_scale": True,
-                        "uuid_": str(uuid.uuid4()),
-                    },
-                ]
-            }
-        )
-
-    def _clear_values(self):
-
-        self.prefix: str = ""
-        self.location: str = ""
-        self.org: str = ""
-        self.arm_joints: list[str] = []
-        self.chain_direction: "Direction" = None
-        self.shoulder_control: "Control" = None
-        self.config_control: "Control" = None
-        self.upvector_control: "Control" = None
-        self.ik_hand_control: "Control" = None
-        self.fk_upper_control: "Control" = None
-        self.fk_lower_control: "Control" = None
-        self.fk_hand_control: "Control" = None
-
-        self.controls: list[str] = []
-        self.fk_controls: list[str] = []
-        self.ik_controls: list[str] = []
-        self.ik_joints: list[str] = []
-        self.nk_joints: list[str] = []

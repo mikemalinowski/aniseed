@@ -3,6 +3,9 @@ from maya import cmds
 from maya.api import OpenMaya as om
 
 
+# -- Values of the overrideDisplayType enum, in index order
+_DISPLAY_OVERRIDE_TYPES = ("normal", "template", "reference")
+
 class DagNode(mref.Trait):
     """
     Trait bound to any node with ``MFn.kDagNode`` — transforms, joints,
@@ -246,12 +249,160 @@ class DagNode(mref.Trait):
 
     def unlock_transform_attributes(self, hide=False) -> None:
         """
-        Locks the nine scalar transform channels on this node — translateX/Y/Z,
-        rotateX/Y/Z, scaleX/Y/Z. Does not lock visibility, nor the parent
-        compound translate/rotate/scale attributes themselves. Has no unlock
-        counterpart; call ``unlock_attributes`` with explicit channel names
-        to reverse.
+        Unlocks the nine scalar transform channels on this node — translateX/Y/Z,
+        rotateX/Y/Z, scaleX/Y/Z — reversing ``lock_transform_attributes``.
+        Does not touch visibility, nor the parent compound
+        translate/rotate/scale attributes themselves.
         """
         for type_ in ["t", "r", "s"]:
             for axis in ["x", "y", "z"]:
                 cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=False, channelBox=not hide)
+
+    # ------------------------------------------------------------------
+    # DAG path and hierarchy
+    # ------------------------------------------------------------------
+
+    def dag_path(self) -> om.MDagPath:
+        """
+        Returns the MDagPath of this node. For an instanced node this is
+        the path of the first instance.
+        """
+        return self._dag_node.getPath()
+
+    def root(self) -> mref.ReferencedItem:
+        """
+        Returns the top-most ancestor of this node (the node directly
+        under the scene root), or this node itself if it has no parent.
+        """
+        full_name = self.item.full_name()
+        return mref.get("|" + full_name.lstrip("|").split("|")[0])
+
+    def siblings(self, include_shapes: bool = True) -> mref.ReferenceList:
+        """
+        Returns the other children of this node's parent, not including
+        this node. For a node at the scene root this is the other
+        top-level nodes (including the default cameras).
+
+        :param include_shapes: If False, shape nodes are skipped.
+        """
+        parent = self.parent()
+        if parent:
+            candidates = cmds.listRelatives(parent.full_name(), children=True, fullPath=True) or []
+        else:
+            candidates = cmds.ls(assemblies=True, long=True) or []
+
+        return mref.ReferenceList(
+            mref.get(node)
+            for node in candidates
+            if node != self.item.full_name()
+            if include_shapes or not cmds.objectType(node, isAType="shape")
+        )
+
+    def instance_count(self) -> int:
+        """
+        Returns the number of DAG paths to this node — 1 for a node that
+        is not instanced. Includes indirect instancing (an instanced
+        parent).
+        """
+        return self._dag_node.instanceCount(True)
+
+    def is_instanced(self) -> bool:
+        """
+        Returns True if this node can be reached by more than one DAG
+        path, either directly or through an instanced parent.
+        """
+        return self._dag_node.isInstanced(True)
+
+    # ------------------------------------------------------------------
+    # Visibility and display
+    # ------------------------------------------------------------------
+
+    def is_visible(self) -> bool:
+        """
+        Returns True if this node is actually drawn — i.e. it and all of
+        its parents are visible (taking ``visibility``, ``lodVisibility``,
+        drawing overrides and intermediate state into account). This
+        differs from reading the ``visibility`` attribute, which ignores
+        the parents.
+        """
+        return self.dag_path().isVisible()
+
+    def show(self) -> None:
+        """
+        Sets this node's ``visibility`` attribute on. Parents that are
+        hidden will still hide it — see ``is_visible``.
+        """
+        cmds.setAttr(f"{self.item.full_name()}.visibility", True)
+
+    def hide(self) -> None:
+        """
+        Sets this node's ``visibility`` attribute off.
+        """
+        cmds.setAttr(f"{self.item.full_name()}.visibility", False)
+
+    def world_matrix(self, inverse: bool = False) -> list[float]:
+        """
+        Returns the world-space matrix of this node as a flat list of 16
+        floats, read directly from the DAG path. Works for shapes as well
+        as transforms (a shape returns its transform's world matrix).
+
+        :param inverse: If True, returns the inverse world matrix.
+        """
+        path = self.dag_path()
+        matrix = path.inclusiveMatrixInverse() if inverse else path.inclusiveMatrix()
+        return list(matrix)
+
+    def outliner_colour(self) -> tuple[float, float, float]|None:
+        """
+        Returns the custom outliner colour as an ``(r, g, b)`` tuple, or
+        None if the node does not use a custom outliner colour.
+        """
+        if not cmds.getAttr(f"{self.item.full_name()}.useOutlinerColor"):
+            return None
+        return tuple(cmds.getAttr(f"{self.item.full_name()}.outlinerColor")[0])
+
+    def set_outliner_colour(self, colour: "tuple[float, float, float]|None") -> None:
+        """
+        Sets the colour this node's name is drawn with in the outliner,
+        as ``(r, g, b)`` floats in the 0-1 range. Pass None to go back to
+        the default colour.
+        """
+        if colour is None:
+            cmds.setAttr(f"{self.item.full_name()}.useOutlinerColor", False)
+            return
+
+        cmds.setAttr(f"{self.item.full_name()}.useOutlinerColor", True)
+        cmds.setAttr(f"{self.item.full_name()}.outlinerColor", *colour, type="float3")
+
+    def display_override(self) -> str:
+        """
+        Returns the drawing-override display type of this node:
+        ``"normal"``, ``"template"`` or ``"reference"`` (unselectable).
+        Returns ``"normal"`` when drawing overrides are not enabled.
+        """
+        if not cmds.getAttr(f"{self.item.full_name()}.overrideEnabled"):
+            return "normal"
+        index = cmds.getAttr(f"{self.item.full_name()}.overrideDisplayType")
+        return _DISPLAY_OVERRIDE_TYPES[index]
+
+    def set_display_override(self, display_type: str) -> None:
+        """
+        Sets the drawing-override display type of this node to
+        ``"normal"``, ``"template"`` or ``"reference"`` (unselectable).
+        Setting template or reference enables drawing overrides; setting
+        normal leaves ``overrideEnabled`` alone so that any override
+        colour set on the node is kept.
+        """
+        if display_type not in _DISPLAY_OVERRIDE_TYPES:
+            raise ValueError(
+                f"Unsupported display type {display_type!r}; "
+                f"expected one of {_DISPLAY_OVERRIDE_TYPES}"
+            )
+
+        if display_type != "normal":
+            cmds.setAttr(f"{self.item.full_name()}.overrideEnabled", True)
+
+        cmds.setAttr(
+            f"{self.item.full_name()}.overrideDisplayType",
+            _DISPLAY_OVERRIDE_TYPES.index(display_type),
+        )

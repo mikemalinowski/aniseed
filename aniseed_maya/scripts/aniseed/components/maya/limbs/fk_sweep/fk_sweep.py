@@ -1,8 +1,13 @@
+"""
+Provides the "Limb : Fk Sweep" component, which walks a joint hierarchy and
+creates a standard fk control (optionally with an offset control) for every
+joint which is not already constrained. Controls are parented under the
+driver of the parent joint and named from regex matches on the joint names.
+"""
 import re
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class FkSweep(aniseed.RigComponent):
@@ -21,6 +26,11 @@ class FkSweep(aniseed.RigComponent):
     identifier = 'Limb : Fk Sweep'
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the hierarchy root input, the regex options used to extract
+        the description, counter and location from joint names (plus an
+        ignore regex), the control shape and the offset control option.
+        """
         super(FkSweep, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -68,6 +78,9 @@ class FkSweep(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the hierarchy root input.
+        """
         if requirement_name == "Hierarchy Root":
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -79,84 +92,79 @@ class FkSweep(aniseed.RigComponent):
             return aniseed.widgets.ShapeSelector(self.option("Shape").get())
 
     def run(self):
+        """
+        Walks the joints below (and including) the hierarchy root, parents
+        first, and creates a control for each joint which is not already
+        constrained and not matched by the ignore regex. Each control is
+        parented under the driver of the parent joint's first constraint and
+        named using the regex extracted description, location and counter.
+        Joints whose parent is not constrained, or whose names do not match
+        the regexes, will cause an error.
+        """
 
         hierarchy_root = mref.get(self.input("Hierarchy Root").get())
+        shape = self.option("Shape").get()
 
         # -- Compile our regex
         description_regex = re.compile(self.option("Description Extraction Regex").get())
         location_regex = re.compile(self.option("Location Extraction Regex").get())
         counter_regex = re.compile(self.option("Counter Extraction Regex").get())
 
+        ignore_regex = None
+        if self.option("Ignore Regex").get():
+            ignore_regex = re.compile(self.option("Ignore Regex").get())
+
+        # -- Sort the joints by depth so parents are always handled
+        # -- before their children
         joints = hierarchy_root.children(recursive=True, node_type="joint")
         joints = sorted(joints, key=lambda x: x.full_name().count("|"))
         joints.insert(0, hierarchy_root)
 
-
-        # -- sort the joints by depth
         for joint in joints:
 
-            is_driven = joint.constraints()
-            if is_driven:
+            # -- Skip any joints which are already driven
+            if joint.constraints():
                 continue
 
-            ignore_regex = None
-            if self.option("Ignore Regex").get():
-                ignore_regex = re.compile(self.option("Ignore Regex").get())
+            joint_name = joint.name()
 
-            if ignore_regex and ignore_regex.search(joint.name()):
+            if ignore_regex and ignore_regex.search(joint_name):
                 continue
 
             # -- To reach here we have a joint which is not driven, so lets
-            # -- get the parent joint and driver
-            parent = joint.parent()
-            driver = parent.constraints()[0].drivers()[0]
-            joint_name = joint.name()
-            #
+            # -- get the driver of the parent joint
+            driver = joint.parent().constraints()[0].drivers()[0]
+
             # -- Pull out the naming classifications
             description = description_regex.search(joint_name).groups()[0]
             location = location_regex.search(joint_name).groups()[0]
             counter = int(counter_regex.search(joint_name).groups()[0])
 
             # -- Lets build a control for this joint
-            control = aniseed_toolkit.control.create(
+            control = aniseed_toolkit.rig.control.create(
                 description=description,
                 location=location,
                 counter=counter,
                 parent=driver.full_name(),
                 match_to=joint.full_name(),
-                shape=self.option("Shape").get(),
+                shape=shape,
                 config=self.config,
             )
             driver = control.ctl
 
             if self.option("Add Offset Control").get():
-                attribute = mref.get(control.ctl).add_attribute(
-                    "show_offset",
-                    value=False,
-                    attribute_type="bool",
-                    keyable=False,
-                )
-                attribute.set(channelBox=True)
-
-                driving_control = aniseed_toolkit.control.create(
-                    description=description + "_offset",
+                driver = aniseed_toolkit.rig.control.add_offset_control(
+                    control,
+                    description=description,
                     location=location,
                     config=self.config,
-                    shape=self.option("Shape").get(),
-                    parent=control.ctl,
+                    shape=shape,
                     match_to=joint_name,
-                )
-                driver = driving_control.ctl
+                ).ctl
 
-
-            # -- Now constraint the joint to the control
-            cmds.parentConstraint(
+            # -- Now constrain the joint to the control
+            aniseed_toolkit.scene.constraints.parent_and_scale(
                 driver,
-                joint.full_name(),
-                maintainOffset=True,
-            )
-            cmds.scaleConstraint(
-                driver,
-                joint.full_name(),
-                maintainOffset=True,
+                joint,
+                maintain_offset=True,
             )

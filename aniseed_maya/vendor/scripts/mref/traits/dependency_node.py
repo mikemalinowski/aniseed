@@ -167,6 +167,221 @@ class DependencyNode(mref.Trait):
         """
         return cmds.nodeType(self.item.full_name())
 
+    # ------------------------------------------------------------------
+    # Identity and scene state
+    # ------------------------------------------------------------------
+
+    def uuid(self) -> str:
+        """
+        Returns the node's UUID as a string. Unlike the name, this stays
+        the same when the node is renamed or reparented, and is saved
+        with the scene.
+        """
+        return self._dependency_node.uuid().asString()
+
+    def exists(self) -> bool:
+        """
+        Returns True if the node this item points at still exists in the
+        scene. Returns False once the node has been deleted, even if the
+        deletion is still sitting in the undo queue.
+        """
+        return om.MObjectHandle(self._pointer).isValid()
+
+    def is_referenced(self) -> bool:
+        """
+        Returns True if this node was brought into the scene by a file
+        reference (and so cannot be renamed, deleted or reparented).
+        """
+        return self._dependency_node.isFromReferencedFile
+
+    def reference_node(self) -> mref.ReferencedItem|None:
+        """
+        Returns the reference node (``fooRN``) that brought this node
+        into the scene, or None if the node is not referenced.
+        """
+        if not self.is_referenced():
+            return None
+        return mref.get(
+            cmds.referenceQuery(self.item.full_name(), referenceNode=True)
+        )
+
+    def is_default_node(self) -> bool:
+        """
+        Returns True if this is one of the nodes Maya creates in every
+        scene (``time1``, ``lambert1``, ``persp`` etc.) and which cannot be
+        deleted.
+        """
+        return self._dependency_node.isDefaultNode
+
+    def node_namespace(self) -> str:
+        """
+        Returns the namespace this node lives in, without a leading colon
+        (``char:rig`` for a nested namespace), or an empty string for the
+        root namespace.
+
+        Named ``node_namespace`` rather than ``namespace`` so it does not
+        clash with ``Reference.namespace()``, which returns the namespace
+        of a reference's *contents* rather than of the node itself.
+        """
+        short_name = self.name()
+        if ":" not in short_name:
+            return ""
+        return short_name.rsplit(":", 1)[0]
+
+    def set_node_namespace(self, namespace: str) -> None:
+        """
+        Moves this node into the given namespace, keeping its base name.
+        The namespace (and any missing parents of a nested ``a:b``
+        namespace) is created if it does not exist. Pass an empty string
+        to move the node back to the root namespace.
+        """
+        namespace = namespace.strip(":")
+        base_name = self.name().rsplit(":", 1)[-1]
+
+        if namespace and not cmds.namespace(exists=f":{namespace}"):
+            cmds.namespace(add=f":{namespace}")
+
+        cmds.rename(
+            self.item.full_name(),
+            f":{namespace}:{base_name}" if namespace else f":{base_name}",
+        )
+
+    def select(self, add: bool = False) -> None:
+        """
+        Selects this node, replacing the current selection unless ``add``
+        is True.
+        """
+        if add:
+            cmds.select(self.item.full_name(), add=True)
+        else:
+            cmds.select(self.item.full_name(), replace=True)
+
+    def duplicate(self, name: str = None, **kwargs) -> mref.ReferencedItem:
+        """
+        Duplicates this node and returns the duplicate. Any additional
+        kwargs are passed to ``cmds.duplicate`` (for example
+        ``upstreamNodes=True`` or ``inputConnections=True``). For DAG
+        nodes the duplicate of this node is returned, not its children.
+        """
+        if name:
+            kwargs["name"] = name
+
+        return mref.get(
+            cmds.duplicate(self.item.full_name(), **kwargs)[0]
+        )
+
+    # ------------------------------------------------------------------
+    # Notes
+    # ------------------------------------------------------------------
+
+    def node_notes(self) -> str:
+        """
+        Returns the text shown in the Notes section of the Attribute
+        Editor, or an empty string if the node has no notes.
+
+        Named ``node_notes`` because ``notes`` is the name of the Maya
+        attribute that stores them, and a method of that name would
+        shadow property-style access to it.
+        """
+        if not cmds.attributeQuery("notes", node=self.item.full_name(), exists=True):
+            return ""
+        return cmds.getAttr(f"{self.item.full_name()}.notes") or ""
+
+    def set_node_notes(self, text: str) -> None:
+        """
+        Sets the text shown in the Notes section of the Attribute Editor,
+        creating the ``notes`` attribute if the node does not have one.
+        """
+        if not cmds.attributeQuery("notes", node=self.item.full_name(), exists=True):
+            cmds.addAttr(
+                self.item.full_name(),
+                longName="notes",
+                shortName="nts",
+                dataType="string",
+            )
+        cmds.setAttr(f"{self.item.full_name()}.notes", text, type="string")
+
+    # ------------------------------------------------------------------
+    # Connections and history
+    # ------------------------------------------------------------------
+
+    def plug_connections(
+        self,
+        source: bool = True,
+        destination: bool = True,
+    ) -> list[tuple[mref.ReferencedItem, mref.ReferencedItem]]:
+        """
+        Returns this node's connections as ``(source_plug,
+        destination_plug)`` tuples of attribute ReferencedItems, always
+        ordered in the direction data flows.
+
+        :param source: Include incoming connections (where this node's
+            plug is the destination).
+        :param destination: Include outgoing connections (where this
+            node's plug is the source).
+        """
+        results = []
+        seen = set()
+
+        for plug in self._dependency_node.getConnections():
+
+            pairs = []
+            if source:
+                upstream = plug.source()
+                if not upstream.isNull:
+                    pairs.append((upstream, plug))
+
+            if destination:
+                pairs.extend((plug, downstream) for downstream in plug.destinations())
+
+            for source_plug, destination_plug in pairs:
+                key = (source_plug.name(), destination_plug.name())
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append((mref.get(source_plug), mref.get(destination_plug)))
+
+        return results
+
+    def history(self, node_type: str = None, **kwargs) -> mref.ReferenceList:
+        """
+        Returns the nodes upstream of this node, nearest first, using
+        ``cmds.listHistory`` (so a transform's history includes its
+        shape's). The node itself is not included. Any additional kwargs
+        are passed to ``cmds.listHistory`` (for example
+        ``pruneDagObjects=True`` or ``levels=1``).
+
+        :param node_type: Only return nodes of this type, or of a type
+            derived from it (``"geometryFilter"`` returns all deformers).
+        """
+        return self._list_history(node_type, future=False, **kwargs)
+
+    def future(self, node_type: str = None, **kwargs) -> mref.ReferenceList:
+        """
+        Returns the nodes downstream of this node, nearest first, using
+        ``cmds.listHistory(future=True)``. The node itself is not
+        included. Any additional kwargs are passed to
+        ``cmds.listHistory``.
+
+        :param node_type: Only return nodes of this type, or of a type
+            derived from it.
+        """
+        return self._list_history(node_type, future=True, **kwargs)
+
+    def _list_history(self, node_type: str, future: bool, **kwargs) -> mref.ReferenceList:
+        results = mref.ReferenceList()
+
+        for node in cmds.listHistory(self.item.full_name(), future=future, **kwargs) or []:
+            if node_type and not cmds.objectType(node, isAType=node_type):
+                continue
+
+            item = mref.get(node)
+            if item == self.item:
+                continue
+
+            results.append(item)
+        return results
+
     def inputs(self, shapes: bool = True, **kwargs) -> list[mref.ReferencedItem]:
         """
         Returns a list of inputs coming into this node.

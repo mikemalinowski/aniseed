@@ -38,4 +38,4 @@ class RollJoints(aniseed_toolkit.Tool):
         if not joints:
             return
 
-        return aniseed_toolkit.joints.roll(joints, axis, value)
+        return aniseed_toolkit.scene.joints.roll(joints, axis, value)

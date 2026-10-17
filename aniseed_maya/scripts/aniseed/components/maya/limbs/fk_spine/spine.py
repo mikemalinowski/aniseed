@@ -1,9 +1,15 @@
+"""
+Provides the "Limb : FK Spine" component, which builds a sequential chain of
+fk controls from the hip joint to the chest joint, plus a hip sway control that
+drives the hip without affecting the controls above it. It can generate a
+spine joint chain of a requested length when added to the stack.
+"""
 import os
+import mref
 import typing
 import aniseed
 import qtility
 import aniseed_toolkit
-from maya import cmds
 
 
 class FKSpineComponent(aniseed.RigComponent):
@@ -19,6 +25,11 @@ class FKSpineComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, hip and chest inputs, the label, location, world
+        alignment and joint count options, and the hip and chest control
+        outputs.
+        """
         super(FKSpineComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -63,11 +74,11 @@ class FKSpineComponent(aniseed.RigComponent):
             value=True,
             group="Behaviour",
         )
-        
+
         self.declare_option(
-            name="Joint Count", 
-            value=4, 
-            hidden=False, 
+            name="Joint Count",
+            value=4,
+            hidden=False,
             pre_expose=True,
         )
 
@@ -75,14 +86,17 @@ class FKSpineComponent(aniseed.RigComponent):
         self.declare_output(name="Chest")
 
     def on_enter_stack(self):
+        """
+        Hides the Joint Count option and, if it is non-zero, creates that many
+        spine joints under the current selection. Then attempts to hook the
+        parent input to the parent component.
+        """
         # -- Now that we have used the joint count option we dont want
-        # -- the user to see it again so we hide it. We also mark the
-        # -- initialisation step as having run (so it never gets run again).
+        # -- the user to see it again so we hide it.
         self.option("Joint Count").set_hidden(True)
 
         # -- Providing the number of joints was not zero then we build
-        # -- the joints and guide (the create guide is called from within
-        # -- the create skeleton function.
+        # -- the joints
         joint_count = self.option("Joint Count").get()
         if joint_count:
             self.user_func_create_skeleton(joint_count=joint_count)
@@ -91,33 +105,46 @@ class FKSpineComponent(aniseed.RigComponent):
         self.input("Parent").hook_to_parent()
 
     def option_widget(self, option_name: str):
+        """
+        Returns a location selector for the Location option.
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for the hip, chest and parent inputs.
+        """
         if requirement_name in ["Hip", "Chest", "Parent"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
     def user_functions(self) -> typing.Dict[str, callable]:
+        """
+        Always exposes a "Create Joints" menu entry. The base class menu
+        entries are not included.
+        """
         return {
             "Create Joints": self.user_func_create_skeleton,
         }
 
     def is_valid(self):
+        """
+        Checks that the hip and chest joints exist and that the chain between
+        them faces along positive X (with a 20 degree tolerance).
+        """
 
         hip = self.input("Hip").get()
         chest = self.input("Chest").get()
 
-        if not cmds.objExists(hip):
+        if not mref.objExists(hip):
             print(f"{hip} does not exist")
             return False
 
-        if not cmds.objExists(chest):
+        if not mref.objExists(chest):
             print(f"{chest} does not exist")
             return False
 
-        facing_dir = aniseed_toolkit.run(
-            "Get Chain Facing Direction",
+        facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=hip,
             end=chest,
             epsilon=20,
@@ -130,142 +157,113 @@ class FKSpineComponent(aniseed.RigComponent):
         return True
 
     def run(self):
+        """
+        Builds a hip control, a hip sway control (a child of the hip which
+        drives the hip joint but has no children), a chain of spine controls
+        for the joints between the hip and chest and finally a chest control.
+        The joints are read from the dag path of the chest, so the chest must
+        be a descendant of the hip.
+        """
 
         hip_bone = self.input("Hip").get()
         chest_bone = self.input("Chest").get()
 
-        align_to_world = self.option("Align Controls To World").get()
-
-        joints = []
-        next_joint = chest_bone
-
         # -- Get all the joints that make up part of the continuous hierarchy
-        long_name = cmds.ls(chest_bone, long=True)[0]
-        chain = long_name.split("|")
+        # -- by reading the dag path of the chest from the hip downward
+        chain = mref.get(chest_bone).full_name().split("|")
         joints = chain[chain.index(hip_bone):]
 
-        control_parent = self.input("Parent").get()
+        hip_control = self._create_control(
+            label="Hip",
+            parent=self.input("Parent").get(),
+            match_to=hip_bone,
+            shape_scale=24,
+        )
 
-        kwargs = dict(
+        # -- Store the output
+        self.output("Hip").set(hip_control.ctl)
+
+        # -- The hip sway is a child of the hip, but nothing else is a child
+        # -- of the sway, so it can be manipulated independently
+        sway_control = self._create_control(
+            label="HipSway",
+            parent=hip_control.ctl,
+            match_to=hip_bone,
+            shape_scale=20,
+        )
+
+        aniseed_toolkit.scene.constraints.parent_and_scale(
+            sway_control.ctl,
+            hip_bone,
+        )
+
+        control_parent = hip_control.ctl
+
+        for joint in joints[1:-1]:
+
+            spine_control = self._create_control(
+                label="Spine",
+                parent=control_parent,
+                match_to=joint,
+                shape_scale=16,
+            )
+
+            aniseed_toolkit.scene.constraints.parent_and_scale(
+                spine_control.ctl,
+                joint,
+            )
+
+            control_parent = spine_control.ctl
+
+        chest_control = self._create_control(
+            label="Chest",
+            parent=control_parent,
+            match_to=chest_bone,
+            shape_scale=24,
+        )
+
+        # -- Store the chest output
+        self.output("Chest").set(chest_control.ctl)
+
+        aniseed_toolkit.scene.constraints.parent_and_scale(
+            chest_control.ctl,
+            chest_bone,
+        )
+
+        return True
+
+    def _create_control(self, label, parent, match_to, shape_scale):
+        """
+        Creates a spine control, aligning it to the world if the option
+        to do so is enabled.
+        """
+        control = aniseed_toolkit.rig.control.create(
+            description=label + self.option("Label").get(),
+            location=self.option("Location").get(),
+            shape_scale=shape_scale,
+            parent=parent,
+            match_to=match_to,
             config=self.config,
             shape="core_rounded_square",
             rotate_shape=[90, 90, 0],
         )
 
-        hip_control = aniseed_toolkit.run(
-            "Create Control",
-            description="Hip" + self.option("Label").get(),
-            location=self.option("Location").get(),
-            shape_scale=24,
-            parent=control_parent,
-            match_to=hip_bone,
-            **kwargs
-        )
-        self._align_control(hip_control, align_to_world)
+        if self.option("Align Controls To World").get():
+            mref.get(control.org).set_rotation([0, 0, 0], space="world")
+            aniseed_toolkit.scene.shapes.rotate(control.ctl, x=0, y=0, z=90)
 
-        # -- Store the output
-        self.output("Hip").set(hip_control.ctl)
-
-        sway_control = aniseed_toolkit.run(
-            "Create Control",
-            description="HipSway" + self.option("Label").get(),
-            location=self.option("Location").get(),
-            shape_scale=20,
-            parent=hip_control.ctl,
-            match_to=hip_bone,
-            **kwargs
-        )
-        self._align_control(sway_control, align_to_world)
-
-        cmds.parentConstraint(
-            sway_control.ctl,
-            hip_bone,
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            sway_control.ctl,
-            hip_bone,
-            maintainOffset=True,
-        )
-
-        control_parent = hip_control.ctl
-
-        for idx, joint in enumerate(joints[1:-1]):
-
-            spine_control = aniseed_toolkit.run(
-                "Create Control",
-                description="Spine" + self.option("Label").get(),
-                location=self.option("Location").get(),
-                shape_scale=16,
-                parent=control_parent,
-                match_to=joint,
-                **kwargs
-            )
-            self._align_control(spine_control, align_to_world)
-
-            cmds.parentConstraint(
-                spine_control.ctl,
-                joint,
-                maintainOffset=True,
-            )
-
-            cmds.scaleConstraint(
-                spine_control.ctl,
-                joint,
-                maintainOffset=True,
-            )
-
-            control_parent = spine_control.ctl
-
-        chest_control = aniseed_toolkit.run(
-            "Create Control",
-            description="Chest" + self.option("Label").get(),
-            location=self.option("Location").get(),
-            shape_scale=24,
-            parent=control_parent,
-            match_to=chest_bone,
-            **kwargs
-        )
-        self._align_control(chest_control, align_to_world)
-
-        # -- Store the chest output
-        self.output("Chest").set(chest_control.ctl)
-
-        cmds.parentConstraint(
-            chest_control.ctl,
-            chest_bone,
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            chest_control.ctl,
-            chest_bone,
-            maintainOffset=True,
-        )
-
-        return True
-
-    def _align_control(self, control, perform_align_controlment):
-
-        if not perform_align_controlment:
-            return
-
-        cmds.xform(
-            control.org,
-            rotation=[0, 0, 0],
-            worldSpace=True,
-        )
-
-        aniseed_toolkit.run(
-            "Rotate Shapes",
-            control.ctl,
-            x=0,
-            y=0,
-            z=90,
-        )
+        return control
 
     def user_func_create_skeleton(self, joint_count=None):
+        """
+        Creates a hip to chest joint chain under the first selected node, with
+        the hip placed at a fixed world position and the joints evenly spaced
+        along X. The hip and chest inputs are set and the hip is selected.
+
+        Args:
+            joint_count: The number of joints including the hip and chest. If
+                not given the user is prompted for it.
+        """
 
         if not joint_count:
             joint_count = qtility.request.text(
@@ -278,28 +276,14 @@ class FKSpineComponent(aniseed.RigComponent):
 
             joint_count = int(joint_count)
 
-        try:
-            parent = cmds.ls(sl=True)[0]
+        parent = aniseed_toolkit.core.selection.first_selected()
 
-        except:
-            parent = None
+        increment = aniseed_toolkit.core.units.to_cm(25) / (joint_count - 1)
 
-        increment = aniseed_toolkit.units.to_cm(25) / (joint_count - 1)
-
-        all_joints = []
-        hip_joint = aniseed_toolkit.run(
-            "Create Joint",
-            description="Hip" + self.option("Label").get(),
-            location=self.option("Location").get(),
-            parent=parent,
-            match_to=parent,
-            config=self.config
-        )
+        hip_joint = self._create_joint("Hip", parent)
         self.input("Hip").set(hip_joint)
-        all_joints.append(hip_joint)
 
-        cmds.xform(
-            hip_joint,
+        mref.get(hip_joint).xform(
             rotation=[-90, 0, 90],
             translation=[0, 105, 0],
             worldSpace=True,
@@ -307,37 +291,25 @@ class FKSpineComponent(aniseed.RigComponent):
 
         parent = hip_joint
 
-        for idx in range(joint_count-2):
-            spine_joint = aniseed_toolkit.run(
-                "Create Joint",
-                description="Spine" + self.option("Label").get(),
-                location=self.option("Location").get(),
-                parent=parent,
-                match_to=parent,
-                config=self.config
-            )
-
-            cmds.setAttr(
-                f"{spine_joint}.translateX",
-                increment
-            )
-            all_joints.append(spine_joint)
+        for _ in range(joint_count - 2):
+            spine_joint = self._create_joint("Spine", parent)
+            mref.get(spine_joint).translateX.set(increment)
             parent = spine_joint
 
-        chest_joint = aniseed_toolkit.run(
-            "Create Joint",
-            description="Chest" + self.option("Label").get(),
+        chest_joint = self._create_joint("Chest", parent)
+        self.input("Chest").set(chest_joint)
+
+        mref.get(chest_joint).translateX.set(increment)
+        mref.select(hip_joint)
+
+    def _create_joint(self, label, parent):
+        """
+        Creates a spine joint as a child of (and matched to) the given parent
+        """
+        return aniseed_toolkit.scene.joints.create(
+            description=label + self.option("Label").get(),
             location=self.option("Location").get(),
             parent=parent,
             match_to=parent,
-            config=self.config
+            config=self.config,
         )
-        self.input("Chest").set(chest_joint)
-        all_joints.append(chest_joint)
-
-        cmds.setAttr(
-            f"{chest_joint}.translateX",
-            increment
-        )
-        cmds.select(hip_joint)
-

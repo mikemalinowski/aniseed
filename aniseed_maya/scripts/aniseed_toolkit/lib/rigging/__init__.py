@@ -1,9 +1,7 @@
-from .blend_chain import BlendChain
-from .blend_chain import create_blend_chain
-from .two_bone_ikfk import TwoBoneIKFK
-from .two_bone_ikfk import create_two_bone_ikfk
+"""
+Deprecated location, kept for compatibility until aniseed_toolkit 4.0.
 
-from .softik import create_two_bone_soft_ik
-from .multi_bone_softik import create_multi_bone_soft_ik
-from .transform_mixer import TransformMixer
-from .rotator import create_rotator
+Use aniseed_toolkit.rigging (and aniseed_toolkit.scene.node_math).
+"""
+from ...rigging import *  # noqa: F401,F403
+from ...rigging import __getattr__  # noqa: F401

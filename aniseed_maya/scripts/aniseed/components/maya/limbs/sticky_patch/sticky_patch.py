@@ -1,11 +1,16 @@
+"""
+Provides the "Limb : Sticky Patch" component, which drives a joint from a
+control under a follicle on a skinned geometry patch, so the joint moves organically with
+the underlying skinning (e.g. pouches or fins). It includes user functions to
+create, match and skin the patch surface. The patch must not be skinned to the
+joint it drives (or its children), otherwise the rig will cycle.
+"""
 import os
 import re
 import mref
 import typing
 import aniseed
 import aniseed_toolkit
-from maya import cmds
-
 
 
 class StickyPatchComponent(aniseed.RigComponent):
@@ -29,6 +34,11 @@ class StickyPatchComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent, geometry patch and joint to drive inputs, the
+        naming and joint/patch creation options and the control and follicle
+        outputs.
+        """
         super(StickyPatchComponent, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -80,6 +90,10 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
     def on_enter_stack(self):
+        """
+        When added to the stack we (optionally) create the joint and the
+        patch surface for the user
+        """
         creation_option = self.option("Create Joint And Patch")
 
         if creation_option.get():
@@ -92,6 +106,9 @@ class StickyPatchComponent(aniseed.RigComponent):
         self.input("Parent").hook_to_parent()
 
     def user_functions(self) -> typing.Dict[str, callable]:
+        """
+        Exposes the joint and patch creation and editing tools
+        """
         menu = super(StickyPatchComponent, self).user_functions()
 
         if not self.input("Joint To Drive").get():
@@ -107,144 +124,102 @@ class StickyPatchComponent(aniseed.RigComponent):
         return menu
 
     def run(self):
+        """
+        Builds a follicle on the patch surface with a control beneath it
+        which drives the joint.
+        """
+        joint_to_drive = self.input("Joint To Drive").get()
 
-        xform = self.input("Geometry Patch").get()
-
-        cmds.setAttr(
-            f"{xform}.inheritsTransform",
-            False
-        )
-        # -- Re-get the surface, as we're not working with a polyPlane any longer
-        # -- but instead a mesh shape
-        surface = cmds.listRelatives(
-            xform,
-            shapes=True,
-        )[0]
+        mref.get(self.input("Geometry Patch").get()).attr("inheritsTransform").set(False)
 
         # -- Now create the follicle
         follicle = self.create_follicle()
+        mref.get(follicle).attr("visibility").set(False)
 
-        cmds.setAttr(
-            f"{follicle}.visibility",
-            False,
+        # -- Scale constraint the follicle transform so that any rig
+        # -- scaling still comes through
+        follicle_xform = mref.get(follicle).parent()
+        mref.scaleConstraint(
+            follicle_xform.parent(),
+            follicle_xform,
         )
 
-        # -- Get the transform so we can properly bind
-        follicle_xfo = cmds.listRelatives(follicle, parent=True)[0]
-        cmds.setAttr(
-            f"{follicle_xfo}.inheritsTransform",
-            False,
-        )
-
-        # -- Scale constraint the node so that any rig scaling still comes through
-        cmds.scaleConstraint(
-            cmds.listRelatives(follicle_xfo, parent=True)[0],
-            follicle_xfo,
-        )
-
-        control = aniseed_toolkit.run("Create Control",
+        control = aniseed_toolkit.rig.control.create(
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
-            parent=follicle_xfo,
+            parent=follicle_xform.full_name(),
             shape="core_cube",
             config=self.config,
-            match_to=self.input("Joint To Drive").get(),
+            match_to=joint_to_drive,
         )
 
-        cmds.parentConstraint(
-            control.ctl,
-            self.input("Joint To Drive").get(),
-            maintainOffset=True,
-        )
-
-        cmds.scaleConstraint(
-            control.ctl,
-            self.input("Joint To Drive").get(),
-            maintainOffset=True,
-        )
+        aniseed_toolkit.scene.constraints.parent_and_scale(control.ctl, joint_to_drive)
 
         self.output("Control").set(control.ctl)
         self.output("Follicle").set(follicle)
 
     def input_widget(self, requirement_name: str):
+        """
+        All our inputs are objects, so we use the object selector
+        """
         if requirement_name in ["Parent", "Geometry Patch", "Joint To Drive"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
+        """
+        Returns the location selector for the location option
+        """
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(config=self.config)
 
-    def create_follicle(self, u=0.5, v=0.5, prefix=""):
+    def create_follicle(self, u=0.5, v=0.5, prefix="") -> str:
+        """
+        Creates a follicle on the patch surface at the given u and v and
+        parents it under the component parent.
 
-        follicle = cmds.createNode("follicle")
-        follicle_xform = cmds.listRelatives(follicle, parent=True)[0]
-        follicle_xform = cmds.rename(
-            follicle_xform,
+        Returns:
+            The name of the follicle shape. Note that the shape keeps its
+            default maya name (only the transform is named).
+        """
+        follicle = mref.create("follicle")
+        follicle_xform = follicle.parent()
+        follicle_xform.rename(
             self.config.generate_name(
                 classification="foll",
                 description=self.option("Descriptive Prefix").get() + prefix + "Follicle",
                 location=self.option("Location").get(),
             ),
         )
-        follicle = cmds.listRelatives(follicle_xform, children=True)[0]
 
-        patch_xform = self.input("Geometry Patch").get()
-        patch_shape = cmds.listRelatives(
-            patch_xform,
-            shapes=True,
-        )[0]
+        patch_shape = mref.get(self.input("Geometry Patch").get()).shapes()[0]
 
-        cmds.parent(
-            follicle_xform,
-            self.input("Parent").get(),
-        )
+        follicle_xform.set_parent(self.input("Parent").get())
 
-        cmds.connectAttr(
-            f"{patch_shape}.local",
-            f"{follicle}.inputSurface",
-        )
+        # -- Hook up the surface and transform inputs
+        patch_shape.attr("local").connect(follicle.attr("inputSurface"))
+        patch_shape.attr("worldMatrix[0]").connect(follicle.attr("inputWorldMatrix"))
 
-        # -- Hook up the transform input
-        cmds.connectAttr(
-            f"{patch_shape}.worldMatrix[0]",
-            f"{follicle}.inputWorldMatrix",
-        )
+        # -- Have the follicle drive its transform
+        follicle.attr("outTranslate").connect(follicle_xform.attr("translate"))
+        follicle.attr("outRotate").connect(follicle_xform.attr("rotate"))
 
-        follicle_parent = cmds.listRelatives(follicle, parent=True)[0]
+        follicle.attr("parameterU").set(u)
+        follicle.attr("parameterV").set(v)
 
-        cmds.connectAttr(
-            f"{follicle}.outTranslate",
-            f"{follicle_parent}.translate",
-        )
-
-        cmds.connectAttr(
-            f"{follicle}.outRotate",
-            f"{follicle_parent}.rotate",
-        )
-
-        cmds.setAttr(
-            f"{follicle}.parameterU",
-            u,
-        )
-
-        cmds.setAttr(
-            f"{follicle}.parameterV",
-            v,
-        )
-
-        cmds.setAttr(
-            f"{follicle_xform}.inheritsTransform",
-            False,
-        )
-        return follicle
+        follicle_xform.attr("inheritsTransform").set(False)
+        return follicle.name()
 
     def user_func_create_skeleton(self, create_patch=False):
-        joint = aniseed_toolkit.joints.create(
+        """
+        Creates the joint to drive (under the current selection) and
+        optionally the patch surface too.
+        """
+        joint = aniseed_toolkit.scene.joints.create(
             description=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
             config=self.config,
-            parent=aniseed_toolkit.mutils.first_selected(),
-            match_to=aniseed_toolkit.mutils.first_selected(),
+            parent=aniseed_toolkit.core.selection.first_selected(),
+            match_to=aniseed_toolkit.core.selection.first_selected(),
         )
         self.input("Joint To Drive").set(joint)
 
@@ -252,8 +227,11 @@ class StickyPatchComponent(aniseed.RigComponent):
             self.user_func_create_patch(joint)
 
     def user_func_create_patch(self, joint_to_drive=None):
-
-        xform, _ = cmds.nurbsPlane(
+        """
+        Creates a nurbs plane to act as the patch surface, matched to
+        the joint to drive if there is one.
+        """
+        patch = mref.nurbsPlane(
             pivot=(0, 0, 0),
             axis=(0, 0, 1),
             width=1,
@@ -262,10 +240,9 @@ class StickyPatchComponent(aniseed.RigComponent):
             patchesU=1,
             patchesV=1,
             constructionHistory=True,
-        )
+        )[0]
 
-        xform = cmds.rename(
-            xform,
+        patch.rename(
             self.config.generate_name(
                 classification="mesh",
                 description=self.option("Descriptive Prefix").get(),
@@ -274,30 +251,19 @@ class StickyPatchComponent(aniseed.RigComponent):
         )
 
         # -- Clear all history
-        cmds.delete(xform, constructionHistory=True)
+        mref.delete(patch, constructionHistory=True)
 
         joint_to_drive = joint_to_drive or self.input("Joint To Drive").get()
 
         if joint_to_drive:
-            cmds.xform(
-                xform,
-                matrix=cmds.xform(
-                    joint_to_drive,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                ),
-                worldSpace=True,
-            )
-        
-            # -- Rename the mesh
-            # xform = cmds.rename(xform, f"MESH_{xform}")
+            patch.match_to(joint_to_drive)
 
-        self.input("Geometry Patch").set(
-            xform,
-        )
+        self.input("Geometry Patch").set(patch.name())
 
     def suggested_label(self):
+        """
+        Suggests a label based on the description and location
+        """
         description = self.option("Descriptive Prefix").get() + " Patch"
         description = re.sub(
             r"(?<!^)(?=[A-Z])",
@@ -310,7 +276,11 @@ class StickyPatchComponent(aniseed.RigComponent):
         label = f"{description} {location}"
 
         # -- Finally, we want to check if there are already components in the rig
-        # -- with this label and form an identifier
+        # -- with this label and form an identifier.
+        # -- Note: The existing labels are tested without the space between the
+        # -- label and the counter, but the label is returned with one - so the
+        # -- counter does not increment for existing labels. This is preserved
+        # -- as it is existing behaviour.
         existing_labels = {
             component.label()
             for component in self.rig.components(of_type=self.identifier)
@@ -320,49 +290,43 @@ class StickyPatchComponent(aniseed.RigComponent):
             counter += 1
         return f"{label} {counter:02d}"
 
-
     def user_func_match_patch_surface_to_joint(self):
-
-        surface_node = self.input("Geometry Patch").get()
-        surface_shape = cmds.listRelatives(
-            surface_node,
-            shapes=True,
-        )[0]
+        """
+        Matches the patch surface to the joint, providing the patch has
+        not yet been skinned.
+        """
+        surface_node = mref.get(self.input("Geometry Patch").get())
+        surface_shape = surface_node.shape()
 
         if not surface_shape:
             print("No shape defined")
             return
 
-        has_skin = len(
-            cmds.listConnections(
-                surface_shape,
-                source=True,
-                type="skinCluster",
-            ) or [],
+        has_skin = mref.listConnections(
+            surface_shape,
+            source=True,
+            type="skinCluster",
         )
 
         if has_skin:
             print("Cannot match transform when the patch has a skin")
             return
 
-        cmds.xform(
-            surface_node,
-            matrix=cmds.xform(
-                self.input("Joint To Drive").get(),
-                query=True,
-                matrix=True,
-                worldSpace=True,
-            ),
-            worldSpace=True,
-        )
+        surface_node.match_to(self.input("Joint To Drive").get())
 
     def user_func_select_joint(self):
+        """
+        Selects the joint being driven
+        """
         joint = self.input("Joint To Drive").get()
         if joint:
-            cmds.select(joint)
+            mref.select(joint)
 
     def user_func_skin_patch_to_skeleton(self):
-
+        """
+        Skins the patch to the whole skeleton, except for the joint being
+        driven and its children (which would cause a cycle).
+        """
         joint = self.input("Joint To Drive").get()
         surface_node = self.input("Geometry Patch").get()
 
@@ -374,150 +338,119 @@ class StickyPatchComponent(aniseed.RigComponent):
             print("No surface node defined")
             return
 
-        joint_root = None
-        long_name = cmds.ls(joint, long=True)[0]
+        joint = mref.get(joint)
 
-        for parent in long_name.split("|"):
-            if parent and cmds.nodeType(parent) == "joint":
-                joint_root = parent
+        # -- Find the top most joint in the hierarchy of the joint
+        joint_root = None
+        for node in list(reversed(joint.all_parents())) + [joint]:
+            if node.node_type() == "joint":
+                joint_root = node
                 break
 
         if not joint_root:
             print("Could not find root joint")
             return
 
-        joints_to_omit = [joint]
-        joints_to_omit.extend(
-            cmds.listRelatives(
-                joint,
-                allDescendents=True,
-                type="joint",
-            ) or [],
-        )
+        joints_to_omit = [joint] + joint.children(recursive=True, node_type="joint")
+        nodes_to_skin_to = [joint_root] + joint_root.children(recursive=True)
 
-        joints_to_skin_to = [joint_root]
-        joints_to_skin_to.extend(
-            cmds.listRelatives(
-                parent,
-                allDescendents=True,
-            ),
-        )
-
-        joints_to_skin_to = [
-            joint
-            for joint in joints_to_skin_to
-            if joint not in joints_to_omit
-        ]
-
-        cmds.skinCluster(
-            joints_to_skin_to,
+        mref.skinCluster(
+            [
+                node.full_name()
+                for node in nodes_to_skin_to
+                if node not in joints_to_omit
+            ],
             surface_node,
             toSelectedBones=True,
         )
 
+
 class AngledStickyPatchComponent(StickyPatchComponent):
+    """
+    A sticky patch where the control is additionally orientated by aiming
+    along the patch surface in both the u and v directions.
+    """
 
     identifier = "Limb : Sticky Patch (Aimed)"
 
-    def __init__(self, *args, **kwargs):
-        super(AngledStickyPatchComponent, self).__init__(*args, **kwargs)
-
     def run(self):
+        """
+        Builds the standard sticky patch and then inserts an aim based
+        resolver between the follicle and the control.
+        """
         super(AngledStickyPatchComponent, self).run()
 
+        descriptive = self.option("Descriptive Prefix").get()
+        location = self.option("Location").get()
+
         # -- Get the control and follicle
-        control = aniseed_toolkit.control.get(self.output("Control").get())
+        control = aniseed_toolkit.rig.control.get(self.output("Control").get())
         follicle = self.output("Follicle").get()
-        follicle_xform = cmds.listRelatives(follicle, parent=True)[0]
-        
+        follicle_xform = mref.get(follicle).parent()
+
         # -- Create an aim upvector
         aim_transform = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="mech",
-                description=self.option("Descriptive Prefix").get() + "Aim",
-                location=self.option("Location").get(),
+                description=descriptive + "Aim",
+                location=location,
                 config=self.config,
                 parent=follicle,
             )
         )
-        aim_transform.visibility.set(False)
+        aim_transform.attr("visibility").set(False)
         aim_transform.match_to(follicle_xform)
         aim_transform.translateZ.set(10)
 
-        # -- We create two readers - this allows us to blend
+        # -- We create two readers, one aiming with a v based upvector
+        # -- and one with a u based upvector. This allows us to blend
         # -- for the twist
-        v_reader = mref.get(
-            aniseed_toolkit.transforms.create(
-                classification="mech",
-                description=self.option("Descriptive Prefix").get() + "ReaderV",
-                location=self.option("Location").get(),
-                config=self.config,
-                parent=follicle_xform,
+        readers = []
+        for axis, u, v in [("V", 0.5, 1), ("U", 1, 0.5)]:
+            reader = mref.get(
+                aniseed_toolkit.scene.transforms.create(
+                    classification="mech",
+                    description=descriptive + f"Reader{axis}",
+                    location=location,
+                    config=self.config,
+                    parent=follicle_xform.full_name(),
+                )
             )
-        )
-        v_reader.match_to(follicle_xform)
+            reader.match_to(follicle_xform)
 
-        upvector_v_follicle = self.create_follicle(
-            u=0.5, v=1, prefix="UpvectorV",
-        )
-        cmds.aimConstraint(
-            aim_transform.name(),
-            v_reader.name(),
-            aimVector=[0, 0, 1],
-            upVector=[0, -1, 0],
-            worldUpType="object",
-            worldUpObject=upvector_v_follicle,
-            maintainOffset=True,
-        )
-
-        # -- Create the U reader
-        u_reader = mref.get(
-            aniseed_toolkit.transforms.create(
-                classification="mech",
-                description=self.option("Descriptive Prefix").get() + "ReaderU",
-                location=self.option("Location").get(),
-                config=self.config,
-                parent=follicle_xform,
+            upvector_follicle = self.create_follicle(
+                u=u, v=v, prefix=f"Upvector{axis}",
             )
-        )
-        u_reader.match_to(follicle_xform)
-
-        upvector_u_follicle = self.create_follicle(
-            u=1, v=0.5, prefix="UpvectorU",
-        )
-        cmds.aimConstraint(
-            aim_transform.name(),
-            u_reader.name(),
-            aimVector=[0, 0, 1],
-            upVector=[0, -1, 0],
-            worldUpType="object",
-            worldUpObject=upvector_u_follicle,
-            maintainOffset=True,
-        )
+            mref.aimConstraint(
+                aim_transform,
+                reader,
+                aimVector=[0, 0, 1],
+                upVector=[0, -1, 0],
+                worldUpType="object",
+                worldUpObject=upvector_follicle,
+                maintainOffset=True,
+            )
+            readers.append(reader)
 
         # -- Now we create our resolver. This blends the result of the two
         resolver = mref.get(
-            aniseed_toolkit.transforms.create(
+            aniseed_toolkit.scene.transforms.create(
                 classification="mech",
-                description=self.option("Descriptive Prefix").get() + "Resolver",
-                location=self.option("Location").get(),
+                description=descriptive + "Resolver",
+                location=location,
                 config=self.config,
-                parent=follicle_xform,
+                parent=follicle_xform.full_name(),
             )
         )
         resolver.match_to(follicle_xform)
 
-        cmds.parentConstraint(
-            v_reader.name(),
-            resolver.name(),
-            maintainOffset=False,
-        )
+        # -- Both readers are targets of the same parent constraint
+        for reader in readers:
+            constraint = mref.parentConstraint(
+                reader,
+                resolver,
+                maintainOffset=False,
+            )[0]
+        constraint.attr("interpType").set(2)  # -- Shortest
 
-        cns = cmds.parentConstraint(
-            u_reader.name(),
-            resolver.name(),
-            maintainOffset=False,
-        )[0]
-        cmds.setAttr(f"{cns}.interpType", 2) # Shortest
-
-        cmds.parent(control.org, resolver.name())
+        mref.get(control.org).set_parent(resolver)

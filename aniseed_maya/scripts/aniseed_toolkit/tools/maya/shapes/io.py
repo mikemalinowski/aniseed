@@ -87,30 +87,6 @@ class GetShapeList(aniseed_toolkit.Tool):
         return aniseed_toolkit.resources.contents("shapes")
 
 
-class ReadShapeFromNode(aniseed_toolkit.Tool):
-
-    identifier = "Read Shape From Node"
-    classification = "Rigging"
-    user_facing = False
-
-    categories = [
-        "Shapes",
-    ]
-
-    def run(self, node: str = "") -> typing.Dict:
-        """
-        Looks at all the NurbsCurve shape nodes under  the given node
-        and attempts to read them into a dictionary format.
-
-        Args:
-            node: The node to seralise the shape data for
-
-        Returns:
-            dictionary
-        """
-        return aniseed_toolkit.shapes.shape_to_dict(node)
-
-
 class ReadShapeFromFile(aniseed_toolkit.Tool):
 
     identifier = "Read Shape From File"
@@ -133,7 +109,7 @@ class ReadShapeFromFile(aniseed_toolkit.Tool):
         Returns:
             dict
         """
-        return aniseed_toolkit.shapes.shape_data_from_file(shape_file)
+        return aniseed_toolkit.scene.shapes.shape_data_from_file(shape_file)
 
 
 class SaveShape(aniseed_toolkit.Tool):
@@ -168,7 +144,7 @@ class SaveShape(aniseed_toolkit.Tool):
         if not filepath:
             return dict()
 
-        return aniseed_toolkit.shapes.save_to_file(node, filepath)
+        return aniseed_toolkit.scene.shapes.save_to_file(node, filepath)
 
 
 class ApplyShape(aniseed_toolkit.Tool):
@@ -205,7 +181,7 @@ class ApplyShape(aniseed_toolkit.Tool):
         Returns:
             List of shape nodes created
         """
-        for node in mc.ls(selection=True):
+        for node in [node] if node else mc.ls(selection=True):
             if not data:
                 data = qtility.request.item(
                     items=aniseed_toolkit.run("Get Shape List"),
@@ -214,7 +190,7 @@ class ApplyShape(aniseed_toolkit.Tool):
                     editable=False,
                 )
 
-            aniseed_toolkit.shapes.load_shape(
+            aniseed_toolkit.scene.shapes.load_shape(
                 node=node,
                 data=data,
                 clear=clear,

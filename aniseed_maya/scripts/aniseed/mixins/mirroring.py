@@ -108,7 +108,7 @@ class MirrorMixin:
         # 4. Mirror the transforms of the declared bones
         bones = self.recursive_mirror_items(self) # [name for name in self.mirror_mixin_items_to_mirror() if name]
         if bones:
-            aniseed_toolkit.mirror.global_mirror(
+            aniseed_toolkit.scene.mirror.mirror_transforms(
                 transforms=bones,
                 across=self.MIRROR_PLANE,
                 behaviour=True,
@@ -124,7 +124,7 @@ class MirrorMixin:
         """
         Return the list of scene-node names representing this component's
         bones. These transforms will be reflected across the mirror plane
-        onto the twin side using ``aniseed_toolkit.mirror.global_mirror``.
+        onto the twin side using ``aniseed_toolkit.scene.mirror.mirror_transforms``.
 
         Default: empty list (no scene-side mirroring).
         """

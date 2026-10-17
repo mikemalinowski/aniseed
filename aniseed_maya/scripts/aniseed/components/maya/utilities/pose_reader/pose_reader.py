@@ -1,6 +1,12 @@
+"""
+Provides the "Utility : Rotation Axis Reader" component, which builds a
+distance based pose reader for a tracked transform. A tracker follows the
+transform's rotation and its distance to a stored target is remapped to a
+0-to-1 float attribute on the Attribute Host, reading 1.0 when the target
+orientation is reached.
+"""
 import mref
 import aniseed
-from maya import cmds
 
 
 class RotationAxisReader(aniseed.RigComponent):
@@ -21,6 +27,11 @@ class RotationAxisReader(aniseed.RigComponent):
     }
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Transform To Track and Attribute Host inputs, the naming,
+        axis and axis lock options, the target matrix storage and button, and
+        the Org, Tracker and Attribute outputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -105,6 +116,10 @@ class RotationAxisReader(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
     def option_widget(self, option_name: str):
+        """
+        Returns an axis selector for Axis, a location selector for Location and
+        a Set Target Transform button for the Target Matrix Button option.
+        """
         if option_name == "Axis":
             return aniseed.widgets.AxisSelector()
 
@@ -118,6 +133,14 @@ class RotationAxisReader(aniseed.RigComponent):
             )
 
     def run(self):
+        """
+        Adds the pose attribute to the host and builds the org, rotator, tracker
+        and target transforms alongside the tracked transform. The rotator is
+        orient constrained to the tracked transform and the distance between the
+        tracker and target is remapped and reversed so the attribute reads 1.0
+        when the tracker reaches the target. The target is placed from the
+        stored Target Matrix, or at the tracker's rest position if none is set.
+        """
 
         transform_to_track = mref.get(self.input("Transform To Track").get())
         host = mref.get(self.input("Attribute Host").get())
@@ -125,10 +148,6 @@ class RotationAxisReader(aniseed.RigComponent):
         location = self.option("Location").get()
         axis = self.option("Axis").get().upper()
         target_matrix = self.option("Target Matrix").get()
-
-        lock_x = self.option("Lock X").get()
-        lock_y = self.option("Lock Y").get()
-        lock_z = self.option("Lock Z").get()
 
         pose_attribute = host.add_attribute(
             prefix,
@@ -146,7 +165,6 @@ class RotationAxisReader(aniseed.RigComponent):
             ),
             parent=transform_to_track.parent(),
         )
-        org.set_parent(transform_to_track.parent())
         org.match_to(transform_to_track)
 
         rotator = mref.create(
@@ -175,19 +193,15 @@ class RotationAxisReader(aniseed.RigComponent):
         tracker.attr(f"translate{axis}").set(1)
 
         # -- Determine which axis we need to skip
-        skip_axis = []
-        if lock_x:
-            skip_axis.append("x")
+        skip_axis = [
+            axis_name
+            for axis_name in ["x", "y", "z"]
+            if self.option(f"Lock {axis_name.upper()}").get()
+        ]
 
-        if lock_y:
-            skip_axis.append("y")
-
-        if lock_z:
-            skip_axis.append("z")
-
-        cmds.orientConstraint(
-            transform_to_track.full_name(),
-            rotator.full_name(),
+        mref.orientConstraint(
+            transform_to_track,
+            rotator,
             maintainOffset=True,
             skip=skip_axis,
         )
@@ -250,6 +264,10 @@ class RotationAxisReader(aniseed.RigComponent):
         self.output("Org").set(org.full_name())
 
     def user_func_set_target(self):
+        """
+        Stores the current tracker transform, relative to the org, as the Target
+        Matrix. Requires the rig to have been built so the outputs are set.
+        """
         org = mref.get(self.output("Org").get())
         tracker = mref.get(self.output("Tracker").get())
 
@@ -257,4 +275,4 @@ class RotationAxisReader(aniseed.RigComponent):
         temp_node.match_to(tracker)
 
         self.option("Target Matrix").set(temp_node.get_matrix())
-        cmds.delete(temp_node.full_name())
+        temp_node.delete()

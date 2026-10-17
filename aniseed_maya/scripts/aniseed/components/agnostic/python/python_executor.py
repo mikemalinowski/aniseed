@@ -1,3 +1,8 @@
+"""
+Provides the "Utility : Execute Python" component, which runs arbitrary Python
+code stored in its "Code" option during the build, along with the CodeEditor
+widget used to edit that code. The code is executed with no sandboxing.
+"""
 from Qt import QtWidgets, QtCore, QtGui
 import aniseed
 
@@ -17,6 +22,10 @@ class PythonExecutionComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "Code" option, which holds the Python source executed
+        during the build.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_option(
@@ -32,11 +41,22 @@ class PythonExecutionComponent(aniseed.RigComponent):
 
     # ----------------------------------------------------------------------------------
     def option_widget(self, option_name: str):
+        """
+        Returns a CodeEditor for the "Code" option.
+
+        Args:
+            option_name: The name of the option to return a widget for.
+        """
         if option_name == "Code":
             return CodeEditor()
 
     # ----------------------------------------------------------------------------------
     def run(self):
+        """
+        Executes the "Code" option with exec. No namespaces are passed, so the
+        code sees the local scope of this method (including self). Any exception
+        raised by the code propagates to the build.
+        """
         exec(
             self.option("Code").get(),
         )
@@ -50,6 +70,11 @@ class CodeEditor(QtWidgets.QTextEdit):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
+        """
+        Configures the text edit for writing Python: a monospace font, a tab
+        width of four spaces, plain-text pasting only and no line wrapping. Text
+        changes are re-emitted through the changed signal.
+        """
         super().__init__(*args, **kwargs)
 
         # -- Editor styling: monospace font, real tab width, no
@@ -69,9 +94,18 @@ class CodeEditor(QtWidgets.QTextEdit):
 
     # ----------------------------------------------------------------------------------
     def set_value(self, value):
+        """
+        Replaces the editor contents with the given source and emits changed.
+
+        Args:
+            value: The Python source to display.
+        """
         self.document().setPlainText(value)
         self.changed.emit()
 
     # ----------------------------------------------------------------------------------
     def get_value(self):
+        """
+        Returns the editor contents as plain text.
+        """
         return self.document().toPlainText()

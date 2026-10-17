@@ -1,3 +1,10 @@
+"""
+Provides the "TPS : BlendShape Based Facial Rig" component, which replaces
+any blendshapes on a base mesh with one built from the given target shapes and
+builds high level facial controls to drive its weights. Also provides the
+"TPS : Link BlendShapes" component, which connects the aliased weights of a
+driving blendshape to the matching weights of other blendshapes.
+"""
 import mref
 import aniseed
 import aniseed_toolkit
@@ -5,16 +12,12 @@ import aniseed_toolkit
 
 # noinspection PyUnresolvedReferences
 class BlendshapeFacialRig(aniseed.RigComponent):
+    """
+    Builds a set of high level facial controls which drive the weights of a
+    blendshape created from the given target shapes.
+    """
 
     identifier = "TPS : BlendShape Based Facial Rig"
-
-    left = "left"
-    right = "right"
-
-    sides = [
-        "left",
-        "right",
-    ]
 
     shape_list = [
 
@@ -84,6 +87,11 @@ class BlendshapeFacialRig(aniseed.RigComponent):
     ]
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent and base mesh inputs, one (optional) target shape
+        input per entry in shape_list grouped by side, and control, parent,
+        guide and shape options for each control group.
+        """
         super(BlendshapeFacialRig, self).__init__(*args, **kwargs)
 
         self.declare_input(
@@ -112,126 +120,115 @@ class BlendshapeFacialRig(aniseed.RigComponent):
                 validate=False,
             )
 
+        # -- Each control group can be given a pre-made control, a parent,
+        # -- a guide and a shape
+        control_group_parts = [
+            ("control", ""),
+            ("parent", ""),
+            ("guide", ""),
+            ("shape", "core_cube"),
+        ]
         for control_label in self.control_groups:
             group = "Control : %s" % control_label.replace("_", " ").title()
 
-            self.declare_option(
-                name=f"{control_label}_control",
-                value="",
-                group=group,
-            )
-            self.declare_option(
-                name=f"{control_label}_parent",
-                value="",
-                group=group,
-            )
-
-            self.declare_option(
-                name=f"{control_label}_guide",
-                value="",
-                group=group,
-            )
-
-            self.declare_option(
-                name=f"{control_label}_shape",
-                value="core_cube",
-                group=group,
-            )
-
+            for part, value in control_group_parts:
+                self.declare_option(
+                    name=f"{control_label}_{part}",
+                    value=value,
+                    group=group,
+                )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for every input.
+        """
         return aniseed.widgets.ObjectSelector()
 
     def option_widget(self, requirement_name: str):
+        """
+        Returns a shape selector for the control group "_shape" options and an
+        object selector for all other options.
+        """
         if requirement_name.endswith("_shape"):
             return aniseed.widgets.ShapeSelector(default_item="core_cube")
 
         return aniseed.widgets.ObjectSelector()
 
     def run(self):
+        """
+        Removes any existing blendshapes from the base mesh, creates a new one
+        from the given target shapes and builds the lip corner, central lip,
+        nose and brow controls to drive its weights.
+        """
         base_mesh = mref.get(self.input("Base Mesh").get())
-        
+        parent = self.input("Parent").get()
+
         self.remove_blendshapes(base_mesh)
 
+        # -- The control settings for this component are stored as options
+        # -- and no proxies are exposed
+        control_rig = aniseed_toolkit.rigging.facial.FacialControlRig(
+            config=self.config,
+            read_setting=lambda name: self.option(name).get(),
+        )
+
         attribute_dictionary = self.setup_blendshape(base_mesh)
-        addition_nodes = self.initialise_driving_adds(attribute_dictionary)
+        addition_nodes = control_rig.initialise_driving_adds(attribute_dictionary)
 
-        for key, value in attribute_dictionary.items():
-            print(f"{key}: {value}")
+        # -- Note: the order of these calls decides the array indices on the
+        # -- plusMinusAverage nodes, so it must be preserved.
+        for location in ["left", "right"]:
+            control_rig.setup_lip_puller(
+                location=location,
+                guide=self.option(f"{location}_lip_corner_guide").get(),
+                parent=parent,
+                connection_map=addition_nodes,
+            )
 
-        self.setup_lip_puller(
-            location="left",
-            guide=self.option("left_lip_corner_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
+        for section in ["upper", "lower"]:
+            control_rig.setup_central_lip(
+                section=section,
+                guide=self.option(f"{section}_lip_guide").get(),
+                parent=parent,
+                connection_map=addition_nodes,
+            )
 
-        self.setup_lip_puller(
-            location="right",
-            guide=self.option("right_lip_corner_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
-
-        self.setup_central_lip(
-            section="upper",
-            guide=self.option("upper_lip_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
-        self.setup_central_lip(
-            section="lower",
-            guide=self.option("lower_lip_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
-
-        self.setup_nose(
+        control_rig.setup_nose(
             guide=self.option("nose_guide").get(),
-            parent=self.input("Parent").get(),
+            parent=parent,
             connection_map=addition_nodes,
         )
 
-        self.setup_inner_brow(
-            location="left",
-            guide=self.option("left_brow_inner_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
+        for location in ["left", "right"]:
+            control_rig.setup_inner_brow(
+                location=location,
+                guide=self.option(f"{location}_brow_inner_guide").get(),
+                parent=parent,
+                connection_map=addition_nodes,
+            )
 
-        self.setup_inner_brow(
-            location="right",
-            guide=self.option("right_brow_inner_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
+        for location in ["left", "right"]:
+            control_rig.setup_outer_brow(
+                location=location,
+                guide=self.option(f"{location}_brow_outer_guide").get(),
+                parent=parent,
+                connection_map=addition_nodes,
+            )
 
-        self.setup_outer_brow(
-            location="left",
-            guide=self.option("left_brow_outer_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
-
-        self.setup_outer_brow(
-            location="right",
-            guide=self.option("right_brow_outer_guide").get(),
-            parent=self.input("Parent").get(),
-            connection_map=addition_nodes,
-        )
-
-
-    def setup_blendshape(self, base_mesh: mref.ReferencedItem):
-        attribute_dictionary = dict()
+    def setup_blendshape(self, base_mesh: mref.ReferencedItem) -> dict:
+        """
+        Creates the blendshape on the base mesh from all the specified target
+        shapes and returns a dictionary of shape label to weight attribute.
+        """
         targets = []
         input_names = []
 
-        for shape in self.shape_list:
-            input_name = f"{shape}"
+        for input_name in self.shape_list:
             target = self.input(input_name).get()
 
             if not target:
                 continue
+
             targets.append(target)
             input_names.append(input_name)
 
@@ -244,384 +241,67 @@ class BlendshapeFacialRig(aniseed.RigComponent):
                 location=self.config.middle,
             )
         )[0]
-        for idx, input_name in enumerate(input_names):
-            attribute_dictionary[input_name] = blendshape_node.attr(f"weight[{idx}]")
-        return attribute_dictionary
 
-    def setup_outer_brow(self, location, guide, parent, connection_map):
-        control = self.resolve_control(
-            description="brow_outer",
-            identity_label=f"{location}_brow_outer",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tx", "tz"],
-        )
-
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_outer_up"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_outer_down"],
-        )
-
-        self.expose_direct(
-            control=control,
-            label="squint_inner",
-            destination_attribute=connection_map[f"{location}_squint_inner"],
-        )
-
-        self.expose_direct(
-            control=control,
-            label="squint_outer",
-            destination_attribute=connection_map[f"{location}_squint_outer"],
-        )
-
-
-    def setup_inner_brow(self, location, guide, parent, connection_map):
-
-        control = self.resolve_control(
-            description="brow_inner",
-            identity_label=f"{location}_brow_inner",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tz"],
-        )
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_inner_up"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_brow_inner_down"],
-        )
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_brow_inner_in"],
-            clamp_min=-1,
-        )
-
-        self.expose_direct(
-            control=control,
-            label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_up"]
-        )
-        self.expose_reversal_direct(
-            control=control,
-            label="mid_brow",
-            destination_attribute=connection_map[f"{location}_brow_mid_down"]
-        )
-
-    def setup_nose(self, guide, parent, connection_map, scale=1):
-
-        control = self.resolve_control(
-            description="nose",
-            identity_label="nose",
-            location=self.config.middle,
-            parent=parent,
-            guide=guide,
-        )
-
-        self.expose_direct(
-            control=control,
-            label=f"left_nose_flare",
-            destination_attribute=connection_map[f"left_nose_flare"]
-        )
-        self.expose_direct(
-            control=control,
-            label=f"right_nose_flare",
-            destination_attribute=connection_map[f"right_nose_flare"]
-        )
-
-    def setup_central_lip(self, section, guide, parent, connection_map):
-
-        control = self.resolve_control(
-            description=f"{section}_lip",
-            identity_label=f"{section}_lip",
-            location=self.config.middle,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tx"],
-        )
-
-        self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{section}_lip_pull"],
-        )
-
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{section}_lip_compress"],
-        )
-
-        self.clamped_connection(
-            driving_attribute=control.attr("translateZ"),
-            destination_attribute=connection_map[f"{section}_lip_curl_out"],
-        )
-
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateZ"),
-            destination_attribute=connection_map[f"{section}_lip_curl_in"],
-        )
-        self.expose_direct(
-            control=control,
-            label=f"right_sneer",
-            destination_attribute=connection_map[f"right_lip_sneer_{section}"],
-            clamp_min=-1,
-        )
-        self.expose_direct(
-            control=control,
-            label=f"left_sneer",
-            destination_attribute=connection_map[f"left_lip_sneer_{section}"],
-            clamp_min=-1,
-        )
-
-        # -- Set up the sneering fixer
-        add_sneers = mref.create("floatMath")
-        control.attr("right_sneer").connect(add_sneers.attr("floatA"))
-        control.attr("left_sneer").connect(add_sneers.attr("floatB"))
-
-        divide_by_two = mref.create("floatMath")
-        divide_by_two.attr("operation").set(2)  # -- Multiply
-        divide_by_two.attr("floatB").set(0.5)
-        add_sneers.attr("outFloat").connect(divide_by_two.attr("floatA"))
-
-        add_direct = mref.create("floatMath")
-        divide_by_two.attr("outFloat").connect(add_direct.attr("floatA"))
-
-        self.expose_direct(
-            control=control,
-            label="sneer_fixup",
-            destination_attribute=add_direct.attr("floatB"),
-            clamp_min=-1,
-            clamp_max=1,
-            do_next=False,
-        )
-        clamp = mref.create("clamp")
-        clamp.attr("minR").set(-1)
-        clamp.attr("maxR").set(1)
-        add_direct.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(connection_map[f"{section}_sneer"])
-
-    def setup_lip_puller(self, location, guide, parent, connection_map):
-
-        control = self.resolve_control(
-            description=f"lip_puller",
-            identity_label=f"{location}_lip_corner",
-            location=location,
-            parent=parent,
-            guide=guide,
-            lock_and_hide=["sx", "sy", "sz", "rx", "ry", "rz", "tz"],
-        )
-
-        # -- Pull Out Behaviour
-        self.clamped_connection(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_out"],
-        )
-
-        # -- Push In Behaviour
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateX"),
-            destination_attribute=connection_map[f"{location}_lip_corner_push_in"],
-        )
-
-        # -- Pull Down In Behaviour
-        self.clamped_reversal(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_down"],
-        )
-
-        # -- Push Up Behaviour
-        corner_pull_up_setup = self.clamped_connection(
-            driving_attribute=control.attr("translateY"),
-            destination_attribute=connection_map[f"{location}_lip_corner_pull_up"],
-        )
-
-        # -- Now add the squint
-        remap_node = mref.create("remapValue")
-        corner_pull_up_setup["clamp"].attr("outputR").connect(remap_node.attr("inputValue"))
-        remap_node.attr("inputMax").set(1)
-        remap_node.attr("value[0].value_Position").set(0.25)
-        remap_node.attr("value[0].value_FloatValue").set(0)
-        remap_node.attr("value[0].value_Interp").set(2) # Smooth
-        remap_node.attr("value[1].value_Position").set(1)
-        remap_node.attr("value[1].value_FloatValue").set(0.25)
-        remap_node.attr("outValue").connect_next(connection_map[f"{location}_squint_outer"])
-
-        # -- Set up our direct connections
-        self.expose_direct(
-            control=control,
-            label="Blow",
-            destination_attribute=connection_map[f"{location}_cheek_blow"],
-        )
-        self.expose_reversal_direct(
-            control=control,
-            label="Blow",
-            destination_attribute=connection_map[f"{location}_cheek_suck"],
-        )
-
-    def initialise_driving_adds(self, attribute_dictionary):
-
-        driving_additions = dict()
-
-        for label, attribute in attribute_dictionary.items():
-            node = mref.create("plusMinusAverage")
-            node.attr("output1D").connect(attribute)
-
-            driving_additions[label] = node.attr("input1D")
-        return driving_additions
+        return {
+            input_name: blendshape_node.attr(f"weight[{idx}]")
+            for idx, input_name in enumerate(input_names)
+        }
 
     @staticmethod
     def remove_blendshapes(mesh: mref.ReferencedItem):
         """
         Remove all blendShape nodes from a mesh while preserving skinning.
-    
+
         Args:
-            mesh (str): transform or shape
-    
+            mesh: transform or shape
+
         Returns:
-            list[str]: removed blendShape nodes
+            list: removed blendShape nodes
         """
-    
-        # Get shape if transform passed
+        # -- Get shape if transform passed
         shapes = mref.listRelatives(mesh, shapes=True, noIntermediate=True) or []
         if shapes:
             mesh_shape = shapes[0]
         else:
             mesh_shape = mesh
-    
-        # Get history (deformers only)
+
+        # -- Get history (deformers only)
         history = mref.listHistory(mesh_shape, pruneDagObjects=True) or []
-    
+
         blendshapes = mref.ls(history, type="blendShape") or mref.ReferenceList()
         skinclusters = mref.ls(history, type="skinCluster") or mref.ReferenceList()
-    
+
         if not blendshapes:
             return []
-    
-        # If skinned, reorder so skinCluster evaluates after blendShape
-        # (prevents popping when deleting)
+
+        # -- If skinned, reorder so skinCluster evaluates after blendShape
+        # -- (prevents popping when deleting)
         for bs in blendshapes:
             for sc in skinclusters:
                 try:
                     mref.reorderDeformers(sc, bs, mesh_shape)
                 except RuntimeError:
                     pass
-    
-        # Delete blendShapes
+
+        # -- Delete blendShapes
         mref.delete(blendshapes)
-    
+
         return blendshapes
-
-    def clamped_connection(self, driving_attribute, destination_attribute, clamp_min=0, clamp_max=1):
-
-        clamp = mref.create("clamp")
-        clamp.attr(f"maxR").set(clamp_max)
-        clamp.attr(f"minR").set(clamp_min)
-        driving_attribute.connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-        return {
-            "clamp": clamp,
-        }
-
-    def clamped_reversal(self, driving_attribute, destination_attribute, clamp_min=0, clamp_max=1):
-
-        # -- Push In Behaviour
-        clamp = mref.create("clamp")
-        inverse = mref.create("floatMath")
-        inverse.attr("operation").set(2) # -- Multiply
-        inverse.attr("floatB").set(-1)
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-        driving_attribute.connect(inverse.attr("floatA"))
-        inverse.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-        return {
-            "clamp": clamp,
-            "multiplier": inverse,
-        }
-
-    def expose_reversal_direct(self, control: mref.ReferencedItem, label, destination_attribute, clamp_min=0, clamp_max=1):
-
-        if control.has_attribute(label):
-            attribute = control.attr(label)
-        else:
-            attribute = control.add_attribute(
-                label,
-                value=0,
-                attribute_type="float",
-                keyable=True,
-            )
-        clamp = mref.create("clamp")
-        inverse = mref.create("floatMath")
-
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-
-        inverse.attr("operation").set(2) # -- Multiply
-        inverse.attr("floatB").set(-1)
-
-        attribute.connect(inverse.attr("floatA"))
-        inverse.attr("outFloat").connect(clamp.attr("inputR"))
-        clamp.attr("outputR").connect_next(destination_attribute)
-
-    def expose_direct(self, control: mref.ReferencedItem, label, destination_attribute, clamp_min=0, clamp_max=1, do_next=True):
-
-        if control.has_attribute(label):
-            attribute = control.attr(label)
-        else:
-            attribute = control.add_attribute(
-                label,
-                value=0,
-                attribute_type="float",
-                keyable=True,
-            )
-        clamp = mref.create("clamp")
-        clamp.attr("maxR").set(clamp_max)
-        clamp.attr("minR").set(clamp_min)
-        attribute.connect(clamp.attr("inputR"))
-
-        if do_next:
-            clamp.attr("outputR").connect_next(destination_attribute)
-        else:
-            clamp.attr("outputR").connect(destination_attribute)
-
-        return {
-            "clamp": clamp,
-        }
-
-    def resolve_control(self, description, identity_label, location, parent, guide, lock_and_hide=None):
-        control_name = self.option(f"{identity_label}_control").get()
-        if control_name:
-            return mref.get(control_name)#, aniseed_toolkit.control.Control(control_name)
-
-        new_control_setup = aniseed_toolkit.control.create(
-            description=description,
-            location=location,
-            parent=self.option(f"{identity_label}_parent").get() or parent,
-            shape=self.option(f"{identity_label}_shape").get() or "core_cube",
-            config=self.config,
-            match_to=guide or None,
-        )
-
-        if lock_and_hide:
-            aniseed_toolkit.attributes.lock_and_hide([new_control_setup.ctl], lock_and_hide, lock=True, hide=True)
-
-        # -- Start by creating the control
-        return mref.get(new_control_setup.ctl)#, new_control_setup
 
 
 class LinkBlendshapes(aniseed.RigComponent):
+    """
+    Drives the weights of the driven blendshapes from the matching (by alias)
+    weights of the driving blendshape.
+    """
 
     identifier = "TPS : Link BlendShapes"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the driving blendshape input and the list of driven
+        blendshapes input.
+        """
         aniseed.RigComponent.__init__(self, *args, **kwargs)
 
         self.declare_input(
@@ -635,11 +315,20 @@ class LinkBlendshapes(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object list for the driven blendshapes and an object
+        selector for the driving blendshape.
+        """
         if requirement_name == "Driven Blendshapes":
             return aniseed.widgets.ObjectList()
         return aniseed.widgets.ObjectSelector()
 
     def run(self) -> bool:
+        """
+        Connects each aliased weight attribute of the driving blendshape to
+        the attribute of the same name on every driven blendshape. Despite the
+        annotation, nothing is returned.
+        """
         driving_blendshape = mref.get(
             self.input("Driving Blendshape").get(),
         )

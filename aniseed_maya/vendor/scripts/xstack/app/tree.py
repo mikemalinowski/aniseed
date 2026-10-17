@@ -302,7 +302,36 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
     # ----------------------------------------------------------------------------------
     def duplicate_component(self, item):
-        item.component.duplicate()
+
+        component = item.component
+
+        dialog = dialogs.DuplicateComponentDialog(
+            component=component,
+            app_config=self.app_config,
+            parent=self,
+        )
+
+        result = dialog.exec_() if hasattr(dialog, "exec_") else dialog.exec()
+
+        if not result:
+            return
+
+        # -- Only search and replace when a search was given. An empty
+        # -- replace is allowed, and removes the matched text.
+        search_for = dialog.search_for() or None
+        replace_with = dialog.replace_with() if search_for else None
+
+        new_component = component.duplicate(
+            search_for=search_for,
+            replace_with=replace_with,
+        )
+
+        # -- An explicitly entered name takes priority over the label the
+        # -- search and replace produced
+        if dialog.label() and dialog.label() != component.label():
+            new_component.set_label(dialog.label())
+
+        self.populate()
 
     # ----------------------------------------------------------------------------------
     def search_and_replace_component(self, item):

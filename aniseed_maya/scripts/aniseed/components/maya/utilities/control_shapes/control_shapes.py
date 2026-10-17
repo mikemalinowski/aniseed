@@ -1,9 +1,14 @@
+"""
+Provides the control shape components. "Utility : Apply Control Shapes"
+rebuilds rig controls' curve shapes from stored shape data (which can be
+snapshotted, cleared, saved or loaded via buttons), preserving incoming
+connections on the shapes. "Utility : Store Control Shapes" is a deprecated,
+no-op holder of legacy shape data, and "Utility : Delete Shapes" removes all
+shapes from a list of nodes.
+"""
 import os
 import mref
-import json
 import aniseed
-import qtility
-import functools
 import aniseed_toolkit
 
 from maya import cmds
@@ -21,6 +26,10 @@ class StoreControlShapes(aniseed.RigComponent):
     deprecated = True
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the legacy options (including the hidden Shape Data and
+        Transient Shape Data stores) kept so existing rigs still load.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_option(
@@ -50,6 +59,9 @@ class StoreControlShapes(aniseed.RigComponent):
         )
 
     def run(self) -> bool:
+        """
+        Does nothing. The stored data is read by Apply Control Shapes.
+        """
         return True
 
 
@@ -67,6 +79,11 @@ class ApplyControlShapes(aniseed.RigComponent):
     icon = os.path.join(os.path.dirname(__file__), "apply_shapes.png")
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Apply Data and Skip Nodes options, the hidden Shape
+        Data store, and button options to snapshot, clear, save and load
+        that data.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_option(
@@ -114,44 +131,38 @@ class ApplyControlShapes(aniseed.RigComponent):
         )
 
     def option_widget(self, option_name):
+        """
+        Returns an object list for Skip Nodes and a button widget for each
+        of the snapshot, save, load and clear options, bound to the
+        matching method.
+        """
         if option_name == "Skip Nodes":
             return aniseed.widgets.ObjectList()
 
-        if option_name == "Snapshot Shape Data":
+        # -- Each button option shares its name with its button label
+        buttons = {
+            "Snapshot Shape Data": self.snapshot_shape_data,
+            "Save Shape Data File": self.save_shape_data_file,
+            "Load Shape Data File": self.load_shape_file,
+            "Clear Shape Data": self.clear_shape_data,
+        }
+        if option_name in buttons:
             return aniseed.widgets.ButtonWidget(
-                button_name="Snapshot Shape Data",
-                func=functools.partial(
-                    self.snapshot_shape_data,
-                ),
-            )
-
-        if option_name == "Save Shape Data File":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Save Shape Data File",
-                func=functools.partial(
-                    self.save_shape_data_file,
-                ),
-            )
-
-        if option_name == "Load Shape Data File":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Load Shape Data File",
-                func=functools.partial(
-                    self.load_shape_file,
-                ),
-            )
-
-        if option_name == "Clear Shape Data":
-            return aniseed.widgets.ButtonWidget(
-                button_name="Clear Shape Data",
-                func=functools.partial(
-                    self.clear_shape_data,
-                ),
+                button_name=option_name,
+                func=buttons[option_name],
             )
 
         return None
 
     def run(self) -> bool:
+        """
+        Rebuilds the curve shapes of each stored control from Shape Data,
+        falling back to data held by a Store Control Shapes component when
+        Shape Data is empty. Missing and skipped nodes are ignored. Incoming
+        connections to each shape are disconnected before the rebuild and
+        reconnected to every new shape afterwards, with failures printed
+        rather than raised. Does nothing if Apply Data is off.
+        """
 
         if not self.option("Apply Data").get():
             return True
@@ -163,12 +174,16 @@ class ApplyControlShapes(aniseed.RigComponent):
 
             node = shape_data["node"]
 
-            if not cmds.objExists(node):
+            if not mref.objExists(node):
                 continue
 
             if node in skip_nodes:
                 continue
-            
+
+            # -- The connection juggling below works on raw plug strings with
+            # -- maya.cmds deliberately: the connectAttr failures must be
+            # -- caught (and reported) per connection, whereas mref's
+            # -- connect swallows every error.
             connection_pairs = []
             for shape in cmds.listRelatives(node, shapes=True) or list():
                 connection_data = cmds.listConnections(
@@ -186,7 +201,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                     connection_pairs.append([driving_attribute, destination_attribute])
                     cmds.disconnectAttr(driving_attribute, f"{shape}.{destination_attribute}")
 
-            aniseed_toolkit.shapes.load_shape(
+            aniseed_toolkit.scene.shapes.load_shape(
                 node=node,
                 data=shape_data,
                 clear=True,
@@ -194,93 +209,73 @@ class ApplyControlShapes(aniseed.RigComponent):
                 scale_by=1,
             )
 
-            for connection_pair in connection_pairs:
+            for driving_attribute, destination_name in connection_pairs:
                 for shape in cmds.listRelatives(node, shapes=True) or list():
-                    driving_attribute = connection_pair[0]
-                    destination_attribute = f"{shape}.{connection_pair[1]}"
+                    destination_attribute = f"{shape}.{destination_name}"
 
                     try:
                         cmds.connectAttr(driving_attribute, destination_attribute)
                     except RuntimeError:
                         print(f"could not reconnect {driving_attribute} to {destination_attribute}")
-                        pass
-
 
         return True
 
     def clear_shape_data(self):
-        confirmation = qtility.request.confirmation(
+        """
+        Empties the Shape Data option after asking the user to confirm.
+        """
+        aniseed.dialogs.clear_option(
+            self.option("Shape Data"),
             title="Clear Shape Data",
             message="Are you sure you want to clear the shape data?",
+            empty_value=dict(),
         )
-        if not confirmation:
-            return
-
-        self.option("Shape Data").set(dict())
 
     def snapshot_shape_data(self):
-        data = self.get_shape_data()
-        self.option("Shape Data").set(data)
+        """
+        Stores the current shapes of this rig's controls in Shape Data.
+        """
+        self.option("Shape Data").set(self.get_shape_data())
 
     def save_shape_data_file(self):
-
-        filepath = qtility.request.filepath(
+        """
+        Prompts for a file and saves a fresh snapshot of this rig's control
+        shapes to it as JSON. Note that this captures the scene, not the
+        stored Shape Data.
+        """
+        aniseed.dialogs.save_json_file(
             title="Save Shape Data File",
-            path=os.path.dirname(cmds.file(query=True, sceneName=True)),
-            save=True,
+            get_data=self.get_shape_data,
         )
-
-        if not filepath:
-            return
-
-        shape_data = self.get_shape_data()
-
-        with open(filepath, "w") as f:
-            json.dump(shape_data, f, sort_keys=True, indent=4)
 
     def load_shape_file(self):
-
-        filepath = qtility.request.filepath(
+        """
+        Prompts for a JSON file and loads its contents into Shape Data.
+        """
+        aniseed.dialogs.load_json_file(
             title="Load Shape Data File",
-            path=os.path.dirname(cmds.file(query=True, sceneName=True)),
-            save=False,
+            option=self.option("Shape Data"),
         )
-
-        if not filepath:
-            return
-
-        with open(filepath, "r") as f:
-            self.option("Shape Data").set(json.load(f))
 
     def get_shape_data(self):
-
-        nodes = cmds.controller(
-            allControllers=True,
-            query=True,
-        )
-
-        shape_data = list()
-
-        for node in nodes:
+        """
+        Returns the shape data of every control in the scene which belongs
+        to this rig.
+        """
+        return [
+            aniseed_toolkit.scene.shapes.shape_to_dict(node)
+            for node in aniseed_toolkit.rig.control.curve_controls()
 
             # -- Ensure we're only looking at controls which are part
             # -- of our rig
-            if not self.rig.label in cmds.ls(node, long=True)[0]:
-                continue
-
-            shape_nodes = cmds.listRelatives(node, type="nurbsCurve")
-
-            if not shape_nodes:
-                continue
-
-            shape_data.append(
-                aniseed_toolkit.shapes.shape_to_dict(node),
-            )
-
-        return shape_data
+            if self.rig.label in mref.get(node).full_name()
+        ]
 
     def read_stored_data(self):
-
+        """
+        Returns the shape data held by any (deprecated) Store Control Shapes
+        component in the rig.
+        """
         stored_shape_data = list()
 
         # -- Find the store component so we can extract the data
@@ -300,10 +295,12 @@ class DeleteShapes(aniseed.RigComponent):
     Removes all the shapes from a node
     """
 
-
     identifier = "Utility : Delete Shapes"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Nodes input.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -312,16 +309,17 @@ class DeleteShapes(aniseed.RigComponent):
             description="The nodes that the attribute will be set on. Each node must already have the named attribute.",
         )
 
-
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object list for the Nodes input.
+        """
         if requirement_name == "Nodes":
             return aniseed.widgets.ObjectList()
 
     def run(self):
-        node_names = self.input("Nodes").get()
-
-        for node_name in node_names:
-            node = mref.get(node_name)
-
-            for shape in node.shapes():
+        """
+        Deletes every shape node under each node in Nodes.
+        """
+        for node_name in self.input("Nodes").get():
+            for shape in mref.get(node_name).shapes():
                 mref.delete(shape)

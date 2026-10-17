@@ -10,7 +10,7 @@ class SkinInterpSetTargetAWeights(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.SkinLerper.set_target_a_weights(cmds.ls(selection=True)[0])
+        aniseed_toolkit.scene.skin.SkinLerper.set_target_a_weights(cmds.ls(selection=True)[0])
 
 
 class SkinInterpSetTargetBWeights(aniseed_toolkit.Tool):
@@ -21,7 +21,7 @@ class SkinInterpSetTargetBWeights(aniseed_toolkit.Tool):
     ]
 
     def run(self):
-        aniseed_toolkit.skin.SkinLerper.set_target_b_weights(cmds.ls(selection=True)[0])
+        aniseed_toolkit.scene.skin.SkinLerper.set_target_b_weights(cmds.ls(selection=True)[0])
 
 
 class SkinInterpApply(aniseed_toolkit.Tool):
@@ -32,10 +32,10 @@ class SkinInterpApply(aniseed_toolkit.Tool):
     ]
 
     def run(self, interpolation_factor=0.5):
-        aniseed_toolkit.skin.SkinLerper.set_destination_vertices(
+        aniseed_toolkit.scene.skin.SkinLerper.set_destination_vertices(
             [
                 n
                 for n in cmds.ls(sl=True, flatten=True)
             ]
         )
-        aniseed_toolkit.skin.SkinLerper.set_by_interpolation_factor(interpolation_factor)
+        aniseed_toolkit.scene.skin.SkinLerper.set_by_interpolation_factor(interpolation_factor)

@@ -38,7 +38,7 @@ class MirrorShape(aniseed_toolkit.Tool):
         Returns: None
         """
         for node in mc.ls(selection=True):
-            aniseed_toolkit.shapes.mirror([node], axis)
+            aniseed_toolkit.scene.shapes.mirror([node], axis)
 
 
 class AutoMirrorShapes(aniseed_toolkit.Tool):
@@ -138,7 +138,7 @@ class MirrorAcross(aniseed_toolkit.Tool):
         if not to_nodes:
             return
 
-        return aniseed_toolkit.shapes.mirror_across(
+        return aniseed_toolkit.scene.shapes.mirror_across(
             from_nodes=from_nodes,
             to_nodes=to_nodes,
             axis=axis,

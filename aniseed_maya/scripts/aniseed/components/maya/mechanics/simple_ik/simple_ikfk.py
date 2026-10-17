@@ -1,9 +1,14 @@
+"""
+Provides the "Mechanics : Two Bone IKFK" component, a generic ik/fk rig for a
+three joint chain such as an arm or leg. It uses the toolkit's two bone ik/fk
+setup with fk, ik target, upvector and config controls, an ikfk blend attribute,
+optional soft ik and fk world space switches, and ik/fk snapping.
+"""
 import os
 import mref
 import snappy
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 # noinspection PyInterpreter
@@ -31,6 +36,11 @@ class SimpleIKFKComponent(aniseed.RigComponent):
 
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):
+        """
+        Declares the parent and root/tip joint inputs, the naming and ik/fk
+        behaviour options (ik control override, world alignment, soft ik, fk
+        world switches, config placement) and the three blended joint outputs.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -154,10 +164,15 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             description="The tip joint of the IK/FK blend chain (drives the tip skin joint downstream)",
         )
 
-        # -- Declare our build properties - this is only required because i have
-        # -- chosen within this component to break up the long build script
-        # -- into functions, and therefore we use this to access items created
-        # -- from other functions.
+        # -- The build is broken up into functions, so these properties hold
+        # -- the items which are shared between them
+        self._clear_values()
+
+    def _clear_values(self):
+        """
+        Resets the properties shared between the build functions to their
+        empty defaults.
+        """
         self.prefix: str = ""
         self.location: str = ""
         self.org: str = ""
@@ -175,6 +190,9 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         self.shape_rotation = [90, 0, 0]
 
     def on_enter_stack(self):
+        """
+        Hooks the Parent input to the parent component's default output.
+        """
         # -- Attempt to auto resolve the parent based on its default output
         self.input("Parent").hook_to_parent()
 
@@ -192,22 +210,21 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         """
         This allows us to provide dedicate widgets for specific inputs
         """
-        object_fields = [
-            "Parent",
-            "Root Joint",
-            "Tip Joint",
-        ]
-        if requirement_name in object_fields:
+        if requirement_name in ["Parent", "Root Joint", "Tip Joint"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
     def is_valid(self):
+        """
+        Checks that the chain between the root and tip joints faces down the
+        positive or negative X axis.
+        """
 
-        limb_joints = aniseed_toolkit.joints.get_between(
+        limb_joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input("Root Joint").get(),
             end=self.input("Tip Joint").get(),
         )
 
-        direction = aniseed_toolkit.direction.get_chain_facing_direction(
+        direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=limb_joints[0],
             end=limb_joints[-1],
         )
@@ -228,7 +245,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         self.prefix = self.option('Descriptive Prefix').get()
         self.location = self.option("Location").get()
 
-        self.org = aniseed_toolkit.transforms.create(
+        self.org = aniseed_toolkit.scene.transforms.create(
             classification=self.config.organisational,
             description=f"{self.prefix}Arm",
             location=self.location,
@@ -236,7 +253,7 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             parent=self.input("Parent").get(),
             match_to=self.input("Parent").get()
         )
-        self.joints = aniseed_toolkit.joints.get_between(
+        self.joints = aniseed_toolkit.scene.joints.get_between(
             start=self.input('Root Joint').get(),
             end=self.input("Tip Joint").get(),
         )
@@ -255,27 +272,17 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             ik_target_transform_override=self.option("IK Control Transform").get(),
         )
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
         if self.option("Make Config Child Of End").get():
-            config_org = self.config_control.org
-            cmds.parent(
-                config_org,
-                ikfk_setup.blend_chain[-1].name(),
-            )
-            cmds.xform(
-                config_org,
-                matrix=cmds.xform(ikfk_setup.blend_chain[-1].name(), query=True, matrix=True, worldSpace=True),
-                worldSpace=True,
-            )
+            config_org = mref.get(self.config_control.org)
+            config_org.set_parent(ikfk_setup.blend_chain[-1])
+            config_org.match_to(ikfk_setup.blend_chain[-1])
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
         # -- Create the guide line
-        aniseed_toolkit.guide.link(
+        aniseed_toolkit.rig.guide.link(
             self.upvector_control.ctl,
             ikfk_setup.ik_chain[1].name(),
         )
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
         for node in ikfk_setup.all_nodes():
             node.rename(
                 self.config.generate_name(
@@ -285,73 +292,45 @@ class SimpleIKFKComponent(aniseed.RigComponent):
                 ),
             )
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
-        cmds.parentConstraint(
+        mref.parentConstraint(
             self.ik_target_control.ctl,
-            ikfk_setup.ik_target.name(),
+            ikfk_setup.ik_target,
             maintainOffset=True,
         )
-        cmds.parentConstraint(
+        mref.parentConstraint(
             self.upvector_control.ctl,
-            ikfk_setup.ik_upvector.name(),
+            ikfk_setup.ik_upvector,
             maintainOffset=False,
         )
 
-        for idx, fk_marker in enumerate(ikfk_setup.fk_chain):
-            cmds.parentConstraint(
-                self.fk_controls[idx],
-                fk_marker.name(),
+        for fk_control, fk_marker in zip(self.fk_controls, ikfk_setup.fk_chain):
+            mref.parentConstraint(
+                fk_control,
+                fk_marker,
                 maintainOffset=True,
             )
 
         # -- Hook up the visibility attributes
-        ikfk_attribute = mref.get(f"{self.config_control.ctl}.ikfk")
+        aniseed_toolkit.rigging.ikfk.create_ikfk_visibility(
+            f"{self.config_control.ctl}.ikfk",
+            ik_controls=self.ik_controls,
+            fk_controls=self.fk_controls,
+        )
 
-        ik_condition = mref.create("lessThan")
-        fk_condition = mref.create("greaterThan")
-
-        ikfk_attribute.connect(ik_condition.input1)
-        ikfk_attribute.connect(fk_condition.input1)
-
-        ik_condition.input2.set(0.9)
-        fk_condition.input2.set(0.1)
-        ik_visibility_attribute = ik_condition.output.full_name()
-        fk_visibility_attribute = fk_condition.output.full_name()
-
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
-        for ik_control in self.ik_controls:
-            ik_control = aniseed_toolkit.control.get(ik_control)
-            cmds.connectAttr(
-                ik_visibility_attribute,
-                f"{ik_control.off}.visibility",
-                force=True,
-            )
-
-        for fk_control in self.fk_controls:
-            fk_control = aniseed_toolkit.control.get(fk_control)
-            cmds.connectAttr(
-                fk_visibility_attribute,
-                f"{fk_control.off}.visibility",
-                force=True,
-            )
-
-        # -- Set up the space switches on teh fk controls
+        # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed_toolkit.space.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
+            aniseed.builders.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
         self._set_outputs()
 
-        print(ikfk_setup.ik_target.get_matrix(space="world"))
-        print(ikfk_setup.ik_target.name())
     def _create_controls(self):
         """
-        Here we create all the controls for the arm
+        Here we create all the controls for the limb
         """
         # -- Add the configuration control
-        self.config_control = aniseed_toolkit.control.create(
+        self.config_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Config",
             location=self.location,
             parent=self.org,
@@ -362,48 +341,28 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             rotate_shape=self.shape_rotation,
         )
 
-        self.fk_upper_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}UpperFK",
-            location=self.location,
-            parent=self.org,
-            shape="core_paddle",
-            config=self.config,
-            match_to=self.joints[0],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
+        # -- Create the fk controls, each one parented under the last
+        fk_parent = self.org
+        fk_controls = []
+        for label, joint in zip(["UpperFK", "LowerFK", "FK"], self.joints[:3]):
+            fk_control = aniseed_toolkit.rig.control.create(
+                description=f"{self.prefix}{label}",
+                location=self.location,
+                parent=fk_parent,
+                shape="core_paddle",
+                config=self.config,
+                match_to=joint,
+                shape_scale=20.0,
+                rotate_shape=self.shape_rotation,
+            )
+            fk_controls.append(fk_control)
+            fk_parent = fk_control.ctl
 
-        self.fk_lower_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}LowerFK",
-            location=self.location,
-            parent=self.fk_upper_control.ctl,
-            shape="core_paddle",
-            config=self.config,
-            match_to=self.joints[1],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
-
-        self.fk_end_control = aniseed_toolkit.control.create(
-            description=f"{self.prefix}FK",
-            location=self.location,
-            parent=self.fk_lower_control.ctl,
-            shape="core_paddle",
-            config=self.config,
-            match_to=self.joints[2],
-            shape_scale=20.0,
-            rotate_shape=self.shape_rotation,
-        )
-
-        # -- We'll iterate over our fk joints, so place them all in a list
-        self.fk_controls = [
-            self.fk_upper_control.ctl,
-            self.fk_lower_control.ctl,
-            self.fk_end_control.ctl,
-        ]
+        self.fk_upper_control, self.fk_lower_control, self.fk_end_control = fk_controls
+        self.fk_controls = [fk_control.ctl for fk_control in fk_controls]
 
         # -- Now create the main IK control
-        self.ik_target_control = aniseed_toolkit.control.create(
+        self.ik_target_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}IK",
             location=self.location,
             parent=self.org,
@@ -414,15 +373,12 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             rotate_shape=[-90, 0, 0],
         )
         self.ik_controls.append(self.ik_target_control.ctl)
-        if self.option("Align IK To World").get():
-            cmds.xform(
-                self.ik_target_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
 
-        # -- Create the upvector control for the arm
-        self.upvector_control = aniseed_toolkit.control.create(
+        if self.option("Align IK To World").get():
+            mref.get(self.ik_target_control.org).set_rotation([0, 0, 0], space="world")
+
+        # -- Create the upvector control
+        self.upvector_control = aniseed_toolkit.rig.control.create(
             description=f"{self.prefix}Upvector",
             location=self.location,
             parent=self.org,
@@ -433,41 +389,31 @@ class SimpleIKFKComponent(aniseed.RigComponent):
             rotate_shape=None,
         )
         self.ik_controls.append(self.upvector_control.ctl)
-        cmds.xform(
-            self.upvector_control.org,
-            translation=aniseed_toolkit.transformation.calculate_upvector_position(
+
+        upvector_org = mref.get(self.upvector_control.org)
+        upvector_org.set_position(
+            aniseed_toolkit.core.maths.calculate_upvector_position(
                 point_a=self.joints[0],
                 point_b=self.joints[1],
                 point_c=self.joints[2],
                 length=1,
             ),
-            worldSpace=True,
+            space="world",
         )
         if self.option("Align Upvector To World").get():
-            cmds.xform(
-                self.upvector_control.org,
-                rotation=(0, 0, 0),
-                worldSpace=True,
-            )
+            upvector_org.set_rotation([0, 0, 0], space="world")
 
     def _create_snap(self):
-        ikfk_group = "IKFK_Limb_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-        ikonly_group = "IKOnly_Limb_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-        fkonly_group = "FKOnly_Limb_%s_%s" % (
-            self.prefix,
-            self.location,
-        )
-
-        snappy.set_data(
-            data_name="ikfk_attribute",
-            data_value=f"{self.config_control.ctl}.ikfk",
-            group=[ikfk_group, fkonly_group, ikonly_group],
+        """
+        Creates the ik/fk snap groups: the ik target and upvector controls snap
+        to the nk joints in the ik groups, and each fk control snaps to its nk
+        joint in the fk groups.
+        """
+        ikfk_group, ikonly_group, fkonly_group = aniseed_toolkit.rigging.ikfk.create_snap_groups(
+            label="Limb",
+            prefix=self.prefix,
+            location=self.location,
+            ikfk_attribute=f"{self.config_control.ctl}.ikfk",
         )
 
         snappy.new(
@@ -483,59 +429,28 @@ class SimpleIKFKComponent(aniseed.RigComponent):
         )
 
         snappy.add_empty_members(
-            nodes=[
-                self.fk_upper_control.ctl,
-                self.fk_lower_control.ctl,
-                self.fk_end_control.ctl,
-            ],
+            nodes=self.fk_controls,
             group=ikonly_group,
         )
 
-        snappy.new(
-            node=self.fk_upper_control.ctl,
-            target=self.nk_joints[0],
-            group=[ikfk_group, fkonly_group],
-        )
+        for fk_control, nk_joint in zip(self.fk_controls, self.nk_joints):
+            snappy.new(
+                node=fk_control,
+                target=nk_joint,
+                group=[ikfk_group, fkonly_group],
+            )
 
-        snappy.new(
-            node=self.fk_lower_control.ctl,
-            target=self.nk_joints[1],
-            group=[ikfk_group, fkonly_group],
-        )
-
-        snappy.new(
-            node=self.fk_end_control.ctl,
-            target=self.nk_joints[2],
-            group=[ikfk_group, fkonly_group],
-        )
         snappy.add_empty_members(
-            nodes=[
-                self.ik_target_control.ctl,
-                self.upvector_control.ctl,
-            ],
+            nodes=self.ik_controls,
             group=fkonly_group,
         )
 
     def _set_outputs(self):
+        """
+        Sets the Blended Upper, Lower and Tip outputs to the first three nk
+        (blend chain) joints.
+        """
 
         self.output("Blended Upper").set(self.nk_joints[0])
         self.output("Blended Lower").set(self.nk_joints[1])
         self.output("Blended Tip").set(self.nk_joints[2])
-
-    def _clear_values(self):
-
-        self.prefix: str = ""
-        self.location: str = ""
-        self.org: str = ""
-        self.joints: list[str] = []
-        self.config_control: "Control" = None
-        self.upvector_control: "Control" = None
-        self.ik_target_control: "Control" = None
-        self.fk_upper_control: "Control" = None
-        self.fk_lower_control: "Control" = None
-        self.fk_end_control: "Control" = None
-
-        self.fk_controls: list[str] = []
-        self.ik_controls: list[str] = []
-        self.nk_joints: list[str] = []
-        self.shape_rotation = [90, 0, 0]

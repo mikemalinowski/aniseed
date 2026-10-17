@@ -1,4 +1,5 @@
 import aniseed_toolkit
+import aniseed_toolkit.ui.dialogs
 import maya.cmds as mc
 
 
@@ -34,7 +35,7 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
             name_replacement : a tuple of length two, where the first part should
                 be replaced with the second part
         """
-        return aniseed_toolkit.mirror.global_mirror(
+        return aniseed_toolkit.ui.dialogs.global_mirror(
             transforms=transforms or mc.ls(selection=True),
             across=across,
             behaviour=behaviour,
@@ -43,24 +44,21 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
         )
 
 
-class InvertTranslationTool(aniseed_toolkit.Tool):
+@aniseed_toolkit.tool(
+    "Invert Translation",
+    classification="Rigging",
+    categories=["Transforms"],
+)
+def invert_translation(transforms: list[str] = None) -> None:
+    """
+    This will invert the translation channels of a node
 
-    identifier = "Invert Translation"
-    classification = "Rigging"
-    categories = [
-        "Transforms",
-    ]
+    Args:
+        transforms: List of transforms to invert the translation of
 
-    def run(self, transforms: list[str] = None) -> None:
-        """
-        This will invert the translation channels of a node
-
-        Args:
-            transforms: List of transforms to invert the translation of
-
-        Returns:
-            None
-        """
-        return aniseed_toolkit.mirror.invert_translation(
-            transforms=transforms or mc.ls(selection=True),
-        )
+    Returns:
+        None
+    """
+    return aniseed_toolkit.scene.mirror.invert_translation(
+        transforms=transforms or mc.ls(selection=True),
+    )

@@ -1,20 +1,27 @@
+"""
+Provides the "Utility : Parent Constraint" component, which parent
+constrains one node to another. Options control whether the offset is
+maintained and whether a scale constraint is added alongside the parent
+constraint.
+"""
 import mref
 import aniseed
 import aniseed_toolkit
-from maya import cmds
 
 
 class ParentConstraint(aniseed.RigComponent):
     """
-    Creates a control that blends the rotation of a joint between two
-    target nodes. A "Blend" attribute on the control (0.0 to 1.0) drives
-    a pair of parent constraints between Target A and Target B, while the
-    control itself drives the joint's transform.
+    Parent constrains a node to another node, optionally also adding a
+    scale constraint between them.
     """
 
     identifier = "Utility : Parent Constraint"
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the Node To Constrain and Constrain To inputs, plus the
+        Maintain Offset and Include Scale options.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -39,22 +46,31 @@ class ParentConstraint(aniseed.RigComponent):
         )
 
     def input_widget(self, requirement_name):
+        """
+        Returns an object selector for both inputs.
+        """
         return aniseed.widgets.ObjectSelector(component=self)
 
     def run(self) -> bool:
-
+        """
+        Constrains the node to the driver. When Include Scale is enabled a
+        parent and scale constraint pair is created, otherwise just a parent
+        constraint. Returns None despite the bool annotation.
+        """
+        driver = self.input("Constrain To").get()
+        driven = self.input("Node To Constrain").get()
         maintain_offset = self.option("Maintain Offset").get()
-        include_scale = self.option("Include Scale").get()
 
-        mref.parentConstraint(
-            self.input("Constrain To").get(),
-            self.input("Node To Constrain").get(),
-            maintainOffset=maintain_offset,
-        )
+        if self.option("Include Scale").get():
+            aniseed_toolkit.scene.constraints.parent_and_scale(
+                driver,
+                driven,
+                maintain_offset=maintain_offset,
+            )
 
-        if include_scale:
-            mref.scaleConstraint(
-                self.input("Constrain To").get(),
-                self.input("Node To Constrain").get(),
+        else:
+            mref.parentConstraint(
+                driver,
+                driven,
                 maintainOffset=maintain_offset,
             )

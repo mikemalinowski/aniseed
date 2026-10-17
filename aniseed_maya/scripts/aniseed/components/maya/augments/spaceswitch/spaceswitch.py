@@ -1,11 +1,19 @@
+"""
+Provides the "Augment : Space Switch" component, which adds a "spaces" enum
+attribute to a host node and switches the driven node between targets through
+weighted parent (and optional scale) constraints. Also provides the widgets
+used to author the spaces: SpaceList, OptionsBlock and SpaceSwitchUi. The
+position only and orientation only flags apply to every space.
+"""
 import os
 import uuid
+import mref
 import aniseed
 import qtility
 import collections
 import aniseed_toolkit
 
-from Qt import QtCore, QtWidgets, QtGui
+from Qt import QtCore, QtWidgets
 from maya import cmds
 
 
@@ -33,6 +41,10 @@ class SpaceSwitchComponent(aniseed.RigComponent):
     )
 
     def __init__(self, *args, **kwargs):
+        """
+        Declares the "To Be Driven" and "Attribute Host" inputs and the internal
+        "_Data" option that stores the space configuration.
+        """
         super().__init__(*args, **kwargs)
 
         self.declare_input(
@@ -61,10 +73,23 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         )
 
     def option_widget(self, option_name: str):
+        """
+        Returns the SpaceSwitchUi editor for the "_Data" option.
+
+        Args:
+            option_name: The name of the option to return a widget for.
+        """
         if option_name == "_Data":
             return SpaceSwitchUi(self)
 
     def input_widget(self, requirement_name: str):
+        """
+        Returns an object selector for the "To Be Driven" and "Attribute Host"
+        inputs.
+
+        Args:
+            requirement_name: The name of the input to return a widget for.
+        """
         if requirement_name in ("To Be Driven", "Attribute Host"):
             return aniseed.widgets.ObjectSelector(component=self)
 
@@ -80,8 +105,8 @@ class SpaceSwitchComponent(aniseed.RigComponent):
                     "position_only": False,
                     "orientation_only": False,
                     "target_transform": None,
-                    "label": ""
-
+                    "label": "",
+                    "include_scale": True,
                 }
             ]
         }
@@ -91,41 +116,25 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         node_to_drive = self.input("To Be Driven").get()
         host = self.input("Attribute Host").get()
 
-        if not data:
+        if not data or not node_to_drive or not host:
             return
 
-        if not node_to_drive:
-            return
+        aniseed_toolkit.core.attributes.add_separator(host)
 
-        if not host:
-            return
+        # -- If the node to drive is part of a control we drive its org
+        control = aniseed_toolkit.rig.control.get(node_to_drive)
+        if control:
+            node_to_drive = control.org
+        node_to_drive = mref.get(node_to_drive)
 
-        aniseed_toolkit.run(
-            "Add Separator Attribute",
-            host,
-        )
-        
-        try:
-            node_to_drive = aniseed_toolkit.run(
-                "Get Control",
-                node_to_drive,
-            )
-            node_to_drive = node_to_drive.org
-        except:
-            pass
-            
+        spaces = data.get("spaces", list())
 
-        labels = [
-            space["label"]
-            for space in data.get("spaces", list())
-        ]
-
-        cmds.addAttr(
-            host,
-            shortName="spaces",
-            at="enum",
-            enumName=":".join(labels),
-            k=True,
+        spaces_attribute = mref.get(host).add_attribute(
+            "spaces",
+            value=None,
+            attribute_type="enum",
+            enumName=":".join(space["label"] for space in spaces),
+            keyable=True,
         )
 
         orientation_only = False
@@ -134,7 +143,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         default_space_idx = 0
         all_constraints = []
 
-        for idx, space in enumerate(data.get("spaces", list())):
+        for idx, space in enumerate(spaces):
 
             if space["orientation_only"]:
                 orientation_only = True
@@ -142,72 +151,43 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             if space["position_only"]:
                 position_only = True
 
-            target = space["target"]
-
-            target_transform = space["target_transform"]
-
-            matrix_to_restore = None
-
             if space["label"] == data["default_space"]:
                 default_space_idx = idx
 
+            target = self._resolve(space["target"])
+            target_transform = self._resolve(space["target_transform"])
+
+            matrix_to_restore = None
             maintain_offset = True
 
-            # -- Resolve any addresses
-            target_attribute = self.rig.resolve_attribute(target)
-            if target_attribute:
-                target = target_attribute.get()
-
-            target_transform_attribute = self.rig.resolve_attribute(target_transform)
-            if target_transform_attribute:
-                target_transform = target_transform_attribute.get()
-
-            # -- If we're given a target transform, we should move the
-            # -- node to drive to this transform before constraining
+            # -- If we're given a target transform, we constrain to a point
+            # -- at that transform, with the node to drive moved there
+            # -- whilst constraining
             if target_transform:
-                target = cmds.createNode("transform")
-                target = cmds.rename(
-                    target,
-                    self.config.generate_name(
+                target = mref.create(
+                    "transform",
+                    name=self.config.generate_name(
                         classification="loc",
                         description="target_point",
                         location=self.config.middle,
                     ),
                 )
 
-                matrix_to_restore = cmds.xform(
-                    node_to_drive,
-                    query=True,
-                    matrix=True,
-                    worldSpace=True,
-                )
-
-                cmds.xform(
-                    target,
-                    matrix=cmds.xform(
-                        target_transform,
-                        query=True,
-                        matrix=True,
-                        worldSpace=True,
-                    ),
-                    worldSpace=True,
-                )
-
+                matrix_to_restore = node_to_drive.get_matrix(space="world")
+                target.match_to(target_transform)
                 maintain_offset = False
 
-            constraints = list()
-
-            constraints.append(
-                cmds.parentConstraint(
+            constraints = [
+                mref.parentConstraint(
                     target,
                     node_to_drive,
                     maintainOffset=maintain_offset,
-                )[0]
-            )
+                )[0],
+            ]
 
             if space["include_scale"]:
                 constraints.append(
-                    cmds.scaleConstraint(
+                    mref.scaleConstraint(
                         target,
                         node_to_drive,
                         maintainOffset=maintain_offset,
@@ -216,88 +196,81 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
             for constraint in constraints:
 
-                condition = cmds.createNode("condition")
+                # -- The condition nodes are left unnamed
+                condition = mref.create("condition")
+                condition.secondTerm.set(idx)
+                condition.colorIfTrueR.set(1)
+                condition.colorIfFalseR.set(0)
 
-                cmds.setAttr(
-                    f"{condition}.secondTerm",
-                    idx,
-                )
+                # -- The constraint type is identified by Maya's default
+                # -- constraint naming, so a driven node with "scale" in its
+                # -- name breaks this (the alias query returns None)
+                weight_query = cmds.scaleConstraint if "scale" in constraint.name() else cmds.parentConstraint
+                weight_alias = weight_query(constraint.full_name(), query=True, weightAliasList=True)[-1]
 
-                cmds.setAttr(
-                    f"{condition}.colorIfTrueR",
-                    1,
-                )
-
-                cmds.setAttr(
-                    f"{condition}.colorIfFalseR",
-                    0,
-                )
-
-                cmds.connectAttr(
-                    f"{host}.spaces",
-                    f"{condition}.firstTerm",
-                )
-
-                func = cmds.parentConstraint
-
-                if "scale" in constraint:
-                    func = cmds.scaleConstraint
-
-                cmds.connectAttr(
-                    f"{condition}.outColorR",
-                    constraint + "." + func(
-                        constraint,
-                        query=True,
-                        weightAliasList=True
-                    )[-1]
-                )
+                # -- connectAttr rather than Attribute.connect so that a
+                # -- failed connection still raises
+                mref.connectAttr(spaces_attribute, condition.firstTerm)
+                mref.connectAttr(condition.outColorR, constraint.attr(weight_alias))
 
             if matrix_to_restore:
-                cmds.xform(
-                    node_to_drive,
-                    matrix=matrix_to_restore,
-                    worldSpace=True,
-                )
+                node_to_drive.set_matrix(matrix_to_restore, space="world")
 
             all_constraints.extend(constraints)
 
         if position_only:
-            for constraint in all_constraints:
-                for axis in ["X", "Y", "Z"]:
-                    try:
-                        cmds.disconnectAttr(
-                            f"{constraint}.constraintRotate.constraintRotate{axis}",
-                            f"{node_to_drive}.rotate.rotate{axis}",
-                        )
-
-                    except RuntimeError:
-                        # -- Channel wasn't connected on this constraint;
-                        # -- nothing to disconnect, fine to skip.
-                        pass
+            self._disconnect_channel(all_constraints, node_to_drive, "rotate")
 
         if orientation_only:
-            for constraint in all_constraints:
-                for axis in ["X", "Y", "Z"]:
-                    try:
-                        cmds.disconnectAttr(
-                            f"{constraint}.constraintTranslate.constraintTranslate{axis}",
-                            f"{node_to_drive}.translate.translate{axis}",
-                        )
+            self._disconnect_channel(all_constraints, node_to_drive, "translate")
 
-                    except RuntimeError:
-                        # -- Channel wasn't connected on this constraint;
-                        # -- nothing to disconnect, fine to skip.
-                        pass
-
-        cmds.setAttr(
-            f"{host}.spaces",
-            default_space_idx,
-        )
+        spaces_attribute.set(default_space_idx)
 
         return True
 
+    def _resolve(self, value):
+        """
+        Returns the value of the attribute the given value addresses, or the
+        value itself if it is not an address.
+        """
+        # -- An unset target transform is stored as None, which cannot be
+        # -- resolved as an address
+        if not value:
+            return value
+
+        attribute = self.rig.resolve_attribute(value)
+        return attribute.get() if attribute else value
+
+    @staticmethod
+    def _disconnect_channel(constraints, driven, channel):
+        """
+        Breaks the connections from each constraint's output to the given
+        channel ("translate" or "rotate") of the driven node.
+        """
+        constraint_channel = "constraint" + channel.title()
+
+        for constraint in constraints:
+            for axis in "XYZ":
+                source = constraint.attr(f"{constraint_channel}{axis}")
+
+                # -- Scale constraints have no translate / rotate outputs
+                if not source:
+                    continue
+
+                try:
+                    source.disconnect(driven.attr(f"{channel}{axis}"))
+
+                except RuntimeError:
+                    # -- Channel wasn't connected on this constraint;
+                    # -- nothing to disconnect, fine to skip.
+                    pass
+
     @classmethod
     def space_template(cls):
+        """
+        Returns a new space dictionary with default values and a freshly
+        generated uuid.
+        """
         return dict(
             target="",
             label="",
@@ -309,6 +282,11 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         )
 
     def get_data(self) -> dict:
+        """
+        Returns the stored space switch data, or an empty structure (no default
+        space and no spaces) if nothing has been stored yet. The empty structure
+        is not written back to the option.
+        """
 
         data = self.option("_Data").get()
 
@@ -321,6 +299,9 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         return data
 
     def get_uuids(self):
+        """
+        Returns the uuids of all stored spaces, in order.
+        """
 
         data = self.get_data()
 
@@ -330,11 +311,24 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         ]
 
     def get_space_data(self, uuid_) -> dict:
+        """
+        Returns the data of the space with the given uuid, or None if there is
+        no such space.
+
+        Args:
+            uuid_: The uuid of the space to look up.
+        """
         for data in self.get_data()["spaces"]:
             if data["uuid_"] == uuid_:
                 return data
 
     def remove_space(self, uuid_):
+        """
+        Removes the space with the given uuid and stores the result.
+
+        Args:
+            uuid_: The uuid of the space to remove.
+        """
 
         data = self.get_data()
 
@@ -346,15 +340,34 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         self.option("_Data").set(data)
 
     def set_default_space(self, label):
+        """
+        Stores the given label as the default space.
+
+        Args:
+            label: The label of the space to make the default.
+        """
         data = self.get_data()
         data["default_space"] = label
 
         self.option("_Data").set(data)
 
     def get_default_space(self):
+        """
+        Returns the label of the default space, or an empty string if none is set.
+        """
         return self.get_data().get("default_space", "")
 
     def add_space(self, space_data):
+        """
+        Stores the given space. If a space with the same uuid already exists it
+        is replaced in place, otherwise the space is appended to the end.
+
+        Args:
+            space_data: The space dictionary to store (see space_template).
+
+        Returns:
+            The updated space switch data.
+        """
 
         uuid_ = space_data["uuid_"]
         uuids = self.get_uuids()
@@ -377,6 +390,14 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         return data
 
     def move_space(self, uuid_, move_by):
+        """
+        Moves the space with the given uuid by the given number of positions and
+        stores the result. Unknown uuids and moves past either end are ignored.
+
+        Args:
+            uuid_: The uuid of the space to move.
+            move_by: The offset to move by, such as -1 for up or 1 for down.
+        """
 
         data = self.get_data()
 
@@ -437,6 +458,15 @@ class SpaceList(QtWidgets.QWidget):
     uuid_selected = QtCore.Signal(str)
 
     def __init__(self, component, button_size=30, parent=None):
+        """
+        Builds the list of spaces with add, remove, up and down buttons and
+        populates it from the component's stored data.
+
+        Args:
+            component: The SpaceSwitchComponent being edited.
+            button_size: The width and height of the buttons.
+            parent: Optional parent widget.
+        """
         super().__init__(parent=parent)
 
         self.component = component
@@ -492,10 +522,19 @@ class SpaceList(QtWidgets.QWidget):
         self.list_widget.currentItemChanged.connect(self.propagate_uuid_change)
 
     def propagate_uuid_change(self, item):
+        """
+        Emits uuid_selected with the uuid of the newly current item, if any.
+
+        Args:
+            item: The newly current list item.
+        """
         if item:
             self.uuid_selected.emit(item.uuid_)
 
     def populate(self):
+        """
+        Clears the list and adds an item for each space stored on the component.
+        """
 
         self.clear()
         data = self.component.option("_Data").get()
@@ -510,9 +549,22 @@ class SpaceList(QtWidgets.QWidget):
             )
 
     def clear(self):
+        """
+        Removes all items from the list widget. The stored data is not changed.
+        """
         self.list_widget.clear()
 
     def add(self, label=None, uuid_=None):
+        """
+        Adds a space item to the list and emits changed. If no label is given
+        the user is prompted for one, and if no uuid is given a new space is
+        created on the component.
+
+        Args:
+            label: The label to display. Prompted for if not given.
+            uuid_: The uuid of an existing space. A new space is created if not
+                given.
+        """
         if not label:
             label = qtility.request.text(
                 title="Space Name",
@@ -535,6 +587,10 @@ class SpaceList(QtWidgets.QWidget):
         self.changed.emit()
 
     def remove(self):
+        """
+        Removes the current item from the list and its space from the component,
+        then emits changed.
+        """
         if not self.list_widget.currentItem():
             return
 
@@ -546,6 +602,10 @@ class SpaceList(QtWidgets.QWidget):
         self.changed.emit()
 
     def move_up(self):
+        """
+        Moves the current item, and its stored space, up one position and emits
+        changed. Does nothing if the item is already at the top.
+        """
 
         if not self.list_widget.currentItem():
             return
@@ -562,6 +622,10 @@ class SpaceList(QtWidgets.QWidget):
         self.changed.emit()
 
     def move_down(self):
+        """
+        Moves the current item, and its stored space, down one position and
+        emits changed. Does nothing if the item is already at the bottom.
+        """
 
         if not self.list_widget.currentItem():
             return
@@ -578,6 +642,9 @@ class SpaceList(QtWidgets.QWidget):
         self.changed.emit()
 
     def update_size(self):
+        """
+        Fixes every button to a square of the configured button size.
+        """
         buttons = [
             self.add_button,
             self.remove_button,
@@ -592,24 +659,13 @@ class SpaceList(QtWidgets.QWidget):
             button.setMaximumWidth(self._button_size)
 
     def rename_current_item(self, new_name):
+        """
+        Sets the text of the current list item.
+
+        Args:
+            new_name: The new label to display.
+        """
         self.list_widget.currentItem().setText(new_name)
-
-    def get_value(self):
-
-        result = list()
-
-        for idx in range(self.list_widget.count()):
-            item = self.list_widget.item(idx)
-            result.append(item.text())
-
-        return result
-
-    def set_value(self, v):
-
-        for item in v or list():
-            self.list_widget.addItem(item)
-
-        self.changed.emit()
 
 
 # noinspection PyUnresolvedReferences
@@ -618,6 +674,15 @@ class OptionsBlock(QtWidgets.QWidget):
     label_changed = QtCore.Signal(str)
 
     def __init__(self, component, parent=None):
+        """
+        Builds the labelled widgets used to edit a single space (label, target,
+        snap to, position only, orientation only, include scale and default) and
+        connects each of them to serialise. Label edits also emit label_changed.
+
+        Args:
+            component: The SpaceSwitchComponent being edited.
+            parent: Optional parent widget.
+        """
         super().__init__(parent=parent)
 
         self.setLayout(
@@ -693,6 +758,10 @@ class OptionsBlock(QtWidgets.QWidget):
         qtility.derive.connect(self.is_default, self.serialise)
 
     def clear_options(self):
+        """
+        Resets every widget to its default value and clears the active space,
+        without serialising the changes.
+        """
         self._ignore_serialisation = True
 
         self.label.setText("")
@@ -707,6 +776,14 @@ class OptionsBlock(QtWidgets.QWidget):
         self._ignore_serialisation = False
 
     def populate_options(self, uuid_):
+        """
+        Loads the space with the given uuid into the widgets, with serialisation
+        suppressed. The position only and orientation only boxes show whether
+        the flag is set on any space, since they are applied globally at build.
+
+        Args:
+            uuid_: The uuid of the space to display. Nothing is loaded if empty.
+        """
 
         self._ignore_serialisation = True
 
@@ -736,6 +813,13 @@ class OptionsBlock(QtWidgets.QWidget):
         self._ignore_serialisation = False
 
     def serialise(self, *args, **kwargs):
+        """
+        Writes the widget values back to the active space on the component,
+        propagates the position only and orientation only flags to every space,
+        and sets the default space if "Is Default Space" is ticked (unticking it
+        does not clear the default). Does nothing while serialisation is
+        suppressed or no space is active.
+        """
 
         if self._ignore_serialisation:
             return
@@ -771,6 +855,15 @@ class SpaceSwitchUi(QtWidgets.QWidget):
     dont_label = True
 
     def __init__(self, component, parent=None):
+        """
+        Combines a SpaceList with an OptionsBlock, so selecting a space shows its
+        options and editing its label renames the list item. Edits are written
+        directly to the component's "_Data" option by the child widgets.
+
+        Args:
+            component: The SpaceSwitchComponent being edited.
+            parent: Optional parent widget.
+        """
         super().__init__(parent=parent)
 
         self.component: SpaceSwitchComponent = component
@@ -796,7 +889,6 @@ class SpaceSwitchUi(QtWidgets.QWidget):
         )
 
         self.layout().addWidget(self.options_block)
-        # self.layout().setStretch(0, 1)
 
         self.text_list.uuid_selected.connect(self.options_block.populate_options)
         self.options_block.label_changed.connect(self.text_list.rename_current_item)
