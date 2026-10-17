@@ -39,4 +39,4 @@ from . import builders
 from . import dialogs
 from . import component_outputs
 
-__version__ = "3.0.2"
+__version__ = "3.2.0"

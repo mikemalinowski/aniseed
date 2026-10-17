@@ -36,7 +36,7 @@ from . import scene
 from . import rig
 from . import rigging
 
-__version__ = "3.1.0"
+__version__ = "3.2.0"
 
 def launch(*args, **kwargs):
     """
