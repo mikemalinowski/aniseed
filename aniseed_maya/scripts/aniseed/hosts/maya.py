@@ -21,13 +21,17 @@ class MayaHost(aniseed.EmbeddedHost):
         This is responsible for launching the application within the
         current host.
         """
+        control = DockableMayaApp.OBJECT_NAME + "WorkspaceControl"
+
         if DockableMayaApp.instance():
             DockableMayaApp.instance().show()
+
+            # -- Bring the existing tab to the front, as showing it does
+            # -- not do so if it is behind another tab
+            cmds.workspaceControl(control, e=True, restore=True)
             return True
 
-        DockableMayaApp.remove_workspace_control(
-            DockableMayaApp.OBJECT_NAME + "WorkspaceControl"
-        )
+        DockableMayaApp.remove_workspace_control(control)
 
         # -- Instance the tool
         window = DockableMayaApp(
@@ -43,12 +47,15 @@ class MayaHost(aniseed.EmbeddedHost):
         )
 
         cmds.workspaceControl(
-            f'{window.objectName()}WorkspaceControl',
+            control,
             e=True,
             ttc=["AttributeEditor", -1],
             wp="preferred",
             mw=150,
         )
+
+        # -- Docking as a tab does not make it the current tab, so raise it
+        cmds.workspaceControl(control, e=True, restore=True)
         return True
 
     def environment_initialization(self):
