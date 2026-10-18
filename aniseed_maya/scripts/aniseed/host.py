@@ -1,12 +1,18 @@
 import os
 import factories
 
+from . import packages
+
 
 class EmbeddedHost:
     """
     An embedded host can be used to override what happens when launching the app
     and managing how aniseed should be initialised within the application.
+
+    The name is matched against the "hosts" listed in an aniseed package's
+    marker file, to determine which packages are used within this host.
     """
+    name = ""
     priority = 0
 
     def launch(self) -> bool:
@@ -68,7 +74,7 @@ class EmbeddedHosts(factories.Factory):
                     os.path.dirname(__file__),
                     "hosts",
                 ),
-            ],
+            ] + packages.host_paths(),
         )
 
     @classmethod

@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import xstack
 import typing
@@ -10,6 +9,7 @@ import traceback
 from . import host as host_
 from . import config
 from . import component
+from . import packages
 from . import constants
 
 
@@ -49,6 +49,9 @@ class Rig(xstack.Stack):
                 "components",
             ),
         )
+
+        # -- Add the components from any aniseed packages
+        component_paths.extend(packages.component_paths())
 
         super().__init__(
             label=label,
@@ -394,7 +397,7 @@ class Rig(xstack.Stack):
             os.environ.get(xstack.constants.COMPONENT_PATHS_ENVVAR, "").split(",")
         )
         paths.extend(
-            re.split(";|,", os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, ""))
+            packages.split_paths(os.environ.get(constants.RIG_COMPONENTS_PATHS_ENVVAR, ""))
         )
         # -- Dedupe via set, then sort, so duplicates in the input list
         # -- (or different ordering) hit the same cache entry.
@@ -409,9 +412,30 @@ class Rig(xstack.Stack):
                 plugin_identifier="identifier",
             )
             cached.register(config.RigConfiguration)
+            self._warn_duplicate_identifiers(cached)
             Rig._FACTORY_CACHE[key] = cached
 
         return cached
+
+    # ----------------------------------------------------------------------------------
+    @staticmethod
+    def _warn_duplicate_identifiers(library: "factories.Factory"):
+        """
+        Component identifiers must be unique across aniseed and every aniseed
+        package. Where two components share one, the factory returns whichever
+        it found first, so we warn rather than let one silently replace the other.
+        """
+        identifiers = [
+            library._get_identifier(plugin)
+            for plugin in library._plugins
+        ]
+
+        for identifier in sorted(set(identifiers)):
+            if identifiers.count(identifier) > 1:
+                print(
+                    f"Warning: {identifiers.count(identifier)} components share the identifier "
+                    f"'{identifier}'. Component identifiers must be unique."
+                )
 
     @classmethod
     def clear_factory_cache(cls):

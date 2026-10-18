@@ -4,4 +4,10 @@
 # -- always look at for paths to find components within.
 RIG_COMPONENTS_PATHS_ENVVAR = "ANISEED_RIG_COMPONENT_PATHS"
 
+# -- Aniseed packages are folders which contribute components, mixins,
+# -- widgets and hosts. By default we look alongside the aniseed module,
+# -- but this environment variable allows any number of additional
+# -- packages (or folders of packages) to be declared.
+ANISEED_PACKAGE_PATHS_ENVVAR = "ANISEED_PACKAGE_PATHS"
+
 website = "https://github.com/mikemalinowski/aniseed"

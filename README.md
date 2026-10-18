@@ -306,16 +306,26 @@ ADD VIDEO LINK
 
 # Coding With Aniseed
 
+The core of aniseed is application agnostic. All application specific code - components,
+mixins, widgets and hosts - lives in aniseed packages. The standard Maya components are
+in the `aniseed_maya_standard` package, which sits alongside the aniseed module.
+
 If you want to add your own rigging components you can either:
 
-* Place your components within the aniseed/components folder (or subfolder). This
-is useful for small development studios or individuals.
+* Create an aniseed package. This is a folder containing an `aniseed_package.json` file,
+where the folder name is the package name. Aniseed looks within it for `components`,
+`mixins`, `widgets` and `hosts` folders, and the aniseed toolkit looks within its
+`tools` folder for tools to expose to the user. Place the package alongside the aniseed module,
+or declare its path (or the path of a folder of packages) in an environment variable
+called ANISEED_PACKAGE_PATHS. This is the best option for sets of components which belong
+together, such as a muscle setup, and keeps studio code separate from open source code.
+See `aniseed_maya_standard/README.md` for details.
 
 
 * Place your components in a folder and declare that folder path in an environment
-variable called ANISEED_RIG_COMPONENT_PATHS. This option is particularly useful
-for larger development studio's whom have a requirement to keep open source code
-seperate from their internally developed code.
+variable called ANISEED_RIG_COMPONENT_PATHS. This is useful for a few loose components.
+
+Component and tool identifiers must be unique across aniseed and all aniseed packages.
 
 ## Aniseed Classes
 

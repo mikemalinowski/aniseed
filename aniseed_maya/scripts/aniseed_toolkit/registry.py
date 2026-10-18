@@ -14,7 +14,8 @@ There are two ways to declare a tool:
 
 2. Subclass ``Tool`` (the original mechanism, still used for tools which need
    class level customisation such as bespoke ui_elements, and by any external
-   plugins found through the ANISEED_TOOLKIT_PATHS environment variable).
+   plugins found through the ANISEED_TOOLKIT_PATHS environment variable, or
+   within the tools folder of an aniseed package).
 """
 import os
 import sys
@@ -180,6 +181,20 @@ def tool_class_from_function(func) -> type:
     )
 
 
+def _aniseed_package_tool_paths() -> list[str]:
+    """
+    Aniseed packages may expose tools through their tools folder. aniseed is
+    optional, so the toolkit still works when it is not available.
+    """
+    try:
+        import aniseed
+
+    except ImportError:
+        return []
+
+    return aniseed.packages.tool_paths()
+
+
 class ToolBox(factories.Factory):
     """
     This is a factory that contains all the tool's. It typically
@@ -200,10 +215,11 @@ class ToolBox(factories.Factory):
                     os.path.dirname(__file__),
                     "tools",
                 ),
-            ],
+            ] + _aniseed_package_tool_paths(),
             envvar="ANISEED_TOOLKIT_PATHS",
         )
         self._register_function_tools()
+        self._warn_duplicate_identifiers()
 
     def _register_function_tools(self):
         """
@@ -212,6 +228,25 @@ class ToolBox(factories.Factory):
         for func in _FUNCTION_TOOLS.values():
             self.register(tool_class_from_function(func))
 
+    def _warn_duplicate_identifiers(self):
+        """
+        Tool identifiers must be unique (per version) across the toolkit and
+        every aniseed package. Where two tools share one, the tool box returns
+        whichever it found first, so we warn rather than let one silently
+        replace the other.
+        """
+        keys = [
+            (self._get_identifier(tool_), self._get_version(tool_))
+            for tool_ in self._plugins
+        ]
+
+        for identifier, version in sorted(set(keys)):
+            if keys.count((identifier, version)) > 1:
+                print(
+                    f"Warning: {keys.count((identifier, version))} tools share the identifier "
+                    f"'{identifier}' (version {version}). Tool identifiers must be unique."
+                )
+
     def reload(self):
         """
         Re-searches the tool paths. Function tools are registered again as
@@ -219,6 +254,7 @@ class ToolBox(factories.Factory):
         """
         super(ToolBox, self).reload()
         self._register_function_tools()
+        self._warn_duplicate_identifiers()
         self._claim_package_attribute()
 
     def run(self, tool_name, *args, **kwargs):

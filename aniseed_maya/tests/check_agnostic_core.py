@@ -1,13 +1,15 @@
 """
 Checks that the core of aniseed is application agnostic.
 
-Outside of the components, hosts and mixins folders, nothing in aniseed may
-import an application specific library (maya, mref, aniseed_toolkit, ...).
-This check does two things:
+Nothing in aniseed may import an application specific library (maya, mref,
+aniseed_toolkit, ...). Application specific code belongs in an aniseed
+package, such as aniseed_maya_standard. This check does three things:
 
     1. Imports aniseed with those libraries blocked, so any import of them
        during the import of aniseed fails.
     2. Scans the source of every core module for imports of them.
+    3. Checks that, outside of an application, the standalone host is used
+       and maya only packages are not.
 
 usage: python check_agnostic_core.py <scripts_root> [<vendor_scripts_root>]
        (run with mayapy, or any python which has aniseed's vendored
@@ -24,7 +26,6 @@ vendor_root = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else os.path.joi
 )
 
 BLOCKED = ("maya", "mref", "aniseed_toolkit", "pymel", "OpenMaya")
-PLUGIN_FOLDERS = ("components", "hosts", "mixins")
 
 blocked_attempts = []
 
@@ -69,8 +70,7 @@ pattern = re.compile(
 aniseed_root = os.path.join(scripts_root, "aniseed")
 
 for root, folders, files in os.walk(aniseed_root):
-    relative = os.path.relpath(root, aniseed_root).split(os.sep)[0]
-    if relative in PLUGIN_FOLDERS or "__pycache__" in root:
+    if "__pycache__" in root:
         continue
 
     for filename in files:
@@ -80,6 +80,22 @@ for root, folders, files in os.walk(aniseed_root):
         with open(path, encoding="utf-8") as f:
             for match in pattern.finditer(f.read()):
                 failures.append(f"{os.path.relpath(path, aniseed_root)} imports {match.group(1)}")
+
+# -- 3. Outside of an application the standalone host should be used, and
+# -- packages written only for maya should not contribute components. Loading
+# -- the hosts attempts (and is expected to fail) to import maya, so this is
+# -- done after the blocked imports have been checked.
+try:
+    host_name = aniseed.host.get().name
+    if host_name != "standalone":
+        failures.append(f"expected the standalone host, got {host_name!r}")
+
+    for package in aniseed.packages.active():
+        if package.metadata.get("hosts") == ["maya"]:
+            failures.append(f"maya only package {package.name} is active outside of maya")
+
+except Exception as error:
+    failures.append(f"resolving the host and packages failed: {type(error).__name__}: {error}")
 
 if failures:
     for failure in failures:
