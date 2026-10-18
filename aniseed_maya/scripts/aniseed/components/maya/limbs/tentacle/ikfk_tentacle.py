@@ -121,17 +121,12 @@ class TentacleComponent(aniseed.RigComponent):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        # -- Its possible one or both of the joints are blank or missing, in
-        # -- which case there are no joints to represent.
-        try:
-            joints = aniseed_toolkit.scene.joints.get_between(
-                self.input("Start Joint").get(),
-                self.input("End Joint").get(),
-            )
-        except Exception:
-            joints = []
-
-        aniseed.component_outputs.declare_joint_outputs(self, "Out Joint", joints)
+        aniseed_toolkit.rig.component_outputs.declare_joint_outputs(
+            self,
+            "Out Joint",
+            self.input("Start Joint").get(),
+            self.input("End Joint").get(),
+        )
 
     def input_widget(self, requirement_name) -> QtWidgets.QWidget:
         """

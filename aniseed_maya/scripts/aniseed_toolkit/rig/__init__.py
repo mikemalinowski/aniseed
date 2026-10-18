@@ -6,6 +6,7 @@ Modules in this layer may import from the core and scene layers.
 For compatibility, the functions which used to live in the old
 aniseed_toolkit.rig module (all_controls, get, ...) are also available here.
 """
+from . import component_outputs
 from . import control
 from . import controls
 from . import guide
@@ -22,6 +23,7 @@ from .controls import mirror_control_shapes
 from .controls import opposing_controls
 
 __all__ = [
+    "component_outputs",
     "control",
     "controls",
     "guide",

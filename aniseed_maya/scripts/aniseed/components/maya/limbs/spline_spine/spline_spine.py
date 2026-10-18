@@ -832,17 +832,12 @@ class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        # -- Its possible one or both of the joints are blank or missing, in
-        # -- which case there are no joints to represent.
-        try:
-            joints = aniseed_toolkit.scene.joints.get_between(
-                self.input("Root Joint").get(),
-                self.input("Tip Joint").get(),
-            )
-        except Exception:
-            joints = []
-
-        aniseed.component_outputs.declare_joint_outputs(self, "FK Control", joints)
+        aniseed_toolkit.rig.component_outputs.declare_joint_outputs(
+            self,
+            "FK Control",
+            self.input("Root Joint").get(),
+            self.input("Tip Joint").get(),
+        )
 
     def _mirror_joints(self) -> list:
         """

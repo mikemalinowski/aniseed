@@ -306,7 +306,7 @@ class Spring(aniseed.RigComponent):
 
         # 2. Wipe any "Control N" outputs left over from a prior build, then build
         #    a control + curve-bind joint per guide and declare an output per control.
-        aniseed.component_outputs.clear_outputs(self, "Control ")
+        aniseed_toolkit.rig.component_outputs.clear_outputs(self, "Control ")
 
         curve_bind_joints = []
         control_parent = parent

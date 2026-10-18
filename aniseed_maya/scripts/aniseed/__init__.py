@@ -35,7 +35,6 @@ from . import constants
 from . import resources
 from . import environment
 from . import dialogs
-from . import component_outputs
 
 __version__ = "4.0.0"
 
