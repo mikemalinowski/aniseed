@@ -10,17 +10,18 @@ component non-mirrorable and hides the menu action.
 Mirroring duplicates the component and all of its children, then mirrors
 their transforms. It happens in this order:
 
-    1. Plan: the source subtree is gathered, and each component's mirror
-       items and parent item are recorded before anything changes. Every
-       twin's label is worked out up front.
-    2. Create the twins, parent before child. Each twin has its data copied,
-       search-and-replaced, internal addresses re-pointed at the twins and
-       its Location switched, all BEFORE its on_enter_stack runs. It is then
-       parented under its twin parent, and the mirrored parent item is
-       selected, so anything on_enter_stack creates (e.g. a joint created
-       from the selection) lands in the mirrored hierarchy.
-    3. Once every twin exists, the source items are mirrored onto the twin
-       items in one pass, paired by position.
+    1. Plan: the original subtree is gathered, and each component's mirror
+       items and parent item are recorded before anything changes. The
+       label of every mirrored component is worked out up front.
+    2. Create the mirrored components, parent before child. Each one has
+       its data copied, search-and-replaced, internal addresses re-pointed
+       at the other mirrored components and its Location switched, all
+       BEFORE its on_enter_stack runs. It is then parented under its
+       mirrored parent, and the mirrored parent item is selected, so
+       anything on_enter_stack creates (e.g. a joint created from the
+       selection) lands in the mirrored hierarchy.
+    3. Once every mirrored component exists, the original items are
+       mirrored onto the mirrored items in one pass, paired by position.
 
 Compose alongside RigComponent:
 
@@ -35,22 +36,28 @@ Compose alongside RigComponent:
 A mirrorable component provides:
 
     mirror_mixin_items_to_mirror()  The nodes to mirror, in a stable order.
-                                    The twin must return its corresponding
-                                    nodes in the same order.
-    mirror_mixin_parent_item()      The node selected before the twin's
-                                    on_enter_stack runs, i.e. where any
-                                    generated skeleton is parented. Return
-                                    an empty string for none.
+                                    The mirrored component must return its
+                                    corresponding nodes in the same order.
+    mirror_mixin_parent_item()      The node selected before the mirrored
+                                    component's on_enter_stack runs, i.e.
+                                    where any generated skeleton is
+                                    parented. Return an empty string for
+                                    none.
 
 and may optionally re-implement:
 
-    mirror_mixin_prepare_twin(source)  Called on the twin after its data has
-                                       been wrangled, before on_enter_stack.
-    mirror_mixin_post_mirror(source)   Called on the twin once all the
-                                       transforms have been mirrored.
-    can_mirror()                       To add further preconditions.
+    mirror_mixin_prepare(mirrored_from)      Called on the mirrored component
+                                             after its data has been
+                                             wrangled, before on_enter_stack.
+    mirror_mixin_post_mirror(mirrored_from)  Called on the mirrored component
+                                             once all the transforms have
+                                             been mirrored.
+    can_mirror()                             To add further preconditions.
 
-During a mirror, a twin can use these helpers from its hooks:
+In both hooks, self is the newly created mirrored component, and
+mirrored_from is the original component it was mirrored from.
+
+During a mirror, a mirrored component can use these helpers from its hooks:
 
     mirror_mixin_mirrored_name(name)       The name with the search and
                                            replace applied.
@@ -58,11 +65,12 @@ During a mirror, a twin can use these helpers from its hooks:
                                            node (what it became earlier in
                                            this mirror, else the replaced
                                            name if it exists, else itself).
-    mirror_mixin_counterparts_exist(s, t)  True when every twin node exists,
-                                           differs from its source and is not
-                                           mirrored by another component.
-    mirror_mixin_mirrored_nodes()          Source node -> node it became, so
-                                           far in this mirror.
+    mirror_mixin_counterparts_exist(s, t)  True when every mirrored node
+                                           exists, differs from its original
+                                           and is not mirrored by another
+                                           component.
+    mirror_mixin_mirrored_nodes()          Original node -> node it became,
+                                           so far in this mirror.
     mirror_mixin_copy_nodes(nodes)         Copies user supplied nodes into
                                            the mirrored hierarchy.
 """
@@ -86,7 +94,7 @@ class MirrorMixin:
     # -- for each direction of mirroring
     _SCRIBBLE_KEY = "aniseed_mirror_expression"
 
-    # -- Appended to a twin's label when the search and replace does not
+    # -- Appended to a mirrored component's label when the search and replace does not
     # -- give it a label of its own
     _MIRRORED_LABEL_SUFFIX = " (Mirrored)"
 
@@ -122,16 +130,16 @@ class MirrorMixin:
         documentation for the order in which this happens.
 
         The scene changes are made in a single undo chunk. Note that undoing
-        does not remove the twin components from the stack.
+        does not remove the mirrored components from the stack.
 
         Args:
-            search_for: Regex applied to the twins' labels, inputs and options.
-                Defaults to the source location as a whole token (so "LF"
+            search_for: Regex applied to the mirrored components' labels, inputs and options.
+                Defaults to the original location as a whole token (so "LF"
                 matches "JNT_Arm_01_LF" and "Arm LF 01", but not "LFoot").
             replace_with: The replacement. Defaults to the target location.
 
         Returns:
-            The twin of this component, or None if this component is not on
+            The mirrored version of this component, or None if this component is not on
             a mirrorable side.
         """
         target_location = self._mirror_target_location()
@@ -152,7 +160,7 @@ class MirrorMixin:
                 return self._mirror_subtree(
                     expression=expression,
                     replace_with=replace_with,
-                    source_location=self.option("Location").get(),
+                    original_location=self.option("Location").get(),
                     target_location=target_location,
                 )
             finally:
@@ -165,10 +173,10 @@ class MirrorMixin:
         """
         Return the list of scene-node names representing this component's
         bones. These transforms will be reflected across the mirror plane
-        onto the twin's corresponding nodes using
+        onto the mirrored component's corresponding nodes using
         ``aniseed_toolkit.scene.mirror.mirror_transforms``.
 
-        The twin must return its corresponding nodes in the same order.
+        The mirrored component must return its corresponding nodes in the same order.
 
         Default: empty list (no scene-side mirroring).
         """
@@ -176,40 +184,41 @@ class MirrorMixin:
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Return the name of the node to select before the twin's
+        Return the name of the node to select before the mirrored component's
         on_enter_stack runs - typically the parent of the component's first
         joint, so a joint created from the selection is parented correctly.
-        The mirrored equivalent of this node is selected for the twin.
+        The mirrored equivalent of this node is selected for the mirrored component.
 
         Default: empty string (nothing is selected).
         """
         return ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        Called on the twin after its data has been copied, search-and-replaced
-        and its Location switched, but before its on_enter_stack runs. Use
-        this to wrangle any further data, such as clearing an input so that
-        on_enter_stack regenerates a skeleton.
+        Called on the newly created mirrored component (self) after its data
+        has been copied, search-and-replaced and its Location switched, but
+        before its on_enter_stack runs. Use this to wrangle any further data,
+        such as clearing an input so that on_enter_stack regenerates a
+        skeleton.
 
         Args:
-            source: The component this twin is a mirror of
+            mirrored_from: The original component this one was mirrored from
         """
         return None
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Called on the twin once every transform in the mirrored subtree has
-        been mirrored.
+        Called on the newly created mirrored component (self) once every
+        transform in the mirrored subtree has been mirrored.
 
         Args:
-            source: The component this twin is a mirror of
+            mirrored_from: The original component this one was mirrored from
         """
         return None
 
     # ----------------------------------------------------------------------------------
-    # Helpers for use from mirror_mixin_prepare_twin / mirror_mixin_post_mirror.
-    # They are only meaningful on a twin during a mirror.
+    # Helpers for use from mirror_mixin_prepare / mirror_mixin_post_mirror.
+    # They are only meaningful on a mirrored component during a mirror.
     # ----------------------------------------------------------------------------------
     def mirror_mixin_mirrored_name(self, name: str) -> str:
         """
@@ -244,36 +253,41 @@ class MirrorMixin:
 
         return ""
 
-    def mirror_mixin_counterparts_exist(self, source_nodes: list, twin_nodes: list = None) -> bool:
+    def mirror_mixin_counterparts_exist(
+            self,
+            original_nodes: list,
+            mirrored_nodes: list = None,
+    ) -> bool:
         """
-        True when every twin node exists, differs from its source node, and
-        is not already mirrored by another component - i.e. the other side
-        already has its own nodes which nothing else drives (for instance the
-        user built a symmetric skeleton) and they can be used as they are.
+        True when every mirrored node exists, differs from its original node,
+        and is not already mirrored by another component - i.e. the other
+        side already has its own nodes which nothing else drives (for
+        instance the user built a symmetric skeleton) and they can be used as
+        they are.
 
-        Nodes which belong to another component (such as the twin of an
+        Nodes which belong to another component (such as the result of an
         earlier mirror) are never shared, so mirroring the same component
-        twice gives the second twin nodes of its own.
+        twice gives the second mirrored component nodes of its own.
 
         Args:
-            source_nodes: The source component's nodes
-            twin_nodes: The twin's corresponding nodes. Defaults to the
-                mirrored names of the source nodes.
+            original_nodes: The original component's nodes
+            mirrored_nodes: The mirrored component's corresponding nodes.
+                Defaults to the mirrored names of the original nodes.
         """
-        source_nodes = [node for node in source_nodes or [] if node]
+        original_nodes = [node for node in original_nodes or [] if node]
 
-        if twin_nodes is None:
-            twin_nodes = [self.mirror_mixin_mirrored_name(node) for node in source_nodes]
-        twin_nodes = [node for node in twin_nodes if node]
+        if mirrored_nodes is None:
+            mirrored_nodes = [self.mirror_mixin_mirrored_name(node) for node in original_nodes]
+        mirrored_nodes = [node for node in mirrored_nodes if node]
 
-        if not source_nodes or len(source_nodes) != len(twin_nodes):
+        if not original_nodes or len(original_nodes) != len(mirrored_nodes):
             return False
 
-        for source_node, twin_node in zip(source_nodes, twin_nodes):
-            if twin_node == source_node or not mref.objExists(twin_node):
+        for original_node, mirrored_node in zip(original_nodes, mirrored_nodes):
+            if mirrored_node == original_node or not mref.objExists(mirrored_node):
                 return False
 
-        claimed = set(twin_nodes)
+        claimed = set(mirrored_nodes)
         for other in self.stack.components():
             if other is self or not isinstance(other, MirrorMixin):
                 continue
@@ -285,7 +299,7 @@ class MirrorMixin:
 
     def mirror_mixin_mirrored_nodes(self) -> dict:
         """
-        Returns a mapping of each source node to the node it became, for the
+        Returns a mapping of each original node to the node it became, for the
         components mirrored so far in this mirror. Outside of a mirror this
         is empty.
         """
@@ -294,7 +308,7 @@ class MirrorMixin:
 
     def mirror_mixin_copy_nodes(self, nodes: list) -> list:
         """
-        Copies the given nodes (without their children) for the twin, in
+        Copies the given nodes (without their children) for the mirrored component, in
         order. Each copy is parented under the copy of its parent if that
         parent is also in the list, otherwise under the mirrored equivalent
         of its parent. Each copy is given the mirrored name, made unique if
@@ -353,7 +367,7 @@ class MirrorMixin:
     # mixin_functions above.
     # ----------------------------------------------------------------------------------
     def _invoke_mirror_from_ui(self):
-        source_location = self.option("Location").get()
+        original_location = self.option("Location").get()
         target_location = self._mirror_target_location()
 
         if not target_location:
@@ -364,14 +378,14 @@ class MirrorMixin:
         # -- Remember the last expression for each direction separately, as
         # -- an LF to RT expression is no use when mirroring RT to LF
         user_data = scribble.get(self._SCRIBBLE_KEY)
-        direction_key = f"{source_location}:{target_location}"
+        direction_key = f"{original_location}:{target_location}"
         prior = user_data.get(direction_key, default_expression)
 
         response = qtility.request.text(
             title="Mirror Component",
             message=(
                 "Enter a search-and-replace expression to apply to the "
-                "twin's data.\n\n"
+                "mirrored component's data.\n\n"
                 "Format: search:replace  (the search is treated as a regex)\n\n"
                 f"Default swaps the location token: \"{default_expression}\""
             ),
@@ -417,147 +431,151 @@ class MirrorMixin:
         if location_option is None:
             return ""
 
-        source_location = location_option.get()
+        original_location = location_option.get()
 
-        if source_location == self.config.left:
+        if original_location == self.config.left:
             return self.config.right
 
-        if source_location == self.config.right:
+        if original_location == self.config.right:
             return self.config.left
 
         return ""
 
     def _default_mirror_expression(self) -> tuple:
         """
-        Returns the default (search, replace) pair: the source location as a
+        Returns the default (search, replace) pair: the original location as a
         whole token (not touching any other letter or digit) and the target
         location.
         """
-        source_location = self.option("Location").get()
+        original_location = self.option("Location").get()
         target_location = self._mirror_target_location()
 
-        search_for = rf"(?<![A-Za-z0-9]){re.escape(source_location)}(?![A-Za-z0-9])"
+        search_for = rf"(?<![A-Za-z0-9]){re.escape(original_location)}(?![A-Za-z0-9])"
         return search_for, target_location
 
-    def _mirror_subtree(self, expression, replace_with, source_location, target_location):
+    def _mirror_subtree(self, expression, replace_with, original_location, target_location):
         """
-        Creates the twin of this component and all of its descendants, then
-        mirrors their transforms. Returns the twin of this component.
+        Creates mirrored versions of this component and all of its descendants, then
+        mirrors their transforms. Returns the mirrored version of this component.
         """
         stack = self.stack
 
         # -- 1. Plan. Gather the subtree (parents before children) and record
-        # -- everything we need from the source before anything changes.
-        sources = self._subtree(self)
+        # -- everything we need from the original before anything changes.
+        originals = self._subtree(self)
 
-        source_items = {
-            source: self._items_of(source)
-            for source in sources
+        original_items = {
+            original: self._items_of(original)
+            for original in originals
         }
 
         parent_items = {
-            source: self._parent_item_of(source)
-            for source in sources
+            original: self._parent_item_of(original)
+            for original in originals
         }
 
-        twin_labels = self._plan_twin_labels(sources, expression, replace_with)
+        mirrored_labels = self._plan_mirrored_labels(originals, expression, replace_with)
 
-        # -- Addresses in the twins which point at a component in the
-        # -- subtree should point at that component's twin. The search and
+        # -- Addresses in the mirrored components which point at a component in the
+        # -- subtree should point at that component's mirrored component. The search and
         # -- replace may already have changed the label inside an address,
         # -- so map both the original and the replaced label.
         label_map = dict()
-        for source in sources:
-            label_map[source.label()] = twin_labels[source]
-            label_map[expression.sub(replace_with, source.label())] = twin_labels[source]
+        for original in originals:
+            label_map[original.label()] = mirrored_labels[original]
+            label_map[expression.sub(replace_with, original.label())] = mirrored_labels[original]
 
-        # -- 2. Create the twins, parent before child
-        twins = dict()
+        # -- 2. Create the mirrored components, parent before child
+        mirrored_components = dict()
         node_map = dict()
 
-        for source in sources:
+        for original in originals:
 
-            twin = stack.add_component(
-                component_type=source.identifier,
-                label=twin_labels[source],
+            mirrored_component = stack.add_component(
+                component_type=original.identifier,
+                label=mirrored_labels[original],
                 suppress_events=True,
             )
 
             # -- Copy the data, then wrangle it before on_enter_stack runs.
             # -- copy() and search_and_replace() both set the label, so the
             # -- planned label is applied afterwards.
-            twin.copy(source)
-            twin.search_and_replace(search_for=expression.pattern, replace_with=replace_with)
-            twin.set_label(twin_labels[source])
+            mirrored_component.copy(original)
+            mirrored_component.search_and_replace(
+                search_for=expression.pattern,
+                replace_with=replace_with,
+            )
+            mirrored_component.set_label(mirrored_labels[original])
 
-            self._retarget_addresses(twin, label_map)
+            self._retarget_addresses(mirrored_component, label_map)
 
-            location_option = twin.option("Location")
-            if location_option is not None and location_option.get(resolved=False) == source_location:
+            location_option = mirrored_component.option("Location")
+            if location_option is not None and location_option.get(resolved=False) == original_location:
                 location_option.set(target_location)
 
-            if isinstance(twin, MirrorMixin):
-                twin._mirror_context = dict(
+            if isinstance(mirrored_component, MirrorMixin):
+                mirrored_component._mirror_context = dict(
                     expression=expression,
                     replace_with=replace_with,
                     node_map=node_map,
                 )
-                twin.mirror_mixin_prepare_twin(source)
+                mirrored_component.mirror_mixin_prepare(original)
 
-            # -- The twin of the root goes alongside the source. Every other
-            # -- twin goes under the twin of its parent.
-            twin_parent = twins.get(source.parent, source.parent)
-            twin.set_parent(parent=twin_parent)
+            # -- The mirrored version of the root goes alongside the original. Every other
+            # -- mirrored component goes under the mirrored version of its parent.
+            mirrored_parent = mirrored_components.get(original.parent, original.parent)
+            mirrored_component.set_parent(parent=mirrored_parent)
 
-            # -- Select the mirrored equivalent of the source's parent item so
+            # -- Select the mirrored equivalent of the original's parent item so
             # -- anything created from the selection lands in the mirrored
             # -- hierarchy
-            self._select_mirrored(parent_items[source], node_map, expression, replace_with)
+            self._select_mirrored(parent_items[original], node_map, expression, replace_with)
 
-            twin.on_enter_stack()
+            mirrored_component.on_enter_stack()
 
-            stack.component_added.emit(twin)
+            stack.component_added.emit(mirrored_component)
             stack.changed.emit()
 
-            twins[source] = twin
+            mirrored_components[original] = mirrored_component
 
-            # -- Record which node each source item became, so that the
+            # -- Record which node each original item became, so that the
             # -- children of this component can find their mirrored parent
-            for source_item, twin_item in zip(source_items[source], self._items_of(twin)):
-                if source_item and twin_item:
-                    node_map[source_item] = twin_item
+            mirrored_items = self._items_of(mirrored_component)
+            for original_item, mirrored_item in zip(original_items[original], mirrored_items):
+                if original_item and mirrored_item:
+                    node_map[original_item] = mirrored_item
 
         # -- 3. Mirror the transforms in a single pass, so that parents and
         # -- children are all resolved together
         transforms = []
         targets = []
 
-        for source in sources:
-            twin_items = self._items_of(twins[source])
+        for original in originals:
+            mirrored_items = self._items_of(mirrored_components[original])
 
-            if len(twin_items) != len(source_items[source]):
+            if len(mirrored_items) != len(original_items[original]):
                 print(
-                    f"Mirror : {twins[source].label()} has {len(twin_items)} items to "
-                    f"mirror but {source.label()} has {len(source_items[source])}. "
-                    f"Only the first {min(len(twin_items), len(source_items[source]))} "
+                    f"Mirror : {mirrored_components[original].label()} has {len(mirrored_items)} items to "
+                    f"mirror but {original.label()} has {len(original_items[original])}. "
+                    f"Only the first {min(len(mirrored_items), len(original_items[original]))} "
                     f"are paired."
                 )
 
-            for source_item, twin_item in zip(source_items[source], twin_items):
+            for original_item, mirrored_item in zip(original_items[original], mirrored_items):
 
-                if not source_item or not twin_item:
+                if not original_item or not mirrored_item:
                     continue
 
-                if source_item == twin_item:
-                    print(f"Mirror : {source_item} would be mirrored onto itself, skipping")
+                if original_item == mirrored_item:
+                    print(f"Mirror : {original_item} would be mirrored onto itself, skipping")
                     continue
 
-                if not mref.objExists(source_item) or not mref.objExists(twin_item):
-                    print(f"Mirror : cannot pair {source_item} with {twin_item}, skipping")
+                if not mref.objExists(original_item) or not mref.objExists(mirrored_item):
+                    print(f"Mirror : cannot pair {original_item} with {mirrored_item}, skipping")
                     continue
 
-                transforms.append(source_item)
-                targets.append(twin_item)
+                transforms.append(original_item)
+                targets.append(mirrored_item)
 
         if transforms:
             aniseed_toolkit.scene.mirror.mirror_transforms(
@@ -567,17 +585,17 @@ class MirrorMixin:
                 behaviour=True,
             )
 
-        for source in sources:
-            twin = twins[source]
-            if isinstance(twin, MirrorMixin):
-                twin.mirror_mixin_post_mirror(source)
+        for original in originals:
+            mirrored_component = mirrored_components[original]
+            if isinstance(mirrored_component, MirrorMixin):
+                mirrored_component.mirror_mixin_post_mirror(original)
 
         # -- The context only applies during the mirror
-        for twin in twins.values():
-            if hasattr(twin, "_mirror_context"):
-                del twin._mirror_context
+        for mirrored_component in mirrored_components.values():
+            if hasattr(mirrored_component, "_mirror_context"):
+                del mirrored_component._mirror_context
 
-        return twins[self]
+        return mirrored_components[self]
 
     @staticmethod
     def _subtree(component) -> list:
@@ -610,9 +628,9 @@ class MirrorMixin:
             return ""
         return component.mirror_mixin_parent_item() or ""
 
-    def _plan_twin_labels(self, sources, expression, replace_with) -> dict:
+    def _plan_mirrored_labels(self, originals, expression, replace_with) -> dict:
         """
-        Works out a unique label for the twin of every source component. The
+        Works out a unique label for the mirrored version of every original component. The
         search and replace is applied to the label. If that leaves it
         unchanged, or it is already taken, the mirrored suffix (and a counter
         if needed) is added.
@@ -620,10 +638,10 @@ class MirrorMixin:
         taken = {component.label() for component in self.stack.components()}
         labels = dict()
 
-        for source in sources:
-            label = expression.sub(replace_with, source.label())
+        for original in originals:
+            label = expression.sub(replace_with, original.label())
 
-            if label == source.label() or label in taken:
+            if label == original.label() or label in taken:
                 label += self._MIRRORED_LABEL_SUFFIX
 
             candidate = label
@@ -633,7 +651,7 @@ class MirrorMixin:
                 counter += 1
 
             taken.add(candidate)
-            labels[source] = candidate
+            labels[original] = candidate
 
         return labels
 

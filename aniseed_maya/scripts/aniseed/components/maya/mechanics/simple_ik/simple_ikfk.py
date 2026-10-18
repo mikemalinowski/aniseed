@@ -319,7 +319,7 @@ class SimpleIKFKComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed.builders.setup_fk_worldspace_switches(self.fk_controls, rig=self.rig)
+            aniseed_toolkit.rig.space.setup_fk_worldspace_switches(self.fk_controls, config=self.config)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -496,11 +496,11 @@ class SimpleIKFKComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(root_joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
         Uses the other side's chain if it already exists (the search and
-        replaced names), otherwise copies the source chain (only the joints
-        from the root to the tip) into the mirrored hierarchy for this twin
+        replaced names), otherwise copies the original chain (only the joints
+        from the root to the tip) into the mirrored hierarchy for this component
         to drive.
 
         The "IK Control Transform" option is left to the search and replace,
@@ -513,19 +513,19 @@ class SimpleIKFKComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
                     f"Mirror : {self.label()} IK Control Transform {ik_transform} "
                     f"does not exist"
                 )
-            elif ik_transform == source.option("IK Control Transform").get():
+            elif ik_transform == mirrored_from.option("IK Control Transform").get():
                 print(
                     f"Mirror : {self.label()} IK Control Transform {ik_transform} "
-                    f"is the same node as the source's"
+                    f"is the same node as the original's"
                 )
 
-        source_chain = source._mirror_chain()
-        if not source_chain:
+        original_chain = mirrored_from._mirror_chain()
+        if not original_chain:
             return
 
-        if self.mirror_mixin_counterparts_exist(source_chain, self._mirror_chain()):
+        if self.mirror_mixin_counterparts_exist(original_chain, self._mirror_chain()):
             return
 
-        copies = self.mirror_mixin_copy_nodes(source_chain)
+        copies = self.mirror_mixin_copy_nodes(original_chain)
         self.input("Root Joint").set(copies[0])
         self.input("Tip Joint").set(copies[-1])

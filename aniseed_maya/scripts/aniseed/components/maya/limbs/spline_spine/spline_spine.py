@@ -832,12 +832,17 @@ class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         This ensures we are supporting a dynamic number of output attributes based
         on the inputs.
         """
-        aniseed.component_outputs.declare_joint_outputs(
-            self,
-            "FK Control",
-            self.input("Root Joint").get(),
-            self.input("Tip Joint").get(),
-        )
+        # -- Its possible one or both of the joints are blank or missing, in
+        # -- which case there are no joints to represent.
+        try:
+            joints = aniseed_toolkit.scene.joints.get_between(
+                self.input("Root Joint").get(),
+                self.input("Tip Joint").get(),
+            )
+        except Exception:
+            joints = []
+
+        aniseed.component_outputs.declare_joint_outputs(self, "FK Control", joints)
 
     def _mirror_joints(self) -> list:
         """
@@ -906,14 +911,14 @@ class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         """
         Returns the joints from the root to the tip, followed by the control
         guides if there is an active guide. The joints come first because a
-        twin always has a guide after entering the stack, even when the
-        source does not.
+        mirrored component always has a guide after entering the stack, even when the
+        original does not.
         """
         return self._mirror_joints() + self._mirror_guides()
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the root joint, which is where the twin creates
+        Returns the parent of the root joint, which is where the mirrored component creates
         its joints.
         """
         root_joint = self.input("Root Joint").get()
@@ -923,63 +928,63 @@ class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(root_joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        The copied guide data still links to the source's guide, which would
-        stop the twin creating its own, so that link is removed. If the
-        other side joints already exist the twin uses them, otherwise it
-        creates a chain of the same length as the source's.
+        The copied guide data still links to the original's guide, which would
+        stop this component creating its own, so that link is removed. If the
+        other side joints already exist this component uses them, otherwise it
+        creates a chain of the same length as the original's.
         """
         guide_data = copy.deepcopy(self.guide_data())
         guide_data["LinkedGuide"] = ""
         self.option("GuideData").set(guide_data)
 
-        source_joints = source._mirror_joints()
+        original_joints = mirrored_from._mirror_joints()
 
-        if self.mirror_mixin_counterparts_exist(source_joints, self._mirror_joints()):
+        if self.mirror_mixin_counterparts_exist(original_joints, self._mirror_joints()):
             self.option("Joint Count").set(0)
             return
 
-        self.option("Joint Count").set(len(source_joints) if len(source_joints) >= 2 else 0)
+        self.option("Joint Count").set(len(original_joints) if len(original_joints) >= 2 else 0)
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        While the twin's guide is active its joints follow the guide, with
+        While this component's guide is active its joints follow the guide, with
         offsets taken from where the joints were when the guide was made, so
         they do not take the mirrored transforms exactly. The guide is
         therefore removed, the joints mirrored directly and the guide data
-        set to the mirror of the source's control points. The guide is then
-        made again (with the joints in place) if the source has one.
+        set to the mirror of the original's control points. The guide is then
+        made again (with the joints in place) if the original has one.
         """
-        source_joints = source._mirror_joints()
-        twin_joints = self._mirror_joints()
+        original_joints = mirrored_from._mirror_joints()
+        mirrored_joints = self._mirror_joints()
 
-        if not source_joints or len(source_joints) != len(twin_joints):
+        if not original_joints or len(original_joints) != len(mirrored_joints):
             return
 
-        source_matrices = source._mirror_control_matrices()
+        original_matrices = mirrored_from._mirror_control_matrices()
 
         self.user_func_remove_guide()
 
         aniseed_toolkit.scene.mirror.mirror_transforms(
-            transforms=source_joints,
-            targets=twin_joints,
+            transforms=original_joints,
+            targets=mirrored_joints,
             across=self.MIRROR_PLANE,
             behaviour=True,
         )
 
-        # -- Mirror each control point, then store it relative to the twin's
+        # -- Mirror each control point, then store it relative to this component's
         # -- root joint. The spline's upvectors are offset along each control
         # -- point's X axis. A behaviour mirror negates that axis, which would
-        # -- put the twin's upvectors on the other side of its curve and twist
-        # -- it slightly differently from the source as it bends. So after the
+        # -- put this component's upvectors on the other side of its curve and twist
+        # -- it slightly differently from the original as it bends. So after the
         # -- behaviour mirror each control point is turned 180 degrees about
         # -- its Z axis, which mirrors its X (and Y) axis instead.
         root_joint = self.input("Root Joint").get()
         buffer = mref.create("transform")
         control_transforms = []
 
-        for matrix in source_matrices:
+        for matrix in original_matrices:
             mref.xform(buffer.full_name(), matrix=matrix, worldSpace=True)
             aniseed_toolkit.scene.mirror.mirror_transforms(
                 transforms=[buffer.full_name()],
@@ -1004,7 +1009,7 @@ class SplineSpine(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         guide_data["LinkedGuide"] = ""
         self.option("GuideData").set(guide_data)
 
-        if source.has_guide():
+        if mirrored_from.has_guide():
             self.user_func_create_guide()
 
 

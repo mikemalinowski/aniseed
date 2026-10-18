@@ -5,8 +5,8 @@ saving and loading option data as json files.
 import json
 import os
 
-from maya import cmds
 import qtility
+import crosswalk
 
 
 def request_count(count, title: str, message: str) -> int:
@@ -22,7 +22,7 @@ def _scene_directory() -> str:
     """
     Returns the directory of the currently open scene file
     """
-    return os.path.dirname(cmds.file(query=True, sceneName=True))
+    return os.path.dirname(crosswalk.scene.path())
 
 
 def clear_option(option, title: str, message: str, empty_value) -> None:

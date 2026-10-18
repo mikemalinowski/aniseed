@@ -5,12 +5,120 @@ them, each of which blends between the root and tip and aims at the tip.
 import typing
 
 import maya.cmds as mc
+import mref
 
 from ..core import maths as _maths
 from ..rig import control as _control
+from ..scene import shapes as _shapes
 
 if typing.TYPE_CHECKING:
     import aniseed
+
+
+def create_twist_driver(
+        joints: list,
+        parent: str,
+        root: str,
+        tip: str,
+        description: str,
+        location: str,
+        config: "aniseed.RigConfiguration",
+        constrain_root: bool = True,
+        constrain_tip: bool = True,
+        shape_rotation=None,
+) -> "TwistSetup":
+    """
+    Builds a twist setup with one twist per joint between the root and tip
+    drivers, and drives each joint with its twist.
+
+    The twist org is parented under the parent and matched to the root
+    driver, and the twist tip is placed at the tip driver (keeping the org's
+    rotation). The root and tip can optionally be parent constrained to their
+    drivers. Each twist's blend factor is set from its joint's distance from
+    the root driver relative to the root to tip distance, and the joint is
+    parent constrained to its twist.
+
+    Args:
+        joints: The joints to drive, one twist is created for each
+        parent: The node to parent the twist org under
+        root: The node driving the root of the twist
+        tip: The node driving the tip of the twist
+        description: The description used in the twist node names
+        location: The location used in the twist node names
+        config: The aniseed.RigConfiguration instance
+        constrain_root: If True, the twist root is parent constrained (with
+            offset) to the root driver
+        constrain_tip: If True, the twist tip is parent constrained (with
+            offset) to the tip driver
+        shape_rotation: Optional x, y, z rotation applied to the shapes of
+            every twist control
+
+    Returns:
+        The TwistSetup instance
+    """
+    twist_builder = create_twist_setup(
+        twist_count=len(joints),
+        description=description,
+        location=location,
+        config=config,
+    )
+
+    # -- Place the org at the root driver and the tip at the tip
+    # -- driver, keeping the tip aligned to the org
+    twist_org = mref.get(twist_builder.org())
+    twist_org.set_parent(parent)
+    twist_org.match_to(root)
+
+    twist_tip = mref.get(twist_builder.tip())
+    twist_tip.set_position(
+        mref.get(tip).get_position(space="world"),
+        space="world",
+    )
+    twist_tip.set_rotation(
+        twist_org.get_rotation(space="world"),
+        space="world",
+    )
+
+    if constrain_root:
+        mref.parentConstraint(
+            root,
+            twist_builder.root(),
+            maintainOffset=True,
+        )
+
+    if constrain_tip:
+        mref.parentConstraint(
+            tip,
+            twist_tip,
+            maintainOffset=True,
+        )
+
+    twist_builder.reset_aim()
+
+    # -- Each twist is blended by its joint's distance along the twist
+    total_distance = _maths.distance_between(root, tip)
+
+    for idx, (joint, twist) in enumerate(zip(joints, twist_builder.twists())):
+
+        twist_builder.set_blend_factor(
+            idx,
+            _maths.distance_between(root, joint) / total_distance,
+        )
+
+        mref.parentConstraint(
+            twist,
+            joint,
+            maintainOffset=True,
+        )
+
+    if shape_rotation is not None:
+        for twist_control in twist_builder.all_controls():
+            _shapes.rotate(
+                twist_control,
+                *shape_rotation,
+            )
+
+    return twist_builder
 
 
 def create_twist_setup(

@@ -236,21 +236,21 @@ class SimpleFkComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(joints[0]).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
         Uses the other side's joints if they already exist (the search and
-        replaced names), otherwise copies the source joints into the mirrored
-        hierarchy for this twin to drive.
+        replaced names), otherwise copies the original joints into the mirrored
+        hierarchy for this component to drive.
         """
-        source_joints = list(source.input("Joints To Drive").get() or [])
-        twin_joints = list(self.input("Joints To Drive").get() or [])
+        original_joints = list(mirrored_from.input("Joints To Drive").get() or [])
+        mirrored_joints = list(self.input("Joints To Drive").get() or [])
 
-        if not source_joints:
+        if not original_joints:
             return
 
-        if self.mirror_mixin_counterparts_exist(source_joints, twin_joints):
+        if self.mirror_mixin_counterparts_exist(original_joints, mirrored_joints):
             return
 
         self.input("Joints To Drive").set(
-            self.mirror_mixin_copy_nodes(source_joints),
+            self.mirror_mixin_copy_nodes(original_joints),
         )

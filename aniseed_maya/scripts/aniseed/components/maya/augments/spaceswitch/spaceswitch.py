@@ -7,14 +7,12 @@ position only and orientation only flags apply to every space.
 """
 import os
 import uuid
-import mref
 import aniseed
 import qtility
 import collections
 import aniseed_toolkit
 
 from Qt import QtCore, QtWidgets
-from maya import cmds
 
 
 class SpaceSwitchComponent(aniseed.RigComponent):
@@ -119,114 +117,73 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         if not data or not node_to_drive or not host:
             return
 
-        aniseed_toolkit.core.attributes.add_separator(host)
+        # -- Space targets may be addresses, so resolve them to node names
+        spaces = [
+            dict(
+                space,
+                target=self._resolve(space["target"]),
+                target_transform=self._resolve(space["target_transform"]),
+            )
+            for space in data.get("spaces", list())
+        ]
 
-        # -- If the node to drive is part of a control we drive its org
-        control = aniseed_toolkit.rig.control.get(node_to_drive)
-        if control:
-            node_to_drive = control.org
-        node_to_drive = mref.get(node_to_drive)
-
-        spaces = data.get("spaces", list())
-
-        spaces_attribute = mref.get(host).add_attribute(
-            "spaces",
-            value=None,
-            attribute_type="enum",
-            enumName=":".join(space["label"] for space in spaces),
-            keyable=True,
+        aniseed_toolkit.rig.space.create_space_switch(
+            driven=node_to_drive,
+            host=host,
+            spaces=spaces,
+            default_space=data["default_space"],
+            config=self.config,
         )
 
-        orientation_only = False
-        position_only = False
-
-        default_space_idx = 0
-        all_constraints = []
-
-        for idx, space in enumerate(spaces):
-
-            if space["orientation_only"]:
-                orientation_only = True
-
-            if space["position_only"]:
-                position_only = True
-
-            if space["label"] == data["default_space"]:
-                default_space_idx = idx
-
-            target = self._resolve(space["target"])
-            target_transform = self._resolve(space["target_transform"])
-
-            matrix_to_restore = None
-            maintain_offset = True
-
-            # -- If we're given a target transform, we constrain to a point
-            # -- at that transform, with the node to drive moved there
-            # -- whilst constraining
-            if target_transform:
-                target = mref.create(
-                    "transform",
-                    name=self.config.generate_name(
-                        classification="loc",
-                        description="target_point",
-                        location=self.config.middle,
-                    ),
-                )
-
-                matrix_to_restore = node_to_drive.get_matrix(space="world")
-                target.match_to(target_transform)
-                maintain_offset = False
-
-            constraints = [
-                mref.parentConstraint(
-                    target,
-                    node_to_drive,
-                    maintainOffset=maintain_offset,
-                )[0],
-            ]
-
-            if space["include_scale"]:
-                constraints.append(
-                    mref.scaleConstraint(
-                        target,
-                        node_to_drive,
-                        maintainOffset=maintain_offset,
-                    )[0]
-                )
-
-            for constraint in constraints:
-
-                # -- The condition nodes are left unnamed
-                condition = mref.create("condition")
-                condition.secondTerm.set(idx)
-                condition.colorIfTrueR.set(1)
-                condition.colorIfFalseR.set(0)
-
-                # -- The constraint type is identified by Maya's default
-                # -- constraint naming, so a driven node with "scale" in its
-                # -- name breaks this (the alias query returns None)
-                weight_query = cmds.scaleConstraint if "scale" in constraint.name() else cmds.parentConstraint
-                weight_alias = weight_query(constraint.full_name(), query=True, weightAliasList=True)[-1]
-
-                # -- connectAttr rather than Attribute.connect so that a
-                # -- failed connection still raises
-                mref.connectAttr(spaces_attribute, condition.firstTerm)
-                mref.connectAttr(condition.outColorR, constraint.attr(weight_alias))
-
-            if matrix_to_restore:
-                node_to_drive.set_matrix(matrix_to_restore, space="world")
-
-            all_constraints.extend(constraints)
-
-        if position_only:
-            self._disconnect_channel(all_constraints, node_to_drive, "rotate")
-
-        if orientation_only:
-            self._disconnect_channel(all_constraints, node_to_drive, "translate")
-
-        spaces_attribute.set(default_space_idx)
-
         return True
+
+    @classmethod
+    def add_to(cls, component, label: str, driven: str, default_space: str, spaces: list):
+        """
+        Adds a Space Switch component to the stack as a child of the given
+        component. The driven node also hosts the space switch attribute.
+
+        Other components can reach this without importing this module, via
+        ``self.rig.component_library.request("Augment : Space Switch").add_to(...)``.
+
+        Args:
+            component: The component to add the space switch beneath
+            label: The label for the space switch component
+            driven: The address of the node to be driven
+            default_space: The label of the space which should be active by default
+            spaces: List of (label, target address) tuples, in the order they
+                should appear
+
+        Returns:
+            The space switch component
+        """
+        space_switch = component.stack.add_component(
+            component_type=cls.identifier,
+            label=label,
+            parent=component,
+            inputs={
+                "To Be Driven": driven,
+                "Attribute Host": driven,
+            },
+        )
+        space_switch.option("_Data").set(
+            {
+                "default_space": default_space,
+                "spaces": [
+                    {
+                        "target": target,
+                        "position_only": False,
+                        "orientation_only": False,
+                        "target_transform": "",
+                        "label": space_label,
+                        "include_scale": True,
+                        "uuid_": str(uuid.uuid4()),
+                    }
+                    for space_label, target in spaces
+                ]
+            }
+        )
+        return space_switch
 
     def _resolve(self, value):
         """
@@ -240,30 +197,6 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
         attribute = self.rig.resolve_attribute(value)
         return attribute.get() if attribute else value
-
-    @staticmethod
-    def _disconnect_channel(constraints, driven, channel):
-        """
-        Breaks the connections from each constraint's output to the given
-        channel ("translate" or "rotate") of the driven node.
-        """
-        constraint_channel = "constraint" + channel.title()
-
-        for constraint in constraints:
-            for axis in "XYZ":
-                source = constraint.attr(f"{constraint_channel}{axis}")
-
-                # -- Scale constraints have no translate / rotate outputs
-                if not source:
-                    continue
-
-                try:
-                    source.disconnect(driven.attr(f"{channel}{axis}"))
-
-                except RuntimeError:
-                    # -- Channel wasn't connected on this constraint;
-                    # -- nothing to disconnect, fine to skip.
-                    pass
 
     @classmethod
     def space_template(cls):

@@ -37,6 +37,20 @@ class EmbeddedHost:
         """
         return None
 
+    def control_shapes(self) -> list:
+        """
+        Returns the names of the control shapes available in this host, as
+        offered by the shape selector widget.
+        """
+        return list()
+
+    def tools(self) -> dict:
+        """
+        Returns the host specific tools to expose in the app's Tools menu, as
+        a mapping of menu label to callable.
+        """
+        return dict()
+
 
 class EmbeddedHosts(factories.Factory):
     """

@@ -301,7 +301,7 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the shoulder joint, which is where the twin's
+        Returns the parent of the shoulder joint, which is where the mirrored component's
         skeleton is generated. Empty if there is none.
         """
         shoulder = self.input("Shoulder").get()
@@ -311,38 +311,38 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(shoulder).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side already has its own (unused) arm joints, the twin
-        uses them. Otherwise the twin generates its own skeleton, with twist
-        counts matching the source. Either way the space switches are not
-        created again, as the source's are mirrored with the subtree.
+        If the other side already has its own (unused) arm joints, this component
+        uses them. Otherwise this component generates its own skeleton, with twist
+        counts matching the original. Either way the space switches are not
+        created again, as the original's are mirrored with the subtree.
         """
         self.option("Apply Space Switches").set(False)
 
-        if self.mirror_mixin_counterparts_exist(source.mirror_mixin_items_to_mirror()):
+        if self.mirror_mixin_counterparts_exist(mirrored_from.mirror_mixin_items_to_mirror()):
             self.option("Build Skeleton").set(False)
             return
 
         self.option("Build Skeleton").set(True)
 
         for input_name, option_name in _ARM_TWISTS:
-            self.option(option_name).set(len(source.input(input_name).get() or []))
+            self.option(option_name).set(len(mirrored_from.input(input_name).get() or []))
             self.input(input_name).set([])
 
         self.input("Shoulder").set("")
         self.input("Hand").set("")
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Restores the creation options the twin's on_enter_stack used to the
-        source's values, so the twin's data matches the source.
+        Restores the creation options this component's on_enter_stack used to the
+        original's values, so this component's data matches the original.
         """
         option_names = ["Build Skeleton", "Apply Space Switches"]
         option_names += [option_name for _, option_name in _ARM_TWISTS]
 
         for option_name in option_names:
-            self.option(option_name).set(source.option(option_name).get(resolved=False))
+            self.option(option_name).set(mirrored_from.option(option_name).get(resolved=False))
 
     def is_valid(self):
         """
@@ -447,7 +447,7 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed.builders.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, rig=self.rig)
+            aniseed_toolkit.rig.space.setup_fk_worldspace_switches([self.shoulder_control.ctl] + self.fk_controls, config=self.config)
 
         self.nk_joints = ikfk_setup.blend_chain.names()
         self._create_snap()
@@ -620,27 +620,31 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         )
 
         if upper_twist_joints:
-            aniseed.builders.add_twister(
-                rig=self.rig,
+            aniseed_toolkit.rigging.twist.create_twist_driver(
+                config=self.config,
                 joints=upper_twist_joints,
                 parent=self.shoulder_control.ctl,
                 root=self.nk_joints[0],
                 tip=rotator,
-                prefix="UpperTwist",
+                description="UpperTwist",
                 location=self.location,
                 shape_rotation=self.shape_rotation,
+                constrain_root=False,
+                constrain_tip=True,
             )
 
         if lower_twist_joints:
-            aniseed.builders.add_twister(
-                rig=self.rig,
+            aniseed_toolkit.rigging.twist.create_twist_driver(
+                config=self.config,
                 joints=lower_twist_joints,
                 parent=self.nk_joints[1],
                 root=self.nk_joints[1],
                 tip=self.nk_joints[2],
-                prefix="LowerTwist",
+                description="LowerTwist",
                 location=self.location,
                 shape_rotation=self.shape_rotation,
+                constrain_root=False,
+                constrain_tip=True,
             )
 
     def _set_outputs(self):
@@ -734,8 +738,9 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             return
 
         world = global_srt_component.output("Main Control").address()
+        space_switch = self.rig.component_library.request("Augment : Space Switch")
 
-        aniseed.builders.add_space_switch(
+        space_switch.add_to(
             component=self,
             label=self.label() + " Hand Space Switch",
             driven=self.output("Ik Hand").address(),
@@ -747,7 +752,7 @@ class ArmComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             ],
         )
 
-        aniseed.builders.add_space_switch(
+        space_switch.add_to(
             component=self,
             label=self.label() + " Upvector Space Switch",
             driven=self.output("Upvector").address(),

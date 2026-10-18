@@ -12,6 +12,10 @@ from .attributes import Input
 from .attributes import Output
 from .constants import Status
 
+# -- Default for Component.duplicate's parent argument, meaning "the same parent
+# -- as the original". None cannot be used, as it means the root of the stack.
+_SIBLING = object()
+
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,PyMethodMayBeStatic
@@ -131,6 +135,39 @@ class Component:
         This is triggered if this component is removed from the stack
 
         :return:
+        """
+        return None
+
+    # ----------------------------------------------------------------------------------
+    def on_serialise(self) -> dict:
+        """
+        Re-implement this to store additional data alongside the component's
+        inputs and options when it is serialised. The returned dictionary must
+        be json serialisable.
+
+        It is stored in the component's serialised data under the
+        "additional_data" key, and passed back to on_deserialise when the
+        component is loaded.
+
+        :return: dict
+        """
+        return dict()
+
+    # ----------------------------------------------------------------------------------
+    def on_deserialise(self, additional_data: dict) -> None:
+        """
+        Re-implement this to restore the data returned by on_serialise.
+
+        It is called once the component has been added to the stack during a
+        deserialise (before its children are added), and when settings are
+        loaded onto the component.
+
+        :param additional_data: The "additional_data" dictionary stored for
+            this component. This is an empty dictionary if there is none, such
+            as for data saved before this was supported.
+        :type additional_data: dict
+
+        :return: None
         """
         return None
 
@@ -653,11 +690,49 @@ class Component:
             label=self.label(),
             uuid=self.uuid(),
             enabled=self.is_enabled(),
+            additional_data=self.serialise_additional_data(),
             children=[
                 child.serialise()
                 for child in self.children
             ],
         )
+
+    # ----------------------------------------------------------------------------------
+    def serialise_additional_data(self) -> dict:
+        """
+        Returns the result of on_serialise. As on_serialise is third party
+        code, any failure is printed and an empty dictionary returned, so one
+        component cannot stop the whole stack from being serialised.
+
+        :return: dict
+        """
+        # noinspection PyBroadException
+        try:
+            return self.on_serialise() or dict()
+
+        except Exception:
+            print(f"on_serialise failed for {self.label()} ({self.identifier})")
+            traceback.print_exc()
+            return dict()
+
+    # ----------------------------------------------------------------------------------
+    def deserialise_additional_data(self, additional_data: dict) -> None:
+        """
+        Passes the given additional data to on_deserialise. As on_deserialise
+        is third party code, any failure is printed rather than raised, so one
+        component cannot stop the rest of the stack from loading.
+
+        :param additional_data: The "additional_data" dictionary stored for
+            this component, or None
+        :type additional_data: dict
+        """
+        # noinspection PyBroadException
+        try:
+            self.on_deserialise(additional_data or dict())
+
+        except Exception:
+            print(f"on_deserialise failed for {self.label()} ({self.identifier})")
+            traceback.print_exc()
 
     # ----------------------------------------------------------------------------------
     def save_settings(self, filepath):
@@ -698,6 +773,8 @@ class Component:
             option = self.option(name)
             if option:
                 option.set(value)
+
+        self.deserialise_additional_data(data.get("additional_data"))
 
         self.changed.emit()
 
@@ -808,6 +885,7 @@ class Component:
         include_children=True,
         search_for=None,
         replace_with=None,
+        parent=_SIBLING,
     ):
         """
         Create a duplicate of this component in the stack.
@@ -821,9 +899,22 @@ class Component:
         top-level duplicate; descendants keep their original values.
 
         ``search_for`` and ``replace_with`` apply a regex search and replace
-        across the duplicate's input and option values once the copy and any
-        overrides are in place. This also only affects the top-level duplicate.
+        across the duplicate's label, input and option values once the copy
+        and any overrides are in place. It is applied to every duplicated
+        descendant too.
+
+        ``parent`` is the component the duplicate is parented under (None for
+        the root of the stack). By default it is the original's parent, so the
+        duplicate is a sibling of the original.
+
+        Each duplicate is parented under its final parent before its
+        on_enter_stack runs, so anything on_enter_stack does with the parent
+        (such as Attribute.hook_to_parent) sees the duplicated parent rather
+        than the original.
         """
+        if parent is _SIBLING:
+            parent = self.parent
+
         # -- Instance the new component
         new_component = self.stack.add_component(
             component_type=self.identifier,
@@ -848,9 +939,10 @@ class Component:
                 replace_with=replace_with,
             )
 
-        # -- Set the parenting of the component (sibling of the original)
+        # -- Parent the component before its events are triggered, so that
+        # -- on_enter_stack sees the parent it will actually live under
         new_component.set_parent(
-            parent=self.parent,
+            parent=parent,
         )
 
         # -- Trigger its events
@@ -858,19 +950,17 @@ class Component:
 
         self.stack.component_added.emit(new_component)
 
-        # -- Recursively duplicate children under the new component. Snapshot
-        # -- self.children first because child.duplicate() temporarily inserts
-        # -- the new child into its source parent (self) before we reparent
-        # -- it under new_component below.
+        # -- Recursively duplicate the children directly under the new
+        # -- component. Snapshot self.children so the iteration is not affected
+        # -- by any changes to the stack during the duplication.
         if include_children:
             for child in list(self.children):
-                child_duplicate = child.duplicate(
+                child.duplicate(
                     include_children=True,
                     search_for=search_for,
                     replace_with=replace_with,
+                    parent=new_component,
                 )
-                child_duplicate.set_parent(parent=new_component)
-
 
         return new_component
 

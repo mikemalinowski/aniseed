@@ -3,7 +3,9 @@ import aniseed
 
 class StandaloneHost(aniseed.EmbeddedHost):
 
-    priority = 0
+    # -- The lowest priority value wins, so this high value makes the
+    # -- standalone host a fallback used only when no application host loads
+    priority = 100
 
     def launch(self):
         """

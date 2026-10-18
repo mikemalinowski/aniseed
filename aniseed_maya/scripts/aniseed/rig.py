@@ -239,22 +239,41 @@ class Rig(xstack.Stack):
             with open(data, 'r') as f:
                 data = json.load(f)
 
-        # -- Call the parent class which manages the load
-        super().deserialize(data, clear=clear)
+        # -- Remove any existing components first. Some components delete scene
+        # -- nodes (such as their joints) when removed, so this must happen
+        # -- before the host restores anything into the scene.
+        if clear:
+            self.clear()
 
-        # -- Store the data on the host node
-        crosswalk.attributes.set_value(
-            item=self.host(),
-            attribute_name="recipe",
-            value=json.dumps(data),
-        )
-
-        # -- Now call the host callback - which allows an embedded environment
-        # -- to tie into the load process
+        # -- Call the host callback - which allows an embedded environment
+        # -- to tie into the load process. This happens before the components
+        # -- are added so that anything the host restores (such as the saved
+        # -- skeleton) already exists when each component's on_deserialise runs.
         host_app = host_.get()
         host_app.on_rig_load(
             self,
             data,
+        )
+
+        # -- Call the parent class which manages the load. It has already
+        # -- been cleared above.
+        super().deserialize(data, clear=False)
+
+        # -- Store the data on the host node. The file level "additional_data"
+        # -- (such as the skeleton hierarchy the host restores) is only used
+        # -- at the moment a file is loaded, so it is left out. Otherwise every
+        # -- later Rig created for this node would restore it again,
+        # -- duplicating the skeleton.
+        stored_data = {
+            key: value
+            for key, value in data.items()
+            if key != "additional_data"
+        }
+
+        crosswalk.attributes.set_value(
+            item=self.host(),
+            attribute_name="recipe",
+            value=json.dumps(stored_data),
         )
 
     def save(

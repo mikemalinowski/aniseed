@@ -1,3 +1,4 @@
+import os
 import sys
 import qtility
 import blackout
@@ -11,7 +12,7 @@ from maya import cmds
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
 
-class StandaloneHost(aniseed.EmbeddedHost):
+class MayaHost(aniseed.EmbeddedHost):
 
     priority = 0
 
@@ -101,6 +102,23 @@ class StandaloneHost(aniseed.EmbeddedHost):
                 root_parent=rig.label,
                 dataset=additional_data["hierarchy"],
             )
+
+    def control_shapes(self) -> list:
+        """
+        Returns the names of the aniseed_toolkit control shapes
+        """
+        return [
+            os.path.basename(shape).split(".")[0]
+            for shape in aniseed_toolkit.run("Get Shape List") or list()
+        ]
+
+    def tools(self) -> dict:
+        """
+        Exposes the aniseed toolkit in the app's Tools menu
+        """
+        return {
+            "Toolkit": aniseed_toolkit.launch,
+        }
 
 
 class MenuBuilder:

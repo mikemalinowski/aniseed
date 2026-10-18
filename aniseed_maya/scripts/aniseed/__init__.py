@@ -34,9 +34,18 @@ from . import widgets
 from . import constants
 from . import resources
 from . import environment
-from . import mixins
-from . import builders
 from . import dialogs
 from . import component_outputs
 
 __version__ = "4.0.0"
+
+
+def __getattr__(name):
+    # -- Mixins are application specific (like components and hosts), so
+    # -- they are only imported when first used - typically by a component -
+    # -- keeping the import of aniseed itself application agnostic.
+    if name == "mixins":
+        import importlib
+        return importlib.import_module(f"{__name__}.mixins")
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

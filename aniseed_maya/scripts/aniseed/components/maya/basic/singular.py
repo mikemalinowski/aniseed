@@ -196,7 +196,7 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         if not joint_option.get():
             return
 
-        joint = aniseed.builders.create_joint_from_selection(
+        joint = aniseed_toolkit.scene.joints.create_from_selection(
             name=self.config.generate_name(
                 classification=self.config.joint,
                 description=self.option("Description").get(),
@@ -243,7 +243,7 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     def mirror_mixin_items_to_mirror(self) -> list:
         """
         Returns the joint this component drives, which is mirrored onto the
-        twin's joint. Empty if no joint is set.
+        mirrored component's joint. Empty if no joint is set.
         """
         joint = self.input("Joint").get()
         if not joint:
@@ -252,7 +252,7 @@ class Singular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the joint, which is where the twin's joint is
+        Returns the parent of the joint, which is where the mirrored component's joint is
         created. Empty if there is no joint or it has no parent.
         """
         joint = self.input("Joint").get()

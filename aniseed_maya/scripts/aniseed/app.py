@@ -3,7 +3,6 @@ import typing
 import qtility
 import crosswalk
 import functools
-import aniseed_toolkit
 
 from Qt import QtWidgets, QtCore, QtGui
 
@@ -187,21 +186,27 @@ class AppWidget(xstack.app.AppWidget):
             )
         rigs_menu.addSeparator()
 
-        tools_menu = QtWidgets.QMenu("Tools")
+        menus = [rigs_menu]
 
-        # -- Add the aniseed toolkit
-        toolkit_action = tools_menu.addAction("Toolkit")
-        toolkit_action.triggered.connect(
-            functools.partial(
-                aniseed_toolkit.launch,
-            )
-        )
+        # -- Add any tools the host application provides
+        host_app = host.get()
+        tools = host_app.tools() if host_app else dict()
+
+        if tools:
+            tools_menu = QtWidgets.QMenu("Tools")
+
+            for label, tool in tools.items():
+                tool_action = tools_menu.addAction(label)
+                tool_action.triggered.connect(
+                    functools.partial(
+                        tool,
+                    )
+                )
+
+            menus.append(tools_menu)
 
         # -- Return a list of additional menus that should be added
-        return [
-            rigs_menu,
-            tools_menu,
-        ]
+        return menus
 
     # ----------------------------------------------------------------------------------
     def all_rigs(self):

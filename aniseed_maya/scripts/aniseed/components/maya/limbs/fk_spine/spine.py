@@ -338,7 +338,7 @@ class FKSpineComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the hip, which is where the twin creates its
+        Returns the parent of the hip, which is where the mirrored component creates its
         joints.
         """
         hip = self.input("Hip").get()
@@ -348,21 +348,21 @@ class FKSpineComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(hip).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side joints already exist the twin uses them. Otherwise
-        it creates a chain of the same length as the source's when it
+        If the other side joints already exist this component uses them. Otherwise
+        it creates a chain of the same length as the original's when it
         enters the stack.
         """
-        source_chain = source._mirror_chain()
+        original_chain = mirrored_from._mirror_chain()
 
-        if self.mirror_mixin_counterparts_exist(source_chain, self._mirror_chain()):
+        if self.mirror_mixin_counterparts_exist(original_chain, self._mirror_chain()):
             self.option("Joint Count").set(0)
             return
 
-        self.option("Joint Count").set(len(source_chain) if len(source_chain) >= 2 else 0)
+        self.option("Joint Count").set(len(original_chain) if len(original_chain) >= 2 else 0)
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
         The mirror reflects the joints' behaviour, which negates their local
         translations, so the chain would point down negative X (which
@@ -371,7 +371,7 @@ class FKSpineComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         Children mirrored by this mirror (such as a child component's
         joints) keep their mirrored transforms. Any other children (for
-        instance when the twin uses existing joints) keep their place
+        instance when this component uses existing joints) keep their place
         relative to their parent joint.
         """
         chain = self._mirror_chain()

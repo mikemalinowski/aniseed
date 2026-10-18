@@ -23,7 +23,7 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         "head.png",
     )
 
-    # -- Set on a twin during a mirror when it should keep the joints it
+    # -- Set on a mirrored component during a mirror when it should keep the joints it
     # -- was given, rather than creating its own
     _mirror_keep_joints = False
 
@@ -95,7 +95,7 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         """
         Creates the neck and head joints under the current selection and
         attempts to hook the parent input to a "tip" or "chest" output. A
-        mirrored twin which keeps the joints it was given creates none.
+        mirrored mirrored component which keeps the joints it was given creates none.
         """
         if not self._mirror_keep_joints:
             self.user_func_create_skeleton()
@@ -259,7 +259,7 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def can_mirror(self) -> bool:
         """
-        As well as being on a side, the joints must have a parent: the twin
+        As well as being on a side, the joints must have a parent: the mirrored component
         creates its joints under the mirrored parent, and cannot create them
         without one.
         """
@@ -268,8 +268,8 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     def mirror_mixin_items_to_mirror(self) -> list:
         """
         Returns the head joint followed by the neck joints. The head is
-        first because the twin always creates a single neck, so if the
-        source has more only the extra necks go unpaired.
+        first because the mirrored component always creates a single neck, so if the
+        original has more only the extra necks go unpaired.
         """
         head_joint = self.input("Head Joint").get()
         neck_joints = self._neck_joints()
@@ -282,7 +282,7 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     def mirror_mixin_parent_item(self) -> str:
         """
         Returns the parent of the first neck joint (or of the head joint if
-        there are no neck joints), which is where the twin creates its joints.
+        there are no neck joints), which is where the mirrored component creates its joints.
         """
         neck_joints = self._neck_joints()
         root = neck_joints[0] if neck_joints else self.input("Head Joint").get()
@@ -293,34 +293,34 @@ class HeadComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(root).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side joints already exist the twin uses them. Otherwise
+        If the other side joints already exist this component uses them. Otherwise
         it creates its own when it enters the stack, which needs a parent.
         """
         if self.mirror_mixin_counterparts_exist(
-            source.mirror_mixin_items_to_mirror(),
+            mirrored_from.mirror_mixin_items_to_mirror(),
             self.mirror_mixin_items_to_mirror(),
         ):
             self._mirror_keep_joints = True
             return
 
-        if not source.mirror_mixin_parent_item():
+        if not mirrored_from.mirror_mixin_parent_item():
             print(
-                f"Mirror : {source.label()} has no parent joint, so "
+                f"Mirror : {mirrored_from.label()} has no parent joint, so "
                 f"{self.label()} cannot create its joints"
             )
             self._mirror_keep_joints = True
             return
 
-        if len(source._neck_joints()) > 1:
+        if len(mirrored_from._neck_joints()) > 1:
             print(
-                f"Mirror : {source.label()} has {len(source._neck_joints())} neck joints "
+                f"Mirror : {mirrored_from.label()} has {len(mirrored_from._neck_joints())} neck joints "
                 f"but {self.label()} creates one. Only the first neck joint is mirrored."
             )
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Clears the flag which stops the twin creating joints.
+        Clears the flag which stops this component creating joints.
         """
         self._mirror_keep_joints = False

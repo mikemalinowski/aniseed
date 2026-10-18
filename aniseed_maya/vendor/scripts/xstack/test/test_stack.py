@@ -338,6 +338,194 @@ class TestUnitStack(unittest.TestCase):
 
 
 # ------------------------------------------------------------------------------
+class TestDuplicate(unittest.TestCase):
+    """
+    Tests for Component.duplicate, in particular that each duplicate is
+    parented under its final parent before its on_enter_stack runs.
+    """
+
+    def _make_nested(self):
+        stack = xstack.Stack(component_paths=[COMPONENT_PATH])
+        top = stack.add_component(label="Top LF", component_type="ParentHookingComponent")
+        middle = stack.add_component(label="Middle LF", component_type="ParentHookingComponent", parent=top)
+        bottom = stack.add_component(label="Bottom LF", component_type="ParentHookingComponent", parent=middle)
+        return stack, top, middle, bottom
+
+    def test_duplicate_is_sibling_by_default(self):
+        stack, top, middle, bottom = self._make_nested()
+        root = stack.add_component(label="Root", component_type="MinimalComponent")
+        top.set_parent(root)
+
+        duplicate = top.duplicate()
+
+        self.assertIs(duplicate.parent, root)
+        self.assertIs(duplicate.parent_on_enter, root)
+
+    def test_children_enter_stack_under_the_duplicated_parent(self):
+        stack, top, middle, bottom = self._make_nested()
+
+        top_twin = top.duplicate(search_for="LF", replace_with="RT")
+        middle_twin = top_twin.children[0]
+        bottom_twin = middle_twin.children[0]
+
+        self.assertEqual(
+            [top_twin.label(), middle_twin.label(), bottom_twin.label()],
+            ["Top RT", "Middle RT", "Bottom RT"],
+        )
+
+        # -- Each duplicate saw its duplicated parent when it entered the stack
+        self.assertIs(middle_twin.parent_on_enter, top_twin)
+        self.assertIs(bottom_twin.parent_on_enter, middle_twin)
+
+        # -- So hooking to the parent connects to the duplicated parent
+        self.assertEqual(middle_twin.input("Parent").get(resolved=False), "[Top RT].[output].[Control]")
+        self.assertEqual(bottom_twin.input("Parent").get(resolved=False), "[Middle RT].[output].[Control]")
+
+        # -- The originals are untouched
+        self.assertEqual(top.children, [middle])
+        self.assertEqual(middle.children, [bottom])
+        self.assertEqual(middle.input("Parent").get(resolved=False), "[Top LF].[output].[Control]")
+
+    def test_duplicate_under_an_explicit_parent(self):
+        stack, top, middle, bottom = self._make_nested()
+        other = stack.add_component(label="Other", component_type="ParentHookingComponent")
+
+        duplicate = middle.duplicate(parent=other)
+
+        self.assertIs(duplicate.parent, other)
+        self.assertIs(duplicate.parent_on_enter, other)
+        self.assertIs(duplicate.children[0].parent_on_enter, duplicate)
+        self.assertNotIn(duplicate, top.children)
+
+    def test_duplicate_without_children(self):
+        stack, top, middle, bottom = self._make_nested()
+
+        duplicate = middle.duplicate(include_children=False)
+
+        self.assertEqual(duplicate.children, [])
+        self.assertIs(duplicate.parent, top)
+
+
+# ------------------------------------------------------------------------------
+class TestAdditionalData(unittest.TestCase):
+    """
+    Tests for the on_serialise / on_deserialise hooks.
+    """
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def _make_stack(self):
+        return xstack.Stack(component_paths=[COMPONENT_PATH])
+
+    def _make_tree(self, stack):
+        root = stack.add_component(label="root", component_type="AdditionalDataComponent")
+        child = stack.add_component(label="child", component_type="AdditionalDataComponent", parent=root)
+        root.payload = {"name": "root", "values": [1, 2, 3]}
+        child.payload = {"name": "child"}
+        return root, child
+
+    def test_serialise_includes_additional_data(self):
+        stack = self._make_stack()
+        root, child = self._make_tree(stack)
+
+        data = stack.serialise()
+
+        self.assertEqual(data["tree"][0]["additional_data"], {"name": "root", "values": [1, 2, 3]})
+        self.assertEqual(data["tree"][0]["children"][0]["additional_data"], {"name": "child"})
+
+    def test_deserialise_passes_additional_data_back(self):
+        stack = self._make_stack()
+        self._make_tree(stack)
+        data = stack.serialise()
+
+        loaded = self._make_stack()
+        loaded.deserialise(data)
+
+        root = loaded.root_components[0]
+        self.assertEqual(root.received, {"name": "root", "values": [1, 2, 3]})
+        self.assertEqual(root.children[0].received, {"name": "child"})
+
+    def test_on_deserialise_runs_before_children_are_added(self):
+        stack = self._make_stack()
+        self._make_tree(stack)
+        data = stack.serialise()
+
+        children_when_called = []
+        original = xstack.Component.deserialise_additional_data
+
+        def record(component, additional_data):
+            children_when_called.append((component.label(), len(component.children)))
+            return original(component, additional_data)
+
+        xstack.Component.deserialise_additional_data = record
+        try:
+            self._make_stack().deserialise(data)
+        finally:
+            xstack.Component.deserialise_additional_data = original
+
+        self.assertEqual(children_when_called, [("root", 0), ("child", 0)])
+
+    def test_missing_additional_data_gives_an_empty_dictionary(self):
+        stack = self._make_stack()
+        self._make_tree(stack)
+        data = stack.serialise()
+
+        # -- Data saved before this was supported has no additional_data
+        del data["tree"][0]["additional_data"]
+        del data["tree"][0]["children"][0]["additional_data"]
+
+        loaded = self._make_stack()
+        loaded.deserialise(data)
+
+        self.assertEqual(loaded.root_components[0].received, {})
+        self.assertEqual(loaded.root_components[0].children[0].received, {})
+
+    def test_failing_hooks_do_not_break_serialising_or_loading(self):
+        stack = self._make_stack()
+        stack.add_component(label="failing", component_type="FailingAdditionalDataComponent")
+        good = stack.add_component(label="good", component_type="AdditionalDataComponent")
+        good.payload = {"kept": True}
+
+        data = stack.serialise()
+        self.assertEqual(data["tree"][0]["additional_data"], {})
+
+        loaded = self._make_stack()
+        loaded.deserialise(data)
+
+        self.assertEqual(len(loaded.components()), 2)
+        self.assertEqual(loaded.root_components[1].received, {"kept": True})
+
+    def test_import_subtree_passes_additional_data(self):
+        stack = self._make_stack()
+        root, child = self._make_tree(stack)
+        filepath = os.path.join(self.tmp_dir.name, "subtree.json")
+        root.save_settings(filepath)
+
+        target_stack = self._make_stack()
+        target = target_stack.add_component(label="target", component_type="MinimalComponent")
+        target.import_subtree(filepath)
+
+        imported = target.children[0]
+        self.assertEqual(imported.received, {"name": "root", "values": [1, 2, 3]})
+        self.assertEqual(imported.children[0].received, {"name": "child"})
+
+    def test_load_settings_passes_additional_data(self):
+        stack = self._make_stack()
+        root, child = self._make_tree(stack)
+        filepath = os.path.join(self.tmp_dir.name, "settings.json")
+        child.save_settings(filepath)
+
+        other = self._make_stack().add_component(label="other", component_type="AdditionalDataComponent")
+        other.load_settings(filepath)
+
+        self.assertEqual(other.received, {"name": "child"})
+
+
+# ------------------------------------------------------------------------------
 class TestImportSubtree(unittest.TestCase):
     """
     Tests for Stack.import_subtree_under and Component.import_subtree —

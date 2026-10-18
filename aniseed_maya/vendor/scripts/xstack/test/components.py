@@ -189,3 +189,63 @@ class ComponentWithOutputs(xstack.Component):
         self.output("test_output1").set("B")
         self.output("test_output2").set("C")
         return True
+
+class ParentHookingComponent(xstack.Component):
+    """
+    Records the parent it has when it enters the stack, and hooks its
+    "Parent" input to its parent's default output - as many real components
+    do in on_enter_stack.
+    """
+    identifier = "ParentHookingComponent"
+
+    def __init__(self, *args, **kwargs):
+        super(ParentHookingComponent, self).__init__(*args, **kwargs)
+
+        self.parent_on_enter = None
+
+        self.declare_input(name="Parent", value="")
+        self.declare_output(name="Control", is_default=True)
+
+    def on_enter_stack(self):
+        self.parent_on_enter = self.parent
+        self.input("Parent").hook_to_parent()
+
+    def run(self):
+        return True
+
+class AdditionalDataComponent(xstack.Component):
+    """
+    Stores its "payload" attribute as additional data, and records what it was
+    given back when deserialised.
+    """
+    identifier = "AdditionalDataComponent"
+
+    def __init__(self, *args, **kwargs):
+        super(AdditionalDataComponent, self).__init__(*args, **kwargs)
+        self.payload = dict()
+        self.received = None
+
+    def on_serialise(self):
+        return dict(self.payload)
+
+    def on_deserialise(self, additional_data):
+        self.received = additional_data
+
+    def run(self):
+        return True
+
+
+class FailingAdditionalDataComponent(xstack.Component):
+    """
+    Raises from both additional data hooks.
+    """
+    identifier = "FailingAdditionalDataComponent"
+
+    def on_serialise(self):
+        raise RuntimeError("on_serialise failure")
+
+    def on_deserialise(self, additional_data):
+        raise RuntimeError("on_deserialise failure")
+
+    def run(self):
+        return True

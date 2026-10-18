@@ -646,10 +646,10 @@ class HandComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the hand joint, which is where the twin's hand
+        Returns the parent of the hand joint, which is where the mirrored component's hand
         skeleton is generated. With Omit Hand Joint the hand joint belongs to
         another component (such as an arm), so the hand joint itself is
-        returned and the twin's digits are generated under its mirror.
+        returned and the mirrored component's digits are generated under its mirror.
         """
         hand_joint = self.input("Hand Joint").get()
         if not hand_joint or not mref.objExists(hand_joint):
@@ -661,29 +661,29 @@ class HandComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(hand_joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side already has its own (unused) hand joints, the twin
-        uses them. Otherwise the twin generates its own hand skeleton. The
+        If the other side already has its own (unused) hand joints, this component
+        uses them. Otherwise this component generates its own hand skeleton. The
         tip inputs are cleared first, as the skeleton generation appends to
         them.
         """
-        if self.mirror_mixin_counterparts_exist(source.mirror_mixin_items_to_mirror()):
+        if self.mirror_mixin_counterparts_exist(mirrored_from.mirror_mixin_items_to_mirror()):
             self.option("Create Joints").set(False)
 
             # -- An omitted hand joint belongs to another component, so use
             # -- whatever that became in this mirror
             if self.option("Omit Hand Joint").get():
                 self.input("Hand Joint").set(
-                    self.mirror_mixin_mirrored_node(source.input("Hand Joint").get()),
+                    self.mirror_mixin_mirrored_node(mirrored_from.input("Hand Joint").get()),
                 )
             return
 
-        finger_tips = source.input("Finger Tips").get() or list()
+        finger_tips = mirrored_from.input("Finger Tips").get() or list()
         finger_labels = list(self.option("Finger Labels").get() or list())
 
         # -- The skeleton generation makes a finger per label. If there are
-        # -- more labels than the source has fingers (a build appends the
+        # -- more labels than the original has fingers (a build appends the
         # -- thumb label to the stored labels), generate with just the first
         # -- ones and put the labels back afterwards.
         if finger_tips and len(finger_labels) > len(finger_tips):
@@ -692,7 +692,7 @@ class HandComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         elif len(finger_tips) != len(finger_labels):
             print(
-                f"Mirror : {source.label()} has {len(finger_tips)} finger tips but "
+                f"Mirror : {mirrored_from.label()} has {len(finger_tips)} finger tips but "
                 f"{len(finger_labels)} finger labels. {self.label()} is generated "
                 f"with {len(finger_labels)} fingers."
             )
@@ -702,12 +702,12 @@ class HandComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         self.input("Thumb Tip").set("")
         self.input("Finger Tips").set([])
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
         Restores the Create Joints option (and any finger labels trimmed for
-        the skeleton generation) so the twin's data matches the source.
+        the skeleton generation) so this component's data matches the original.
         """
-        self.option("Create Joints").set(source.option("Create Joints").get(resolved=False))
+        self.option("Create Joints").set(mirrored_from.option("Create Joints").get(resolved=False))
 
         finger_labels = getattr(self, "_mirror_finger_labels", None)
         if finger_labels is not None:

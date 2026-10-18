@@ -504,7 +504,7 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
     identifier = "Limb : Eye"
 
-    # -- Set on a twin during a mirror when it should use the existing
+    # -- Set on a mirrored component during a mirror when it should use the existing
     # -- other side joints it was given, rather than creating its own
     _mirror_keep_joints = False
 
@@ -665,7 +665,7 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     def on_enter_stack(self):
         """
         Creates the eye joints under the current selection (unless this is
-        a mirrored twin which uses existing other side joints).
+        a mirrored mirrored component which uses existing other side joints).
         """
         if self._mirror_keep_joints:
             return
@@ -782,7 +782,7 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the eye joint, which is where the twin's eye
+        Returns the parent of the eye joint, which is where the mirrored component's eye
         joint is created.
         """
         eye_joint = self.input("Eye Joint").get()
@@ -792,24 +792,24 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(eye_joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side joints already exist the twin uses them. Otherwise
+        If the other side joints already exist this component uses them. Otherwise
         its joint inputs are cleared, and it creates its own joints when it
-        enters the stack (from the options copied from the source).
+        enters the stack (from the options copied from the original).
         """
         pairs = [
-            (source_joint, twin_joint)
-            for source_joint, twin_joint in zip(
-                source.mirror_mixin_items_to_mirror(),
+            (original_joint, mirrored_joint)
+            for original_joint, mirrored_joint in zip(
+                mirrored_from.mirror_mixin_items_to_mirror(),
                 self.mirror_mixin_items_to_mirror(),
             )
-            if source_joint
+            if original_joint
         ]
 
         if self.mirror_mixin_counterparts_exist(
-            [source_joint for source_joint, _ in pairs],
-            [twin_joint for _, twin_joint in pairs],
+            [original_joint for original_joint, _ in pairs],
+            [mirrored_joint for _, mirrored_joint in pairs],
         ):
             self._mirror_keep_joints = True
             return
@@ -817,7 +817,7 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         for input_name in EYE_JOINT_INPUTS:
             self.input(input_name).set("")
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
         The mirror reflects the eye joint's behaviour, which negates its
         axes. The aim control is placed along the forward axis, so that
@@ -828,7 +828,7 @@ class EyeComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         Children mirrored by this mirror keep their mirrored transforms.
         Any other children (for instance those of another component, when
-        the twin uses existing joints) keep their place relative to the
+        this component uses existing joints) keep their place relative to the
         eye joint.
         """
         self._mirror_keep_joints = False

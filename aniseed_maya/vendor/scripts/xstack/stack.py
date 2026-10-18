@@ -299,6 +299,11 @@ class Stack:
             )
             if not root_data.get("enabled", True):
                 root_component.set_enabled(False)
+
+            # -- Let the component restore any additional data before its
+            # -- children are added, as they may rely on it
+            root_component.deserialise_additional_data(root_data.get("additional_data"))
+
             self._add_child_components(parent=root_component, child_list=root_data["children"])
 
     def deserialise(self, data: typing.Dict, clear: bool = True):
@@ -325,6 +330,10 @@ class Stack:
             # -- now
             if not child_data.get("enabled", True):
                 created_component.set_enabled(False)
+
+            # -- Let the component restore any additional data before its
+            # -- children are added, as they may rely on it
+            created_component.deserialise_additional_data(child_data.get("additional_data"))
 
             # -- Create any children
             self._add_child_components(

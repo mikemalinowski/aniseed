@@ -12,6 +12,9 @@ import typing
 import aniseed
 import aniseed_toolkit
 
+from maya import cmds
+from maya import mel
+
 
 class StickyPatchComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     """
@@ -364,10 +367,198 @@ class StickyPatchComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             toSelectedBones=True,
         )
 
+    def on_serialise(self) -> dict:
+        """
+        Stores the patch surface, so it can be recreated if it is missing when
+        the rig is loaded (for instance when building a rig from a saved file):
+        its name, parent, world matrix, degree and spans, the object space
+        position of every cv (undeformed, if the patch is skinned) and its skin
+        weights if it has any.
+        """
+        patch = self.input("Geometry Patch").get()
+
+        if not patch or not mref.objExists(patch):
+            return dict()
+
+        shape = self._patch_shape(patch)
+        if not shape:
+            return dict()
+
+        # -- If the patch is skinned, read the cvs from its undeformed
+        # -- (intermediate) shape so we store the rest shape of the surface
+        cv_shape = self._patch_shape(patch, intermediate=True) or shape
+
+        cv_count_u, cv_count_v = self._patch_cv_counts(shape)
+
+        patch_data = dict(
+            name=mref.get(patch).name(),
+            parent=(cmds.listRelatives(patch, parent=True) or [""])[0],
+            matrix=cmds.xform(patch, query=True, matrix=True, worldSpace=True),
+            degree=[
+                cmds.getAttr(f"{shape}.degreeU"),
+                cmds.getAttr(f"{shape}.degreeV"),
+            ],
+            spans=[
+                cmds.getAttr(f"{shape}.spansU"),
+                cmds.getAttr(f"{shape}.spansV"),
+            ],
+            cvs=[
+                cmds.xform(f"{cv_shape}.cv[{u}][{v}]", query=True, translation=True, objectSpace=True)
+                for u in range(cv_count_u)
+                for v in range(cv_count_v)
+            ],
+        )
+
+        if mel.eval(f'findRelatedSkinCluster "{patch}";'):
+            patch_data["skin"] = aniseed_toolkit.scene.skin.skin_to_dict(patch)
+
+        return dict(patch=patch_data)
+
+    def on_deserialise(self, additional_data: dict) -> None:
+        """
+        Recreates the patch surface from the stored data, but only if the patch
+        does not exist as a surface. If it does, the scene is the truth and is
+        left alone, as the stored data may be older than edits made since it
+        was saved.
+
+        The patch transform may exist without its surface shape, for instance
+        when the rig's saved hierarchy was restored (which recreates
+        transforms but not shapes). In that case the transform is deleted and
+        the patch is rebuilt in its place. Any child transforms it had are kept
+        and moved under the rebuilt patch.
+        """
+        patch_data = additional_data.get("patch")
+
+        if not patch_data:
+            return
+
+        fallback_parent = ""
+        orphaned_children = []
+
+        existing_patch = self.input("Geometry Patch").get()
+        if existing_patch and mref.objExists(existing_patch):
+
+            # -- A real surface is in the scene, so leave it alone
+            if self._patch_shape(existing_patch):
+                return
+
+            # -- Only the transform exists, so replace it. Keep its parent in
+            # -- case the stored one no longer exists, and move any child
+            # -- transforms out (keeping their world transforms) so they
+            # -- survive the delete.
+            fallback_parent = (cmds.listRelatives(existing_patch, parent=True) or [""])[0]
+
+            children = cmds.listRelatives(
+                existing_patch,
+                children=True,
+                type=["transform", "joint"],
+                fullPath=True,
+            ) or []
+            if children:
+                orphaned_children = cmds.parent(children, world=True)
+
+            cmds.delete(existing_patch)
+
+        degree_u, degree_v = patch_data["degree"]
+        if degree_u != degree_v:
+            print(
+                f"Sticky Patch : {self.label()} patch had degree {degree_u} in u and "
+                f"{degree_v} in v, it is recreated with degree {degree_u} in both"
+            )
+
+        patch = mref.nurbsPlane(
+            pivot=(0, 0, 0),
+            axis=(0, 0, 1),
+            width=1,
+            lengthRatio=1,
+            degree=degree_u,
+            patchesU=patch_data["spans"][0],
+            patchesV=patch_data["spans"][1],
+            constructionHistory=True,
+        )[0]
+        mref.delete(patch, constructionHistory=True)
+
+        # -- Give it the stored name, made unique if that is taken
+        name = patch_data["name"]
+        candidate = name
+        counter = 1
+        while mref.objExists(candidate):
+            candidate = f"{name}{counter}"
+            counter += 1
+        patch.rename(candidate)
+        patch_name = patch.name()
+
+        parent = patch_data.get("parent")
+        if not (parent and mref.objExists(parent)):
+            parent = fallback_parent
+
+        if parent and mref.objExists(parent):
+            patch_name = cmds.parent(patch_name, parent)[0]
+
+        cmds.xform(patch_name, matrix=patch_data["matrix"], worldSpace=True)
+
+        # -- Return any children the replaced transform had
+        if orphaned_children:
+            cmds.parent(orphaned_children, patch_name)
+
+        shape = self._patch_shape(patch_name)
+        cv_count_u, cv_count_v = self._patch_cv_counts(shape)
+
+        if len(patch_data["cvs"]) == cv_count_u * cv_count_v:
+            for index, position in enumerate(patch_data["cvs"]):
+                u, v = divmod(index, cv_count_v)
+                cmds.xform(f"{shape}.cv[{u}][{v}]", translation=position, objectSpace=True)
+        else:
+            print(
+                f"Sticky Patch : {self.label()} stored {len(patch_data['cvs'])} cvs but the "
+                f"recreated patch has {cv_count_u * cv_count_v}, so its cvs are not restored"
+            )
+
+        self.input("Geometry Patch").set(patch_name)
+
+        skin_data = patch_data.get("skin")
+        if skin_data:
+            missing = [
+                influence
+                for influence in skin_data["influences"]
+                if not mref.objExists(influence)
+            ]
+
+            if missing:
+                print(
+                    f"Sticky Patch : {self.label()} patch is not re-skinned, as these "
+                    f"influences do not exist: {missing}. Use 'Skin Patch To Skeleton' "
+                    f"once they do."
+                )
+            else:
+                aniseed_toolkit.scene.skin.dict_to_skin(patch_name, skin_data)
+
+    @staticmethod
+    def _patch_shape(patch: str, intermediate: bool = False) -> str:
+        """
+        Returns the nurbs surface shape of the patch: the deformed (visible)
+        shape, or with intermediate the undeformed shape used by a skin.
+        Returns an empty string if there is no such shape.
+        """
+        for shape in cmds.listRelatives(patch, shapes=True, type="nurbsSurface", fullPath=True) or []:
+            if bool(cmds.getAttr(f"{shape}.intermediateObject")) == intermediate:
+                return shape
+        return ""
+
+    @staticmethod
+    def _patch_cv_counts(shape: str) -> tuple:
+        """
+        Returns the number of cvs in u and v of the given (open) nurbs surface.
+        """
+        return (
+            cmds.getAttr(f"{shape}.spansU") + cmds.getAttr(f"{shape}.degreeU"),
+            cmds.getAttr(f"{shape}.spansV") + cmds.getAttr(f"{shape}.degreeV"),
+        )
+
     def mirror_mixin_items_to_mirror(self) -> list:
         """
         Returns the joint to drive and the geometry patch. Empty unless both
-        are set, so that the twin's items always pair up by position.
+        are set, so that the mirrored component's items always pair up by position.
         """
         joint = self.input("Joint To Drive").get()
         patch = self.input("Geometry Patch").get()
@@ -379,7 +570,7 @@ class StickyPatchComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the joint to drive, which is where the twin's
+        Returns the parent of the joint to drive, which is where the mirrored component's
         joint is created. Empty if there is no joint or it has no parent.
         """
         joint = self.input("Joint To Drive").get()
@@ -389,33 +580,33 @@ class StickyPatchComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
         Uses the other side's joint and patch if they already exist (the
-        search and replaced names). Otherwise the twin creates its own joint
+        search and replaced names). Otherwise this component creates its own joint
         and patch when it enters the stack, which the mirror then moves into
         place.
 
         Note that a created patch is a fresh plane, so any shaping or skinning
-        of the source patch is not carried over.
+        of the original patch is not carried over.
         """
-        source_nodes = [
-            source.input("Joint To Drive").get(),
-            source.input("Geometry Patch").get(),
+        original_nodes = [
+            mirrored_from.input("Joint To Drive").get(),
+            mirrored_from.input("Geometry Patch").get(),
         ]
-        twin_nodes = [
+        mirrored_nodes = [
             self.input("Joint To Drive").get(),
             self.input("Geometry Patch").get(),
         ]
 
-        # -- Without both a joint and a patch on the source there is nothing
-        # -- to mirror onto created nodes, so the twin keeps its search and
+        # -- Without both a joint and a patch on the original there is nothing
+        # -- to mirror onto created nodes, so this component keeps its search and
         # -- replaced inputs as they are
-        if not all(source_nodes):
+        if not all(original_nodes):
             self.option("Create Joint And Patch").set(False)
             return
 
-        if self.mirror_mixin_counterparts_exist(source_nodes, twin_nodes):
+        if self.mirror_mixin_counterparts_exist(original_nodes, mirrored_nodes):
             self.option("Create Joint And Patch").set(False)
             return
 

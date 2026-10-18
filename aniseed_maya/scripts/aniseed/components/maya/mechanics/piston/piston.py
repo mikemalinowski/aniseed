@@ -229,7 +229,7 @@ class PistonComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
     def mirror_mixin_items_to_mirror(self) -> list:
         """
         Returns the base and tip joints. Empty unless both are set, so that
-        the twin's items always pair up by position.
+        the mirrored component's items always pair up by position.
         """
         base_joint = self.input("Base Joint").get()
         tip_joint = self.input("Tip Joint").get()
@@ -251,28 +251,28 @@ class PistonComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(base_joint).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
         Uses the other side's base and tip joints if they already exist (the
-        search and replaced names), otherwise copies the source joints into
-        the mirrored hierarchy for this twin to drive. The tip copy goes under
+        search and replaced names), otherwise copies the original joints into
+        the mirrored hierarchy for this component to drive. The tip copy goes under
         the base copy if the tip is a child of the base.
         """
-        source_joints = [
-            source.input("Base Joint").get(),
-            source.input("Tip Joint").get(),
+        original_joints = [
+            mirrored_from.input("Base Joint").get(),
+            mirrored_from.input("Tip Joint").get(),
         ]
-        twin_joints = [
+        mirrored_joints = [
             self.input("Base Joint").get(),
             self.input("Tip Joint").get(),
         ]
 
-        if not all(source_joints):
+        if not all(original_joints):
             return
 
-        if self.mirror_mixin_counterparts_exist(source_joints, twin_joints):
+        if self.mirror_mixin_counterparts_exist(original_joints, mirrored_joints):
             return
 
-        base_copy, tip_copy = self.mirror_mixin_copy_nodes(source_joints)
+        base_copy, tip_copy = self.mirror_mixin_copy_nodes(original_joints)
         self.input("Base Joint").set(base_copy)
         self.input("Tip Joint").set(tip_copy)

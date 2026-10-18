@@ -31,6 +31,7 @@ from .soft_ik import create_two_bone_soft_ik
 from .spline import SimpleSplineSetup
 from .spline import create_spline_setup
 from .twist import TwistSetup
+from .twist import create_twist_driver
 from .twist import create_twist_setup
 from .two_bone_ikfk import TwoBoneIKFK
 from .two_bone_ikfk import create_two_bone_ikfk
@@ -57,6 +58,7 @@ __all__ = [
     "create_ribbon",
     "create_rotator",
     "create_spline_setup",
+    "create_twist_driver",
     "create_twist_setup",
     "create_two_bone_ikfk",
     "create_two_bone_soft_ik",

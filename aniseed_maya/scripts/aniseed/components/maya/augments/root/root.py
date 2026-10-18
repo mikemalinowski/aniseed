@@ -128,7 +128,7 @@ class GlobalControlRoot(aniseed.RigComponent):
             return
 
         # -- To reach here the user would like us to create the joint.
-        joint = aniseed.builders.create_joint_from_selection(
+        joint = aniseed_toolkit.scene.joints.create_from_selection(
             name=self.config.generate_name(
                 description="global_srt",
                 classification=self.config.joint,

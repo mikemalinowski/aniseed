@@ -1,6 +1,5 @@
 import os
 import uuid
-import aniseed_toolkit
 
 from importlib.machinery import SourceFileLoader
 from . import host
@@ -29,7 +28,6 @@ def initialize():
         os.path.dirname(__file__),
         "components",
     )
-    print("runningi intia")
     for root, _, files in os.walk(components_root):
         for filename in files:
             if filename.lower() == "toolkit_plugin.py":

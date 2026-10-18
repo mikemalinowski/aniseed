@@ -358,7 +358,7 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         """
         Returns the foot guides (in guide tag order) followed by the leg root
         to toe chain and the upper, lower, mid and foot twist joints. The mid
-        and foot twists come last, as the twin cannot generate them. Empty if
+        and foot twists come last, as the mirrored component cannot generate them. Empty if
         there are no guides or joints.
         """
         guides = self.all_guides()
@@ -371,7 +371,7 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_parent_item(self) -> str:
         """
-        Returns the parent of the leg root, which is where the twin's skeleton
+        Returns the parent of the leg root, which is where the mirrored component's skeleton
         is generated. Empty if there is none.
         """
         leg_root = self.input("Leg Root").get()
@@ -381,19 +381,19 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         parent = mref.get(leg_root).parent()
         return parent.name() if parent else ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
-        If the other side already has its own (unused) leg joints, the twin
+        If the other side already has its own (unused) leg joints, this component
         uses them, and gets foot guides of its own unless the other side has
-        those too. Otherwise the twin generates its own skeleton and guides,
-        with upper and lower twist counts matching the source. The skeleton
+        those too. Otherwise this component generates its own skeleton and guides,
+        with upper and lower twist counts matching the original. The skeleton
         generation does not create mid or foot twist joints, so those are
         cleared with a warning.
         """
-        if self.mirror_mixin_counterparts_exist(source._mirror_joints()):
+        if self.mirror_mixin_counterparts_exist(mirrored_from._mirror_joints()):
             self.option("Build Skeleton").set(False)
 
-            if not self.mirror_mixin_counterparts_exist(source.all_guides()):
+            if not self.mirror_mixin_counterparts_exist(mirrored_from.all_guides()):
                 guides = foot.create_guides(
                     description_prefix="leg_",
                     location=self.option("Location").get(),
@@ -406,13 +406,13 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         self.option("Build Skeleton").set(True)
 
         for input_name, option_name in _TRILEG_TWISTS:
-            self.option(option_name).set(len(source.input(input_name).get() or []))
+            self.option(option_name).set(len(mirrored_from.input(input_name).get() or []))
             self.input(input_name).set([])
 
         for input_name in _TRILEG_UNGENERATED_TWISTS:
-            if source.input(input_name).get():
+            if mirrored_from.input(input_name).get():
                 print(
-                    f"Mirror : {source.label()} has {input_name} but they cannot be "
+                    f"Mirror : {mirrored_from.label()} has {input_name} but they cannot be "
                     f"generated for {self.label()}. Add them to {self.label()} by hand."
                 )
             self.input(input_name).set([])
@@ -423,15 +423,15 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         for guide_tag in self.guide_tags:
             self.input(f"{guide_tag} Guide").set("")
 
-    def mirror_mixin_post_mirror(self, source) -> None:
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Restores the creation options the twin's on_enter_stack used to the
-        source's values, so the twin's data matches the source.
+        Restores the creation options this component's on_enter_stack used to the
+        original's values, so this component's data matches the original.
         """
         option_names = ["Build Skeleton"] + [option_name for _, option_name in _TRILEG_TWISTS]
 
         for option_name in option_names:
-            self.option(option_name).set(source.option(option_name).get(resolved=False))
+            self.option(option_name).set(mirrored_from.option(option_name).get(resolved=False))
 
     def is_valid(self) -> bool:
         """
@@ -587,7 +587,7 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
         # -- Set up the space switches on the fk controls
         if self.option("Apply World Fk Switches").get():
-            aniseed.builders.setup_fk_worldspace_switches(fk_data["controls"], rig=self.rig)
+            aniseed_toolkit.rig.space.setup_fk_worldspace_switches(fk_data["controls"], config=self.config)
 
         self.output("Blended Upper Leg").set(nk_joints[self.INDEX_UPPER_LEG])
         self.output("Blended Mid Leg").set(nk_joints[self.INDEX_MID_LEG])
@@ -1096,14 +1096,16 @@ class TriLegComponent(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
             if not twist_joints:
                 continue
 
-            aniseed.builders.add_twister(
-                rig=self.rig,
+            aniseed_toolkit.rigging.twist.create_twist_driver(
+                config=self.config,
                 joints=twist_joints,
                 parent=twist_parent,
                 root=root,
                 tip=tip,
-                prefix=prefix + description,
+                description=prefix + description,
                 location=location,
+                constrain_root=False,
+                constrain_tip=True,
             )
 
     def user_func_create_skeleton(

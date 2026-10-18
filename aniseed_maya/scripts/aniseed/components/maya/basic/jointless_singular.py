@@ -178,7 +178,7 @@ class JointlessSingular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
 
     def mirror_mixin_items_to_mirror(self) -> list:
         """
-        Returns the guide, which is mirrored onto the twin's guide. Empty if
+        Returns the guide, which is mirrored onto the mirrored component's guide. Empty if
         no guide is set.
         """
         guide = self.input("Guide").get()
@@ -192,17 +192,17 @@ class JointlessSingular(aniseed.RigComponent, aniseed.mixins.MirrorMixin):
         """
         return ""
 
-    def mirror_mixin_prepare_twin(self, source) -> None:
+    def mirror_mixin_prepare(self, mirrored_from) -> None:
         """
         Uses the other side's guide if it already exists (the search and
-        replaced name), otherwise copies the source guide into the mirrored
-        hierarchy for this twin.
+        replaced name), otherwise copies the original guide into the mirrored
+        hierarchy for this component.
         """
-        source_guide = source.input("Guide").get()
-        if not source_guide:
+        original_guide = mirrored_from.input("Guide").get()
+        if not original_guide:
             return
 
-        if self.mirror_mixin_counterparts_exist([source_guide], [self.input("Guide").get()]):
+        if self.mirror_mixin_counterparts_exist([original_guide], [self.input("Guide").get()]):
             return
 
-        self.input("Guide").set(self.mirror_mixin_copy_nodes([source_guide])[0])
+        self.input("Guide").set(self.mirror_mixin_copy_nodes([original_guide])[0])
