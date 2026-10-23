@@ -5,11 +5,14 @@ world alignment. It can generate the neck and head joints from head.json when
 added to the stack.
 """
 import os
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
 import aniseed_toolkit.ui.dialogs
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class HeadComponent(aniseed.RigComponent, MirrorMixin):
@@ -34,7 +37,7 @@ class HeadComponent(aniseed.RigComponent, MirrorMixin):
         location and world alignment options, and the neck and head control
         outputs (the head being the default).
         """
-        super(HeadComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -133,7 +136,7 @@ class HeadComponent(aniseed.RigComponent, MirrorMixin):
         """
         Exposes a "Create Joints" menu entry when no head joint is set.
         """
-        menu = super(HeadComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Head Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
@@ -153,7 +156,7 @@ class HeadComponent(aniseed.RigComponent, MirrorMixin):
         neck_controls = []
         next_parent = self.input("Parent").get()
 
-        for neck_joint in self.input("Neck Joints").get():
+        for neck_joint in self._neck_joints():
             # -- Create the neck control
             neck_control = aniseed_toolkit.rig.control.create(
                 description=f"{prefix}Neck",
@@ -307,7 +310,7 @@ class HeadComponent(aniseed.RigComponent, MirrorMixin):
             return
 
         if not mirrored_from.mirror_mixin_parent_item():
-            print(
+            log.warning(
                 f"Mirror : {mirrored_from.label()} has no parent joint, so "
                 f"{self.label()} cannot create its joints"
             )
@@ -315,7 +318,7 @@ class HeadComponent(aniseed.RigComponent, MirrorMixin):
             return
 
         if len(mirrored_from._neck_joints()) > 1:
-            print(
+            log.warning(
                 f"Mirror : {mirrored_from.label()} has {len(mirrored_from._neck_joints())} neck joints "
                 f"but {self.label()} creates one. Only the first neck joint is mirrored."
             )

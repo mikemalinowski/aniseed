@@ -5,9 +5,12 @@ joint which is not already constrained. Controls are parented under the
 driver of the parent joint and named from regex matches on the joint names.
 """
 import re
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 class FkSweep(aniseed.RigComponent):
@@ -31,7 +34,7 @@ class FkSweep(aniseed.RigComponent):
         the description, counter and location from joint names (plus an
         ignore regex), the control shape and the offset control option.
         """
-        super(FkSweep, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Hierarchy Root",
@@ -91,6 +94,34 @@ class FkSweep(aniseed.RigComponent):
         if option_name == "Shape":
             return aniseed.widgets.ShapeSelector(self.option("Shape").get())
 
+    def is_valid(self) -> bool:
+        """
+        Checks that the hierarchy root exists, that the regexes compile and
+        that the name of every joint which will get a control matches the
+        description, location and counter regexes.
+        """
+        hierarchy_root = self.input("Hierarchy Root").get()
+
+        if not hierarchy_root or not mref.objExists(hierarchy_root):
+            log.warning(f"{self.label()} : Hierarchy Root is not set or does not exist")
+            return False
+
+        try:
+            regexes = self._compile_regexes()
+        except re.error as error:
+            log.warning(f"{self.label()} : one of the regex options is not valid ({error})")
+            return False
+
+        for joint in self._joints_to_drive(mref.get(hierarchy_root), regexes["ignore"]):
+            if not self._extract_naming(joint.name(), regexes):
+                log.warning(
+                    f"{self.label()} : could not extract the description, location "
+                    f"and counter from '{joint.name()}' using the extraction regexes"
+                )
+                return False
+
+        return True
+
     def run(self):
         """
         Walks the joints below (and including) the hierarchy root, parents
@@ -98,47 +129,24 @@ class FkSweep(aniseed.RigComponent):
         constrained and not matched by the ignore regex. Each control is
         parented under the driver of the parent joint's first constraint and
         named using the regex extracted description, location and counter.
-        Joints whose parent is not constrained, or whose names do not match
-        the regexes, will cause an error.
+        Joints whose parent is not constrained will cause an error.
         """
 
         hierarchy_root = mref.get(self.input("Hierarchy Root").get())
         shape = self.option("Shape").get()
 
-        # -- Compile our regex
-        description_regex = re.compile(self.option("Description Extraction Regex").get())
-        location_regex = re.compile(self.option("Location Extraction Regex").get())
-        counter_regex = re.compile(self.option("Counter Extraction Regex").get())
+        regexes = self._compile_regexes()
 
-        ignore_regex = None
-        if self.option("Ignore Regex").get():
-            ignore_regex = re.compile(self.option("Ignore Regex").get())
-
-        # -- Sort the joints by depth so parents are always handled
-        # -- before their children
-        joints = hierarchy_root.children(recursive=True, node_type="joint")
-        joints = sorted(joints, key=lambda x: x.full_name().count("|"))
-        joints.insert(0, hierarchy_root)
-
-        for joint in joints:
-
-            # -- Skip any joints which are already driven
-            if joint.constraints():
-                continue
+        for joint in self._joints_to_drive(hierarchy_root, regexes["ignore"]):
 
             joint_name = joint.name()
-
-            if ignore_regex and ignore_regex.search(joint_name):
-                continue
 
             # -- To reach here we have a joint which is not driven, so lets
             # -- get the driver of the parent joint
             driver = joint.parent().constraints()[0].drivers()[0]
 
             # -- Pull out the naming classifications
-            description = description_regex.search(joint_name).groups()[0]
-            location = location_regex.search(joint_name).groups()[0]
-            counter = int(counter_regex.search(joint_name).groups()[0])
+            description, location, counter = self._extract_naming(joint_name, regexes)
 
             # -- Lets build a control for this joint
             control = aniseed_toolkit.rig.control.create(
@@ -168,3 +176,60 @@ class FkSweep(aniseed.RigComponent):
                 joint,
                 maintain_offset=True,
             )
+
+    def _compile_regexes(self) -> dict:
+        """
+        Compiles the regex options. The ignore regex is None when the option
+        is empty. Raises re.error if any of them is not a valid regex.
+        """
+        ignore_regex = None
+        if self.option("Ignore Regex").get():
+            ignore_regex = re.compile(self.option("Ignore Regex").get())
+
+        return dict(
+            description=re.compile(self.option("Description Extraction Regex").get()),
+            location=re.compile(self.option("Location Extraction Regex").get()),
+            counter=re.compile(self.option("Counter Extraction Regex").get()),
+            ignore=ignore_regex,
+        )
+
+    @staticmethod
+    def _joints_to_drive(hierarchy_root, ignore_regex) -> list:
+        """
+        Returns the hierarchy root and the joints below it, sorted by depth so
+        parents always come before their children, leaving out any joints
+        which are already constrained or whose name matches the ignore regex.
+        """
+        joints = hierarchy_root.children(recursive=True, node_type="joint")
+        joints = sorted(joints, key=lambda x: x.full_name().count("|"))
+        joints.insert(0, hierarchy_root)
+
+        return [
+            joint
+            for joint in joints
+            if not joint.constraints()
+            and not (ignore_regex and ignore_regex.search(joint.name()))
+        ]
+
+    @staticmethod
+    def _extract_naming(joint_name: str, regexes: dict):
+        """
+        Returns the description, location and counter extracted from the
+        joint name by the regexes, or None if any of them does not match (or
+        the counter is not a number).
+        """
+        description_match = regexes["description"].search(joint_name)
+        location_match = regexes["location"].search(joint_name)
+        counter_match = regexes["counter"].search(joint_name)
+
+        if not description_match or not location_match or not counter_match:
+            return None
+
+        try:
+            return (
+                description_match.groups()[0],
+                location_match.groups()[0],
+                int(counter_match.groups()[0]),
+            )
+        except (IndexError, ValueError):
+            return None

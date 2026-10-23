@@ -243,9 +243,13 @@ class DagNode(mref.Trait):
         counterpart; call ``unlock_attributes`` with explicit channel names
         to reverse.
         """
+        additional_kwargs = {}
+        if hide:
+            additional_kwargs["channelBox"] = False
+
         for type_ in ["t", "r", "s"]:
             for axis in ["x", "y", "z"]:
-                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=True, channelBox=not hide)
+                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=True, **additional_kwargs)
 
     def unlock_transform_attributes(self, hide=False) -> None:
         """
@@ -256,7 +260,10 @@ class DagNode(mref.Trait):
         """
         for type_ in ["t", "r", "s"]:
             for axis in ["x", "y", "z"]:
-                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=False, channelBox=not hide)
+                cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", lock=False)
+                try:
+                    cmds.setAttr(f"{self.item.full_name()}.{type_}{axis}", channelBox=not hide)
+                except: pass
 
     # ------------------------------------------------------------------
     # DAG path and hierarchy

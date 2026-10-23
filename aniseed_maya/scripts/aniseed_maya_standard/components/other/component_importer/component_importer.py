@@ -4,8 +4,11 @@ made rig part from a Maya file into an optional namespace. The import itself
 is not implemented yet, so the component currently only validates that the
 file exists.
 """
+import logging
 import os
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 class ComponentImporter(aniseed.RigComponent):
@@ -66,7 +69,7 @@ class ComponentImporter(aniseed.RigComponent):
         filepath = self.input("Filepath").get()
 
         if not os.path.exists(filepath):
-            print(f"{filepath} does not exist")
+            log.warning(f"{self.label()} : {filepath} does not exist")
             return False
 
         return True

@@ -1,7 +1,9 @@
 import os
 import sys
+import logging
 import qtility
 import blackout
+import contextlib
 import webbrowser
 import aniseed
 import aniseed_toolkit
@@ -9,13 +11,64 @@ from Qt import QtCore, QtWidgets, QtGui
 
 import maya
 from maya import cmds
+from maya.api import OpenMaya as om
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
+
+try:
+    from shiboken6 import isValid
+except ImportError:
+    from shiboken2 import isValid
+
+log = logging.getLogger(__name__)
+
+# -- The ids of the scene callbacks registered by MayaHost
+_SCENE_CALLBACK_IDS = list()
 
 
 class MayaHost(aniseed.EmbeddedHost):
 
     name = "maya"
     priority = 0
+
+    def __init__(self):
+        super().__init__()
+        self._register_scene_callbacks()
+
+    @staticmethod
+    def _register_scene_callbacks():
+        """
+        Registers the scene callbacks which keep aniseed's shared rigs in step
+        with the scene: outstanding recipe changes are written before a save,
+        and the rigs are released before the scene is replaced. These need to
+        run before the event, which only OpenMaya's scene messages offer.
+        """
+        if _SCENE_CALLBACK_IDS:
+            om.MMessage.removeCallbacks(_SCENE_CALLBACK_IDS)
+            _SCENE_CALLBACK_IDS.clear()
+
+        try:
+            _SCENE_CALLBACK_IDS.extend(
+                [
+                    om.MSceneMessage.addCallback(
+                        om.MSceneMessage.kBeforeSave,
+                        _flush_rigs,
+                    ),
+                    om.MSceneMessage.addCallback(
+                        om.MSceneMessage.kBeforeNew,
+                        _release_rigs,
+                    ),
+                    om.MSceneMessage.addCallback(
+                        om.MSceneMessage.kBeforeOpen,
+                        _release_rigs,
+                    ),
+                ]
+            )
+
+        except RuntimeError:
+            log.warning(
+                "Could not register the aniseed scene callbacks, so rigs will not "
+                "be released when the scene changes"
+            )
 
     def launch(self):
         """
@@ -66,6 +119,34 @@ class MayaHost(aniseed.EmbeddedHost):
         """
         MenuBuilder.build()
 
+    @contextlib.contextmanager
+    def build_context(self, rig):
+        """
+        Runs the build as a single undo step, so one undo reverts the whole build
+        """
+        cmds.undoInfo(openChunk=True, chunkName=f"Aniseed Build : {rig.label}")
+
+        try:
+            yield
+
+        finally:
+            cmds.undoInfo(closeChunk=True)
+
+    @contextlib.contextmanager
+    def without_undo(self):
+        """
+        Suspends undo recording, without flushing the undo queue, so the
+        changes made within it are not undo steps
+        """
+        undo_enabled = cmds.undoInfo(query=True, state=True)
+        cmds.undoInfo(stateWithoutFlush=False)
+
+        try:
+            yield
+
+        finally:
+            cmds.undoInfo(stateWithoutFlush=undo_enabled)
+
     def on_rig_save(self, rig) -> dict:
         """
         This is called when a rig is being saved
@@ -95,7 +176,7 @@ class MayaHost(aniseed.EmbeddedHost):
         return dict(
             hierarchy=aniseed_toolkit.run(
                 "Serialise Nodes To Dict",
-                nodes=nodes,
+                nodes=resolved_nodes,
             ),
         )
 
@@ -248,6 +329,10 @@ class MenuBuilder:
     def _menu_reload(cls, *args, **kwargs):
         aniseed.Rig.clear_factory_cache()
 
+        # -- The existing rigs hold the old component classes, so release them
+        # -- and let them be created afresh from the reloaded modules
+        aniseed.Rig.clear_registry()
+
         # -- Aniseed packages (and therefore their mixins and widgets) are
         # -- dropped too, so edits to them are picked up alongside the
         # -- components
@@ -269,7 +354,8 @@ class MenuBuilder:
                 version_data.append(label)
 
             except AttributeError:
-                label = f"{package.rjust(15, ' ')} : No Version Data"
+                label = f"{package} : No Version Data"
+                version_data.append(label)
 
         version_data.append("\nAniseed Packages")
         for package in aniseed.packages.discover():
@@ -312,8 +398,13 @@ class MayaAppWidget(aniseed.AppWidget):
     def notify_build_started(self, *args, **kwargs):
         cmds.inViewMessage(amg="Build Started", **self.options)
 
-    def notify_build_finished(self, *args, **kwargs):
-        cmds.inViewMessage(amg="Build Finished", **self.options)
+    def notify_build_failed(self, component=None, details="", *args, **kwargs):
+        failed_at = f" : {component.label()}" if component else ""
+        cmds.inViewMessage(amg=f"Build Failed{failed_at}", **self.options)
+
+    def notify_build_finished(self, successful=True, *args, **kwargs):
+        if successful:
+            cmds.inViewMessage(amg="Build Finished", **self.options)
 
 
 # noinspection PyUnresolvedReferences
@@ -448,11 +539,6 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
 
     @classmethod
     def instance(cls):
-        try:
-            from shiboken6 import isValid
-        except ImportError:
-            from shiboken2 import isValid
-
         # -- Iterate a snapshot so we can safely mutate the registry to
         # -- evict sip-deleted shells we discover along the way. Maya
         # -- can destroy the C++ side of a dockable widget during scene
@@ -468,14 +554,30 @@ class DockableMayaApp(MayaQWidgetDockableMixin, QtWidgets.QMainWindow):
     def remove_workspace_control(cls, control):
         if cmds.workspaceControl(control, q=True, exists=True):
 
+            # -- Either step can fail if Maya has already torn the control
+            # -- down part way, which is what we want anyway
             try:
                 cmds.workspaceControl(control, e=True, close=True)
-            except:
+            except RuntimeError:
                 pass
 
             try:
                 cmds.deleteUI(control, control=True)
-            except:
+            except RuntimeError:
                 pass
 
             return
+
+
+def _flush_rigs(*args):
+    """
+    Writes any outstanding recipe changes before the scene is saved
+    """
+    aniseed.Rig.flush_all()
+
+
+def _release_rigs(*args):
+    """
+    Releases the shared rigs before the scene they belong to is replaced
+    """
+    aniseed.Rig.clear_registry()

@@ -1,4 +1,6 @@
 import string
+import typing
+import logging
 import weakref
 import qtility
 import functools
@@ -6,14 +8,19 @@ from Qt import QtWidgets, QtCore, QtGui
 
 from . import resources
 
+log = logging.getLogger(__name__)
+
 
 # ----------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
 class ComponentEditor(QtWidgets.QWidget):
     """
-    The component editor shows the tabs for both the requirements and the options
-    of a component.
+    The component editor shows the name of a component, along with the tabs for
+    its inputs, options and outputs.
     """
+
+    # -- Emitted when the user changes the component name through the editor
+    label_changed = QtCore.Signal()
 
     # ----------------------------------------------------------------------------------
     def __init__(self, parent=None):
@@ -25,6 +32,13 @@ class ComponentEditor(QtWidgets.QWidget):
             ),
         )
         self.component = None
+
+        # -- The name field lets the user see and change the component label
+        self.name_edit = QtWidgets.QLineEdit()
+        self.name_edit.setAlignment(QtCore.Qt.AlignCenter)
+        self.name_edit.setEnabled(False)
+        self.name_edit.editingFinished.connect(self._on_name_edited)
+        self.layout().addWidget(self.name_edit)
 
         # -- We are hosting an unknown amount of widgets, so lets create
         # -- a scrollable area to place the tabs within.
@@ -78,12 +92,35 @@ class ComponentEditor(QtWidgets.QWidget):
         self.inputs_widget.set_component(component)
         self.outputs_widget.set_component(component)
 
+        self.name_edit.setText(component.label() if component else "")
+        self.name_edit.setEnabled(component is not None)
+
         self.component = weakref.ref(component) if component else None
 
     # ----------------------------------------------------------------------------------
     def redraw(self):
         if self.component and self.component():
             self.set_component(self.component())
+
+    # ----------------------------------------------------------------------------------
+    def _on_name_edited(self):
+        """
+        Applies the name typed by the user as the label of the component. An empty
+        or unchanged name restores the current label.
+        """
+        component = self.component() if self.component else None
+
+        if not component:
+            return
+
+        label = self.name_edit.text().strip()
+
+        if not label or label == component.label():
+            self.name_edit.setText(component.label())
+            return
+
+        component.set_label(label)
+        self.label_changed.emit()
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences,DuplicatedCode
@@ -117,7 +154,7 @@ class OptionsWidget(QtWidgets.QWidget):
 
     # ----------------------------------------------------------------------------------
     # noinspection PyUnresolvedReferences
-    def set_component(self, component: "xstack.Component" or None):
+    def set_component(self, component: typing.Optional["xstack.Component"]):
         """
         This sets the target component for the widget and populates the widget
         with all the options.
@@ -158,7 +195,7 @@ class OptionsWidget(QtWidgets.QWidget):
                 )
 
             if not option_widget:
-                print(f"Could not resolve a widget for : {option.name()}")
+                log.warning(f"Could not resolve a widget for : {option.name()}")
                 continue
 
             option_widget.setToolTip(
@@ -327,7 +364,7 @@ class InputsWidget(QtWidgets.QWidget):
                 )
 
             if not input_widget:
-                print(f"Could not resolve a widget for : {input_.name()}, {input_.get()}")
+                log.warning(f"Could not resolve a widget for : {input_.name()}, {input_.get()}")
                 continue
 
             input_widget.setToolTip(

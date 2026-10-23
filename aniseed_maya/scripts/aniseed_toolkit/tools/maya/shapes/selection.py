@@ -4,7 +4,7 @@ import typing
 import qtility
 import aniseed_toolkit
 
-import maya.cmds as mc
+from maya import cmds
 import maya.api.OpenMaya as om
 
 
@@ -18,11 +18,13 @@ class SelectShapes(aniseed_toolkit.Tool):
 
     def run(self, nodes=None) -> list[str]:
         """
-        This will return a list of shape files which are present in the
-        aniseed toolkit shapes directory
+        This will select the shapes of the given (or selected) nodes.
+
+        Args:
+            nodes: The nodes to select the shapes of
 
         Returns:
-            List of absolute paths to the json shape files
+            None
         """
-        nodes = nodes or mc.ls(sl=True)
+        nodes = nodes or cmds.ls(sl=True)
         return aniseed_toolkit.scene.shapes.select_shapes(nodes)

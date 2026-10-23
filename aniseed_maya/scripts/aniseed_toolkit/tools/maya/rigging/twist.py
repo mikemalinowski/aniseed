@@ -1,5 +1,6 @@
 import typing
 
+from maya import cmds
 import aniseed_toolkit
 
 if typing.TYPE_CHECKING:
@@ -8,6 +9,36 @@ if typing.TYPE_CHECKING:
 # -- The builder lives in the rigging layer. The name is kept here so that
 # -- anything which referenced it from this module still finds it.
 TwistSetup = aniseed_toolkit.rigging.twist.TwistSetup
+
+
+class _DefaultNaming:
+    """
+    Stands in for an aniseed.RigConfiguration when the tool is run without
+    one (as it is from the toolkit ui). It names nodes in the same
+    [location]_[classification]_[description]_[##] form as the default
+    rig configuration.
+    """
+
+    organisational = "org"
+    control = "ctrl"
+    zero = "zero"
+    offset = "off"
+
+    def generate_name(
+            self,
+            classification: str,
+            description: str,
+            location: str,
+            counter: int = 1,
+            unique: bool = True,
+    ) -> str:
+        while True:
+            formatted_counter = str(counter).rjust(2, "0")
+            name = f"{location.lower()}_{classification}_{description.lower()}_{formatted_counter}"
+
+            if not unique or not cmds.objExists(name):
+                return name
+            counter += 1
 
 
 class CreateTwist(aniseed_toolkit.Tool):
@@ -39,7 +70,9 @@ class CreateTwist(aniseed_toolkit.Tool):
             description (str): The description of the twist - this will be used in
                 all the node names
             location: The location tag for the nodes
-            config: The aniseed.RigConfiguration instance
+            config: The aniseed.RigConfiguration instance used for naming. If
+                not given, nodes are named in the default rig configuration's
+                form.
 
         Returns:
             The TwistSetup instance
@@ -48,5 +81,5 @@ class CreateTwist(aniseed_toolkit.Tool):
             twist_count=twist_count,
             description=description,
             location=location,
-            config=config,
+            config=config or _DefaultNaming(),
         )

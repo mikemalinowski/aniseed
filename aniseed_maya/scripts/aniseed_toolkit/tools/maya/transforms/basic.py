@@ -1,7 +1,7 @@
 import mref
 import qtility
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class SnapshotNodeTranslation(aniseed_toolkit.Tool):
@@ -23,7 +23,7 @@ class SnapshotNodeTranslation(aniseed_toolkit.Tool):
         if node:
             nodes = [node]
         else:
-            nodes = mc.ls(selection=True)
+            nodes = cmds.ls(selection=True)
         SnapshotNodeTranslation.snapshot = dict()
 
         for store_node in nodes:
@@ -80,7 +80,7 @@ class ScaleNodeTranslation(aniseed_toolkit.Tool):
         if node:
             nodes = [node]
         else:
-            nodes = mc.ls(selection=True)
+            nodes = cmds.ls(selection=True)
 
         for node in nodes:
             aniseed_toolkit.scene.transforms.scale_translation(node, scale_by)
@@ -102,7 +102,7 @@ class ScaleHierarchyTranslation(aniseed_toolkit.Tool):
         if node:
             nodes = [node]
         else:
-            nodes = mc.ls(selection=True)
+            nodes = cmds.ls(selection=True)
 
         for node in nodes:
             aniseed_toolkit.scene.transforms.scale_translation_of_hierarchy(node, scale_by)

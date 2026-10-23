@@ -7,12 +7,15 @@ position only and orientation only flags apply to every space.
 """
 import os
 import uuid
+import logging
 import aniseed
 import qtility
 import collections
 import aniseed_toolkit
 
 from Qt import QtCore, QtWidgets
+
+log = logging.getLogger(__name__)
 
 
 class SpaceSwitchComponent(aniseed.RigComponent):
@@ -47,7 +50,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
         self.declare_input(
             name="To Be Driven",
-            description="The root of the spine",
+            description="The node that the space switch drives",
             validate=True,
             group="Required Entries",
         )
@@ -91,6 +94,48 @@ class SpaceSwitchComponent(aniseed.RigComponent):
         if requirement_name in ("To Be Driven", "Attribute Host"):
             return aniseed.widgets.ObjectSelector(component=self)
 
+    def is_valid(self) -> bool:
+        """
+        Checks that at least one space is defined, that every space has a
+        label and a target, that no two spaces share a label, and that the
+        default space (if given) is one of the space labels.
+        """
+        data = self.option("_Data").get() or dict()
+        spaces = data.get("spaces", list())
+
+        if not spaces:
+            log.warning(f"{self.label()} : No spaces have been defined")
+            return False
+
+        labels = list()
+
+        for space in spaces:
+            label = space.get("label")
+
+            if not label:
+                log.warning(f"{self.label()} : A space has no label")
+                return False
+
+            if not space.get("target"):
+                log.warning(f"{self.label()} : The space {label!r} has no target")
+                return False
+
+            if label in labels:
+                log.warning(f"{self.label()} : More than one space is labelled {label!r}")
+                return False
+
+            labels.append(label)
+
+        default_space = data.get("default_space")
+
+        if default_space and default_space not in labels:
+            log.warning(
+                f"{self.label()} : The default space {default_space!r} is not one of the spaces ({', '.join(labels)})"
+            )
+            return False
+
+        return True
+
     def run(self):
         """
         Data should take the form of:
@@ -131,7 +176,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
             driven=node_to_drive,
             host=host,
             spaces=spaces,
-            default_space=data["default_space"],
+            default_space=data.get("default_space", ""),
             config=self.config,
         )
 

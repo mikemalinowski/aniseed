@@ -4,7 +4,7 @@ ctl parts of a control hierarchy), control creation, offset controls and
 queries for controls with curve shapes.
 """
 import json
-import traceback
+import logging
 import typing
 
 from maya import cmds
@@ -17,6 +17,7 @@ from ..scene import shapes as _shapes
 if typing.TYPE_CHECKING:
     import aniseed
 
+log = logging.getLogger(__name__)
 
 
 class Control:
@@ -101,8 +102,7 @@ class Control:
             )[0]
 
         except (ValueError, IndexError):
-            print("Failed to get component")
-            traceback.print_exc()
+            log.exception(f"Failed to get the {classification} part of {self._control_node}")
             return None
 
     @classmethod
@@ -133,8 +133,7 @@ class Control:
             )
 
         except (ValueError, IndexError):
-            print("Failed to get component")
-            traceback.print_exc()
+            log.exception(f"Failed to get the control linked to {node}")
             return None
 
     @classmethod
@@ -175,8 +174,9 @@ class Control:
             shape_scale: Scale of the shape to apply to the control, default is 1.0
             rotate_shape: Optional x, y, z rotation to apply to the shape,
                 default is None
-            classification_override: By default this will always use the control
-                prefix as per the rig configuration, but you can specify an override.
+            classification_override: If given, this classification is used
+                in place of the configured org, zero, offset and control
+                classifications when naming every part of the hierarchy.
             counter: The counter to use when generating the names, default is 1
 
         Returns:
@@ -297,8 +297,9 @@ def create(
         shape_scale: Scale of the shape to apply to the control, default is 1.0
         rotate_shape: Optional x, y, z rotation to apply to the shape,
             default is None
-        classification_override: By default this will always use the control
-            prefix as per the rig configuration, but you can specify an override.
+        classification_override: If given, this classification is used in
+            place of the configured org, zero, offset and control
+            classifications when naming every part of the hierarchy.
         counter: The counter to use when generating the names, default is 1
 
     Returns:

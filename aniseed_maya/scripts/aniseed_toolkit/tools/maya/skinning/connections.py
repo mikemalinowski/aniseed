@@ -11,8 +11,9 @@ class DisconnectAllSkinsTool(aniseed_toolkit.Tool):
 
     def run(self) -> None:
         """
-        This will disconnect all the skinCluster nodes in the scene. It does not
-        remove them, and does not disconnect them.
+        This will disconnect all the skinCluster nodes in the scene (putting
+        them into move joints mode), so the influences can be moved without
+        deforming the meshes. It does not delete them.
         """
         aniseed_toolkit.scene.skin.disconnect_all_skins()
 

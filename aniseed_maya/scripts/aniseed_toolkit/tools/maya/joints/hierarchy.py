@@ -1,6 +1,10 @@
+import logging
+
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 
@@ -259,13 +263,17 @@ class GetChainLength(aniseed_toolkit.Tool):
         Args:
             start: The joint from which to start measuring
             end: The joint to which measuring should end
-            log_result: If true, the result should be printed
+            log_result: If true, the result is logged
 
         Returns:
             The total length of all the bones in the chain
         """
-        return aniseed_toolkit.scene.joints.chain_length(
+        length = aniseed_toolkit.scene.joints.chain_length(
             start=start,
             end=end,
-            log_result=log_result,
         )
+
+        if log_result:
+            log.info(f"Chain length between {start} and {end} is {length}")
+
+        return length

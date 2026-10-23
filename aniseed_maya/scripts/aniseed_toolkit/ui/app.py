@@ -1,5 +1,7 @@
 import os
 import re
+import inspect
+import logging
 import qtility
 import functools
 from Qt import QtWidgets, QtGui, QtCore
@@ -7,13 +9,15 @@ from Qt import QtWidgets, QtGui, QtCore
 from .. import resources
 from ..core import ToolBox
 
+log = logging.getLogger(__name__)
+
 
 class ToolWidget(QtWidgets.QWidget):
 
-    _FILTER_DENOMINATORS = re.compile("\,|\;")
+    _FILTER_DENOMINATORS = re.compile(r"[,;]")
 
     def __init__(self, parent=None):
-        super(ToolWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
         # -- Instance a singleton of the toolbox
         self.toolbox = ToolBox.singleton()
 
@@ -78,11 +82,35 @@ class ToolWidget(QtWidgets.QWidget):
         if not tool_identifier:
             return
 
-        kwargs = self.toolbox.signature(tool_identifier)
+        parameters = inspect.signature(
+            self.toolbox.instance(tool_identifier).run,
+        ).parameters
 
-        for key, value in kwargs.items():
-            if key in self._dynamic_widgets:
-                kwargs[key] = qtility.derive.value(self._dynamic_widgets[key])
+        kwargs = dict()
+        missing = []
+
+        for name, parameter in parameters.items():
+
+            if parameter.kind in (parameter.VAR_POSITIONAL, parameter.VAR_KEYWORD):
+                continue
+
+            if name in self._dynamic_widgets:
+                kwargs[name] = qtility.derive.value(self._dynamic_widgets[name])
+
+            elif parameter.default is not inspect.Parameter.empty:
+                kwargs[name] = parameter.default
+
+            else:
+                missing.append(name)
+
+        # -- A required argument the ui has no widget for cannot be given
+        # -- a value here, so the tool can only be run from code
+        if missing:
+            log.warning(
+                f"'{tool_identifier}' cannot be run from the toolkit, as it needs "
+                f"values for: {', '.join(missing)}"
+            )
+            return
 
         self.toolbox.run(tool_identifier, **kwargs)
 
@@ -197,7 +225,7 @@ class ToolWidget(QtWidgets.QWidget):
 class ToolList(QtWidgets.QTreeWidget):
 
     def __init__(self, toolbox, parent=None):
-        super(ToolList, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Set the general properties
         self.setHeaderHidden(True)
@@ -242,9 +270,19 @@ class ToolList(QtWidgets.QTreeWidget):
         self.clear()
         self._tool_items = []
 
-        # -- Get a list of categories, and create an item for each one
+        # -- Get a list of categories, and create an item for each one. General
+        # -- always exists, as it is where uncategorised tools go, so it is made
+        # -- up front - and needs its icon setting here, as the loop below skips
+        # -- categories which already exist
+        general_item = QtWidgets.QTreeWidgetItem(["General"])
+        general_item.setIcon(
+            0,
+            QtGui.QIcon(
+                resources.get("icons/General.png")
+            )
+        )
         self._category_items = dict(
-            General=QtWidgets.QTreeWidgetItem(["General"])
+            General=general_item,
         )
 
         for category in self.toolbox.categories():
@@ -351,7 +389,7 @@ class ToolList(QtWidgets.QTreeWidget):
 class ToolWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent=None):
-        super(ToolWindow, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.setCentralWidget(ToolWidget(self))
         self.setWindowTitle("Aniseed Toolkit")

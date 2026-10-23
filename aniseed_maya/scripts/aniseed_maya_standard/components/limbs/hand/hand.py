@@ -8,8 +8,11 @@ supports mirroring.
 import os
 import mref
 import aniseed
+import logging
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class HandComponent(aniseed.RigComponent, MirrorMixin):
@@ -26,7 +29,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         metacarpal, digit count and attribute exposure behaviour options and
         the joint creation options. The single (default) output is the hand.
         """
-        super(HandComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -143,8 +146,13 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         When the component is removed from the stack we need to remove the
         bones too.
         """
+        # -- There is nothing to remove if the joints were never created
+        hand_joint = self.input("Hand Joint").get()
+        if not hand_joint or not mref.objExists(hand_joint):
+            return
+
         # -- Remove the joints (re-parenting any children)
-        new_parent = mref.get(self.input("Hand Joint").get()).parent()
+        new_parent = mref.get(hand_joint).parent()
         aniseed_toolkit.scene.joints.reparent_unknown_children(self.all_joints(), new_parent)
 
         # -- Now delete our joints
@@ -177,7 +185,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         """
         This exposes various bits of functionality to the user
         """
-        menu = super(HandComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Hand Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
@@ -188,22 +196,32 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         """
         Check whether we have all the inputs we require in order to build
         """
+        hand_joint = self.input("Hand Joint").get()
         finger_tips = self.input("Finger Tips").get() or list()
         thumb_tip = self.input("Thumb Tip").get()
 
+        if not hand_joint or not mref.objExists(hand_joint):
+            log.warning(f"{self.label()}: The Hand Joint input is not set to an existing joint")
+            return False
+
         if not len(finger_tips) > 0:
-            print("You must specify at least one finger")
+            log.warning(f"{self.label()}: You must specify at least one finger")
             return False
 
         if not thumb_tip:
-            print("You must specify a thumb")
+            log.warning(f"{self.label()}: You must specify a thumb")
             return False
 
         finger_depth = self.option("Digit Count").get()
 
+        for finger_tip in finger_tips + [thumb_tip]:
+            if not finger_tip or not mref.objExists(finger_tip):
+                log.warning(f"{self.label()}: The finger or thumb tip '{finger_tip}' does not exist")
+                return False
+
         for finger_tip in finger_tips:
             if not self.get_parent(finger_tip, parent_index=finger_depth - 1):
-                print(f"{finger_tip} does not have {finger_depth} joints")
+                log.warning(f"{self.label()}: {finger_tip} does not have {finger_depth} joints")
                 return False
 
         return True
@@ -272,7 +290,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         all_tips_including_thumb.append(thumb_tip)
 
         # -- Get a list of all the finger labels as well as the thumb label
-        finger_labels = self.option("Finger Labels").get()
+        finger_labels = list(self.option("Finger Labels").get() or [])
         finger_labels.append(self.option("Thumb Label").get())
 
         # -- We now cycle over all the fingers (and thumb)
@@ -468,19 +486,32 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         This will return the parent with the given index
         """
         while parent_index > 0 and node:
-            node = mref.get(node).parent().name()
+            parent = mref.get(node).parent()
+            node = parent.name() if parent else ""
             parent_index -= 1
         return node
 
     def user_func_create_skeleton(self, parent=None):
         """
-        This will generate a skeleton for us.
+        This will generate a skeleton for us, under the given parent or the
+        first selected object. With nothing to parent to the hand is created at
+        the origin, unless Omit Hand Joint is set, in which case nothing is
+        created as the fingers would have no hand joint to sit under.
         """
         # -- Determine the parent for the hand bones
         parent = parent or aniseed_toolkit.core.selection.first_selected()
 
         # -- Get the finger labels
         omit_hand = self.option("Omit Hand Joint").get()
+
+        if not parent and omit_hand:
+            log.warning(
+                f"{self.label()}: Omit Hand Joint is set but nothing is selected to act as "
+                "the hand, so no joints were created. Select the hand joint and use "
+                "Create Joints."
+            )
+            return
+
         finger_labels = self.option("Finger Labels").get()
         digit_count = self.option("Digit Count").get()
         use_metacarpals = self.option("Use Metacarpals").get()
@@ -507,7 +538,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
             # -- By default the parent for our digits will be the
             # -- hand
             digit_parent = hand
-            planar_offset = aniseed_toolkit.core.units.to_cm(ranged_value * (spread / 4))
+            planar_offset = ranged_value * (spread / 4)
 
             # -- Before we build the finger digits, build the metacarpal if we
             # -- need to
@@ -522,7 +553,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
                 # -- Adjust the transform of the metacarpal
                 m_metacarpal = mref.get(metacarpal)
                 m_metacarpal.translateZ.set(planar_offset)
-                m_metacarpal.translateX.set(aniseed_toolkit.core.units.to_cm(1))
+                m_metacarpal.translateX.set(1)
 
                 # -- Ensure the metacarpal is the parent of the subsequent
                 # -- digits
@@ -545,7 +576,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
                     space="world",
                 )
 
-                length = aniseed_toolkit.core.units.to_cm(spread * 2 if not digit_index else spread)
+                length = spread * 2 if not digit_index else spread
                 m_digit.translateX.set(length)
 
                 if finger_index == 0:  # -- Thumb
@@ -565,7 +596,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
 
             # -- Ensure the last digits are added
             if finger_index:
-                tips = self.input("Finger Tips").get()
+                tips = list(self.input("Finger Tips").get() or [])
                 tips.append(digit)
                 self.input("Finger Tips").set(tips)
             else:
@@ -573,10 +604,11 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
 
         # -- Snap the hand to the parent
         m_hand = mref.get(hand)
-        m_hand.set_position(
-            mref.get(parent).get_position(space="world"),
-            space="world",
-        )
+        if parent:
+            m_hand.set_position(
+                mref.get(parent).get_position(space="world"),
+                space="world",
+            )
 
         # -- If we're omitting the hand, then move its children to the
         # -- parent and remove it
@@ -684,15 +716,16 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         finger_labels = list(self.option("Finger Labels").get() or list())
 
         # -- The skeleton generation makes a finger per label. If there are
-        # -- more labels than the original has fingers (a build appends the
-        # -- thumb label to the stored labels), generate with just the first
-        # -- ones and put the labels back afterwards.
+        # -- more labels than the original has fingers (older builds appended
+        # -- the thumb label to the stored labels, so saved recipes can hold
+        # -- extra ones), generate with just the first ones and put the
+        # -- labels back afterwards.
         if finger_tips and len(finger_labels) > len(finger_tips):
             self._mirror_finger_labels = finger_labels
             self.option("Finger Labels").set(finger_labels[:len(finger_tips)])
 
         elif len(finger_tips) != len(finger_labels):
-            print(
+            log.warning(
                 f"Mirror : {mirrored_from.label()} has {len(finger_tips)} finger tips but "
                 f"{len(finger_labels)} finger labels. {self.label()} is generated "
                 f"with {len(finger_labels)} fingers."
@@ -775,7 +808,8 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         """
         Maps an index linearly into the range 1.0 to -1.0, where index 0
         gives 1.0 and index len(items) - 1 gives -1.0. Used to weight how
-        much each finger is affected by features such as spread.
+        much each finger is affected by features such as spread. With fewer
+        than two items there is no range, so 0.0 (no spread) is returned.
 
         Args:
             idx: The index of the finger
@@ -784,6 +818,9 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         Returns:
             The ranged float value
         """
+        if len(items) < 2:
+            return 0.0
+
         increment = 1.0 / (len(items) - 1)
         v = ((idx + 1) / (len(items) - 1)) - increment
         v = 1.0 - (v * 2.0)
@@ -795,7 +832,7 @@ class HandComponent(aniseed.RigComponent, MirrorMixin):
         by this component
         """
         all_joints = []
-        finger_tips = self.input("Finger Tips").get()
+        finger_tips = self.input("Finger Tips").get() or []
         thumb_tip = self.input("Thumb Tip").get()
         use_metacarpals = self.option("Use Metacarpals").get()
         digit_count = self.option("Digit Count").get()

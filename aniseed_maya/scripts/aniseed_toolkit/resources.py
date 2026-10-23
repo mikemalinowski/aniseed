@@ -14,7 +14,6 @@ def get(resource_path: str) -> str:
     """
     for resource_root in resource_root_paths:
         resolved_resource_path = os.path.join(resource_root, resource_path)
-        print("testing for resolved_resource_path :: %s" % resolved_resource_path)
         if os.path.exists(resolved_resource_path):
             return resolved_resource_path
 

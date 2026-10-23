@@ -26,6 +26,12 @@ class AppConfig:
     show_menu_bar = True
     forced_orientation = None  # -- Can be None, "vertical" or "horizontal"
 
+    # -- The Log tab. It always shows records from these loggers (and their
+    # -- children), and while a build runs it shows every log record and
+    # -- everything printed. It is cleared when each build starts.
+    show_log_tab = True
+    log_logger_names = ["xstack"]
+
     # -- These let you tailor the icons which will be displayed for various
     # -- items and actions
     icon = resources.get("icon.png")
@@ -86,6 +92,7 @@ class AppConfig:
         internal_settings = {
             "auto_adjust_orientation": False,
             "use_vertical_alignment": True,
+            "switch_to_log_on_failure": True,
         }
         internal_settings.update(cls.additional_settings)
         return internal_settings

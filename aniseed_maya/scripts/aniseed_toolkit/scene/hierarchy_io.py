@@ -8,12 +8,15 @@ returns when nodes are created and renamed (which can be partial paths such as
 reports names differently, so this module stays on cmds.
 """
 import json
+import logging
 import typing
 
 from maya import cmds
 
 from ..registry import tool
 from . import mirror as _mirror
+
+log = logging.getLogger(__name__)
 
 
 SUPPORTED_TYPES = [
@@ -181,14 +184,12 @@ def _create_dataset_from_nodes(nodes):
 
         try:
             node_type = cmds.nodeType(node)
-        except:
+        except RuntimeError:
+            log.warning(f"Could not find {node}, it will not be serialised")
             continue
 
-        try:
-            parent = cmds.listRelatives(node, parent=True)[0]
-
-        except:
-            parent = None
+        parents = cmds.listRelatives(node, parent=True)
+        parent = parents[0] if parents else None
 
         if parent not in nodes:
             parent = None

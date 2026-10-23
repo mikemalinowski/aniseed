@@ -9,7 +9,7 @@ class ToolApiDocumentationGenerator(aniseed_toolkit.Tool):
 
     def run(self):
         """
-        This will update the tool doc's in teh _resources/doc's folder of
+        This will update the tool docs (_resources/docs/tool_api_docs.md) of
         aniseed_toolkit
         """
         aniseed_toolkit.run(
@@ -62,7 +62,6 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
             lines.append(f"{category_header} {category.title()}")
 
             for tool in self.get_plugins(category):
-                print(tool.identifier)
                 lines.append("-" * 20)
                 lines.append(f"{tool_header} {tool.identifier}")
                 lines.append(f"Identifier : `{tool.identifier}`")
@@ -139,7 +138,7 @@ class DocumentationGenerator(aniseed_toolkit.Tool):
                 lines.append(f"{tool_subheader} Returns")
                 lines.append(return_string)
 
-            with open(filepath, "w") as f:
-                for line in lines:
-                    f.write(line)
-                    f.write("\n\n")
+        with open(filepath, "w") as f:
+            for line in lines:
+                f.write(line)
+                f.write("\n\n")

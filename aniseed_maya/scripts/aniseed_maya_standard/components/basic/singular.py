@@ -6,8 +6,11 @@ current selection when added to the stack and supports mirroring.
 import re
 import mref
 import aniseed
+import logging
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class Singular(aniseed.RigComponent, MirrorMixin):
@@ -143,12 +146,12 @@ class Singular(aniseed.RigComponent, MirrorMixin):
         Checks that a parent is given and that the joint exists.
         """
         if not self.input("Parent").get(resolved=False):
-            print("You must specify a Parent")
+            log.warning(f"{self.label()}: You must specify a Parent")
             return False
 
         joint = self.input("Joint").get()
         if not joint or not mref.objExists(joint):
-            print("You must specify a valid joint")
+            log.warning(f"{self.label()}: You must specify a valid joint")
             return False
 
         return True
@@ -156,8 +159,8 @@ class Singular(aniseed.RigComponent, MirrorMixin):
     def suggested_label(self):
         """
         Builds a label from the title-cased description, the location and a two
-        digit counter. Note that the existing label check omits the space before
-        the counter, so it never matches and the counter is always 01.
+        digit counter. The counter is the lowest one (from 01) whose label is
+        not already used by a component of this type in the rig.
         """
         description = self.option("Description").get()
         description = re.sub(
@@ -177,7 +180,7 @@ class Singular(aniseed.RigComponent, MirrorMixin):
             for component in self.rig.components(of_type=self.identifier)
         }
         counter = 1
-        while f"{label}{counter:02d}" in existing_labels:
+        while f"{label} {counter:02d}" in existing_labels:
             counter += 1
         return f"{label} {counter:02d}"
 

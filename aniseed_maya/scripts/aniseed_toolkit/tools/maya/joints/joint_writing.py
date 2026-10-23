@@ -2,7 +2,7 @@ import typing
 import aniseed
 import aniseed_toolkit
 import aniseed_toolkit.ui.dialogs
-import maya.cmds as mc
+from maya import cmds
 
 
 class LoadJointFileTool(aniseed_toolkit.Tool):
@@ -38,8 +38,8 @@ class LoadJointFileTool(aniseed_toolkit.Tool):
             apply_names: Whether to apply the names to the created nodes
             invert: Whether translations should be inverted or not (useful when
                 mirroring)
-            worldspace_root: If false, the root of the structure will be matched
-                in worldspace
+            worldspace_root: If true, the stored local values of each root node
+                are applied as its world space matrix
         
         Returns:
             Dictionary where the key is the name as defined in the data and the value
@@ -71,7 +71,7 @@ def serialise_nodes_to_dict(nodes: list[str]) -> dict:
         dict of the dataset in the format supported by the joint writing tools
     """
     return aniseed_toolkit.scene.hierarchy_io.hierarchy_to_dict(
-        nodes=nodes or mc.ls(selection=True),
+        nodes=nodes or cmds.ls(selection=True),
     )
 
 

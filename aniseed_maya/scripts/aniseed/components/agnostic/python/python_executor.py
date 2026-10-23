@@ -13,9 +13,9 @@ class PythonExecutionComponent(aniseed.RigComponent):
     Executes a block of arbitrary Python code during the rig build.
 
     The code runs inside ``run()`` and has access to ``self`` (the
-    component), ``self.rig`` (the active Rig), and any modules
-    imported by the calling environment. Use with caution — there is
-    no sandboxing.
+    component), ``rig`` (the active Rig, also ``self.rig``), ``aniseed`` and
+    Qt's ``QtWidgets``, ``QtCore`` and ``QtGui``. Anything else must be
+    imported by the code. Use with caution — there is no sandboxing.
     """
 
     identifier = "Utility : Execute Python"
@@ -33,7 +33,7 @@ class PythonExecutionComponent(aniseed.RigComponent):
             description=(
                 "Python source code to execute during the build. The "
                 "code runs with access to ``self`` (the component) and "
-                "``self.rig``."
+                "``rig`` (the rig)."
             ),
             value="",
             group="Behaviour",
@@ -53,12 +53,33 @@ class PythonExecutionComponent(aniseed.RigComponent):
     # ----------------------------------------------------------------------------------
     def run(self):
         """
-        Executes the "Code" option with exec. No namespaces are passed, so the
-        code sees the local scope of this method (including self). Any exception
-        raised by the code propagates to the build.
+        Executes the "Code" option with exec, in its own namespace holding
+        ``self`` (this component), ``rig`` (the active Rig), ``aniseed`` and Qt's
+        ``QtWidgets``, ``QtCore`` and ``QtGui``. As there is a single namespace,
+        functions and comprehensions defined in the code can use any name
+        defined at its top level.
+
+        The code is compiled with this component's label as its filename, so
+        tracebacks name the component. Any exception raised by the code
+        propagates to the build.
         """
+        namespace = {
+            "__name__": "__aniseed_python__",
+            "self": self,
+            "rig": self.rig,
+            "aniseed": aniseed,
+            "QtWidgets": QtWidgets,
+            "QtCore": QtCore,
+            "QtGui": QtGui,
+        }
+
         exec(
-            self.option("Code").get(),
+            compile(
+                self.option("Code").get(),
+                f"<{self.label()}>",
+                "exec",
+            ),
+            namespace,
         )
         return True
 

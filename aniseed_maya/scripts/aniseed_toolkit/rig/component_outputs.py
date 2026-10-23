@@ -39,7 +39,7 @@ def declare_joint_outputs(component, prefix: str, root_joint: str, tip_joint: st
     """
     clear_outputs(component, prefix)
 
-    # -- Its possible one or both of the joints are blank or missing, in
+    # -- It's possible one or both of the joints are blank or missing, in
     # -- which case there are no joints to represent.
     try:
         joint_count = len(_joints.get_between(root_joint, tip_joint))

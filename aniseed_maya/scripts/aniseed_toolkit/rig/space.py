@@ -40,7 +40,8 @@ def create_space_switch(
         }
 
     where target and target_transform are node names. If a target transform
-    is given, a locator is created at it and constrained to without offset,
+    is given, a transform is created under the target, placed at the target
+    transform and constrained to without offset,
     with the driven node moved there whilst constraining. The position only
     and orientation only flags apply to every space if any space sets them.
 
@@ -92,8 +93,8 @@ def create_space_switch(
         maintain_offset = True
 
         # -- If we're given a target transform, we constrain to a point
-        # -- at that transform, with the node to drive moved there
-        # -- whilst constraining
+        # -- under the target at that transform, with the node to drive
+        # -- moved there whilst constraining
         if target_transform:
             target = mref.create(
                 "transform",
@@ -102,6 +103,7 @@ def create_space_switch(
                     description="target_point",
                     location=config.middle,
                 ),
+                parent=target or None,
             )
 
             matrix_to_restore = node_to_drive.get_matrix(space="world")

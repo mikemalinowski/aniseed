@@ -11,6 +11,7 @@ or ambiguous name) is also relied upon. mref resolves names differently, so
 those calls stay on cmds; mref is used for the temporary nodes these functions
 create and delete themselves.
 """
+import logging
 import typing
 
 from maya import cmds
@@ -22,6 +23,8 @@ from ..core import maths as _maths
 
 if typing.TYPE_CHECKING:
     import aniseed
+
+log = logging.getLogger(__name__)
 
 
 @tool(
@@ -213,7 +216,7 @@ def copy_attributes(
 
 def replicate(
     joint: str = "",
-    parent: str or None = "",
+    parent: typing.Optional[str] = "",
     worldspace: bool = False,
     link: bool = False,
     copy_local_name: bool = False,
@@ -784,7 +787,7 @@ def make_referenced(joints):
     Makes the given joints display as referenced (unselectable in the
     viewport) by enabling their drawing overrides and setting the display
     type to Reference. Joints which cannot be changed (e.g. missing nodes)
-    are silently skipped.
+    are skipped with a warning.
 
     Args:
         joints: A joint or list of joints
@@ -797,15 +800,15 @@ def make_referenced(joints):
         try:
             cmds.setAttr(joint + ".overrideEnabled", 1)
             cmds.setAttr(joint + ".overrideDisplayType", 2)  # 2 = Reference
-        except:
-            pass
+        except (RuntimeError, ValueError):
+            log.warning(f"Could not display {joint} as referenced, skipping")
 
 
 def unreference(joints):
     """
     Sets the drawing override display type of the given joints back to
-    Normal (overrideEnabled is left as it is). Stops silently at the first
-    joint which cannot be changed.
+    Normal (overrideEnabled is left as it is). Stops, with a warning, at the
+    first joint which cannot be changed.
 
     Args:
         joints: A joint or list of joints
@@ -816,8 +819,8 @@ def unreference(joints):
     try:
         for joint in joints:
             cmds.setAttr(joint + ".overrideDisplayType", 0)  # 0 = Normal
-    except:
-        pass
+    except (RuntimeError, ValueError):
+        log.warning(f"Could not display {joint} as normal, stopping")
 
 
 def is_referenced(joint):

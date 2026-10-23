@@ -1,10 +1,13 @@
-import traceback
+import typing
+import logging
 import qtility
 from Qt import QtWidgets, QtCore, QtGui
 
 from . import dialogs
 from . import delegate
 from . import menu
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------------------
@@ -41,6 +44,10 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         # -- We're not using columns, so we dont need a header
         self.setHeaderHidden(True)
+
+        # -- Double clicking an item renames it, so we dont want it to
+        # -- also expand/collapse the item
+        self.setExpandsOnDoubleClick(False)
 
         # -- We use a custom delegate to draw our items to allow us complete
         # -- control over how our items are visualised.
@@ -84,11 +91,11 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.app.build_started.connect(self.disable_interaction)
         self.app.build_complete.connect(self.enable_interaction)
         self.stack.build_progressed.connect(self.on_build_updated)
+        self.itemDoubleClicked.connect(self._on_item_double_clicked)
 
     # ----------------------------------------------------------------------------------
     def describe(self):
         for component in self.stack.components():
-            print("-" * 100)
             component.describe()
 
     # ----------------------------------------------------------------------------------
@@ -102,10 +109,26 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.viewport().update()
 
     # ----------------------------------------------------------------------------------
-    def populate(self, *args, **kwargs):
+    def populate(self, *args, remember_collapse_state: bool = True, **kwargs):
         """
-        This will clear out the tree and rebuild it
+        This will clear out the tree and rebuild it. The current component (if any)
+        is selected again once the tree has been rebuilt.
+
+        Args:
+            remember_collapse_state: If True, any component items which were collapsed
+                before the rebuild are collapsed again afterwards. New items are
+                always expanded.
         """
+        # -- Remember what was selected so we can restore it after the rebuild
+        current_component = self.current_component()
+
+        # -- Remember which items were collapsed, as re-ordering or adding components
+        # -- triggers a rebuild and we do not want to lose the users layout
+        collapsed_uuids = set()
+
+        if remember_collapse_state:
+            collapsed_uuids = self._collapsed_component_uuids()
+
         # -- Clear the current entries
         self.clear()
 
@@ -133,6 +156,70 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             root_item.setExpanded(True)
         self._root_item.setExpanded(True)
 
+        # -- Restore the collapse state of any items which existed before the rebuild
+        for item in self._all_items():
+            item_component = getattr(item, "component", None)
+
+            if item_component and item_component.uuid() in collapsed_uuids:
+                item.setExpanded(False)
+
+        if current_component:
+            self.select_component(current_component)
+
+    # ----------------------------------------------------------------------------------
+    def select_component(self, component: "xstack.Component"):
+        """
+        Makes the item representing the given component the current item
+        """
+        if not component:
+            return
+
+        for item in self._all_items():
+            item_component = getattr(item, "component", None)
+
+            if item_component and item_component.uuid() == component.uuid():
+                self.setCurrentItem(item)
+                self.scrollToItem(item)
+                return
+
+    # ----------------------------------------------------------------------------------
+    def _all_items(self) -> list:
+        """
+        Returns every item in the tree, breadth first.
+
+        We walk the items directly rather than using a QTreeWidgetItemIterator,
+        as PySide can leave an iterator registered with the tree after we are
+        done with it, and Qt then crashes updating it when items are moved
+        """
+        all_items = list()
+
+        items = [
+            self.topLevelItem(i)
+            for i in range(self.topLevelItemCount())
+        ]
+
+        while items:
+            item = items.pop(0)
+            all_items.append(item)
+
+            items.extend(
+                item.child(i)
+                for i in range(item.childCount())
+            )
+
+        return all_items
+
+    # ----------------------------------------------------------------------------------
+    def _collapsed_component_uuids(self) -> set:
+        """
+        Returns the uuids of all the components whose items are currently collapsed
+        """
+        return {
+            item.component.uuid()
+            for item in self._all_items()
+            if getattr(item, "component", None) and not item.isExpanded()
+        }
+
     def generate_child_items(self, item):
         for child_component in item.component.children:
             child_item = self._create_item(child_component)
@@ -141,7 +228,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         item.setExpanded(True)
 
     # ----------------------------------------------------------------------------------
-    def current_component(self) -> "xstack.Component" or None:
+    def current_component(self) -> typing.Optional["xstack.Component"]:
         """
         Returns the component for the currently active item
         """
@@ -326,6 +413,9 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
             replace_with=replace_with,
         )
 
+        if not new_component:
+            return
+
         # -- An explicitly entered name takes priority over the label the
         # -- search and replace produced
         if dialog.label() and dialog.label() != component.label():
@@ -333,9 +423,11 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         self.populate()
 
+        # -- Select the duplicate so the editor shows its inputs, options and outputs
+        self.select_component(new_component)
+
     # ----------------------------------------------------------------------------------
     def search_and_replace_component(self, item):
-        print("search and replace for %s" % item.component)
 
         search_for = qtility.request.text(
             title="Search For",
@@ -375,12 +467,12 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         # -- At this point, we're executing third party code, so we
         # -- wrap this in a broad exception
+        # noinspection PyBroadException
         try:
             return func()
 
         except Exception:
-            print(f"Function failed to execute : {func}")
-            print(traceback.print_exc())
+            log.exception(f"Function failed to execute : {func}")
 
     # ----------------------------------------------------------------------------------
     def remove_component(self, item: QtWidgets.QListWidgetItem):
@@ -403,6 +495,8 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         item.component = None
         self.stack.remove_component(component)
 
+        # -- Removing the component repopulates the tree, which may already
+        # -- have deleted this item
         try:
             item.parent().removeChild(item)
 
@@ -422,6 +516,19 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         )
         self.add_component_window.component_added.connect(self.populate)
         self.add_component_window.show()
+
+    # ----------------------------------------------------------------------------------
+    def _on_item_double_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int):
+        """
+        Double clicking a component item starts the rename flow
+        """
+        if not self.allow_interaction:
+            return
+
+        if not getattr(item, "component", None):
+            return
+
+        self.rename_component(item)
 
     # ----------------------------------------------------------------------------------
     def rename_component(self, item: QtWidgets.QListWidgetItem):

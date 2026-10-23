@@ -4,12 +4,15 @@ blendshape weights from driver attributes, each divided by a value and
 optionally clamped to a zero to one range. Also provides the BlendShapeEditor
 table widget used to author the connection data.
 """
+import logging
 import mref
 import aniseed
 import qtility
 
 from Qt import QtCore, QtWidgets
 from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 class BlendShapeConnectorComponent(aniseed.RigComponent):
@@ -42,6 +45,7 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
         self.declare_input(
             name="BlendShape Node",
             value="",
+            validate=False,
             description="The BlendShape Node",
         )
         self.declare_option(
@@ -82,11 +86,11 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
         for data in self.option("BlendShape Connection Data").get():
 
             if not mref.objExists(data["shape"]):
-                print(f'{data["shape"]} does not exist')
+                log.warning(f'{data["shape"]} does not exist, skipping')
                 continue
 
             if not mref.objExists(data["driver"]):
-                print(f'{data["driver"]} does not exist')
+                log.warning(f'{data["driver"]} does not exist, skipping')
                 continue
 
             # -- connectAttr is used rather than Attribute.connect so that
@@ -153,9 +157,8 @@ class BlendShapeEditor(QtWidgets.QWidget):
         Prompts the user for a shape on the component's blendshape node, a
         driver attribute (defaulting to the name of the first selected node),
         a divide by value and whether to clamp, then adds the connection.
-        Relies on the current selection for the default driver. Cancelling the
-        shape or driver prompt aborts; the divide by text is converted with
-        float() without validation.
+        Relies on the current selection for the default driver. Cancelling any
+        prompt, or giving a divide by value that is not a number, aborts.
         """
 
         blendshape_node = self.component.input("BlendShape Node").get()
@@ -163,12 +166,32 @@ class BlendShapeEditor(QtWidgets.QWidget):
         selection = mref.selected()
         default_driver = selection[0].name() if selection else ""
 
+        if not blendshape_node or not cmds.objExists(blendshape_node):
+            qtility.request.message(
+                title="Blend Shape",
+                message="Please set the BlendShape Node input to an existing blendShape node first.",
+                parent=self,
+            )
+            return
+
         # -- cmds rather than mref, as mref would try to wrap the returned
         # -- attribute names as nodes
-        shape_names = cmds.listAttr(
-            f"{blendshape_node}.w",
-            multi=True,
-        )
+        try:
+            shape_names = cmds.listAttr(
+                f"{blendshape_node}.w",
+                multi=True,
+            )
+
+        except (RuntimeError, ValueError):
+            shape_names = None
+
+        if not shape_names:
+            qtility.request.message(
+                title="Blend Shape",
+                message=f"{blendshape_node} has no shapes to connect.",
+                parent=self,
+            )
+            return
 
         blendshape_name = qtility.request.item(
             title="Blend Shape",
@@ -204,7 +227,19 @@ class BlendShapeEditor(QtWidgets.QWidget):
             parent=self,
         )
 
-        division = float(division)
+        if division is None:
+            return
+
+        try:
+            division = float(division)
+
+        except ValueError:
+            qtility.request.message(
+                title="Specify Divide_by",
+                message=f"{division!r} is not a number.",
+                parent=self,
+            )
+            return
 
         clamp = qtility.request.confirmation(
             title="Clamp Range",

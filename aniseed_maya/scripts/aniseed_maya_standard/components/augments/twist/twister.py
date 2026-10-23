@@ -3,10 +3,13 @@ Provides the "Augment : Twister" component, which builds a twist setup between
 a root and tip driver and parent constrains each given joint to a twist
 transform blended by its distance along the chain.
 """
+import logging
 import os
 import aniseed
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class TwisterComponent(aniseed.RigComponent, MirrorMixin):
@@ -161,7 +164,7 @@ class TwisterComponent(aniseed.RigComponent, MirrorMixin):
         joints = self.input("Joints").get()
 
         if not joints:
-            print("No joints given to drive")
+            log.warning(f"{self.label()} : No joints given to drive")
             return False
 
         facing_direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
@@ -169,7 +172,7 @@ class TwisterComponent(aniseed.RigComponent, MirrorMixin):
             end=joints[-1],
         )
         if facing_direction == facing_direction.Unknown:
-            print("Not a valid facing direction")
+            log.warning(f"{self.label()} : The joint chain does not have a valid facing direction")
             return False
 
         return True

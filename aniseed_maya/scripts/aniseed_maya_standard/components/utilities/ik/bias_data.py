@@ -5,10 +5,13 @@ re-applies it to those handles on every build. The data is captured from
 the scene with the Snapshot Bias Data button, and can also be cleared or
 saved to and loaded from json files.
 """
+import logging
 import os
 import mref
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 # noinspection PyUnresolvedReferences
@@ -119,7 +122,7 @@ class ApplyIKBiasData(aniseed.RigComponent):
         stored_bias_data = self.option("Bias Data").get()
 
         if not stored_bias_data:
-            print("no stored bias data")
+            log.info(f"{self.label()} : No stored bias data to apply")
             return True
 
         for ikh, bias_data in stored_bias_data.items():

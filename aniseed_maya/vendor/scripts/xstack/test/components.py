@@ -7,7 +7,7 @@ class MinimalComponent(xstack.Component):
     identifier = "MinimalComponent"
 
     def __init__(self, *args, **kwargs):
-        super(MinimalComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def run(self):
         return True
@@ -20,10 +20,9 @@ class VersionedComponent1(xstack.Component):
     version = 1
 
     def __init__(self, *args, **kwargs):
-        super(VersionedComponent1, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def run(self):
-        print("Running Version " + str(self.version))
         return True
 
 
@@ -35,10 +34,9 @@ class VersionedComponent2(xstack.Component):
     version = 2
 
     def __init__(self, *args, **kwargs):
-        super(VersionedComponent2, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def run(self):
-        print("Running Version " + str(self.version))
         return True
 
 
@@ -50,10 +48,9 @@ class VersionedComponent3(xstack.Component):
     version = 3
 
     def __init__(self, *args, **kwargs):
-        super(VersionedComponent3, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def run(self):
-        print("Running Version " + str(self.version))
         return True
 
 
@@ -65,7 +62,7 @@ class FailingComponent(xstack.Component):
     identifier = "FailingComponent"
 
     def __init__(self, *args, **kwargs):
-        super(FailingComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def run(self):
         raise Exception("Enforced Failure")
@@ -78,7 +75,7 @@ class ComponentWithExpectedRequirementSet(xstack.Component):
     identifier = "ComponentWithExpectedRequirementSet"
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithExpectedRequirementSet, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="expected_requirement",
@@ -89,7 +86,7 @@ class ComponentWithExpectedRequirementNotSet(xstack.Component):
     identifier = "ComponentWithExpectedRequirementNotSet"
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithExpectedRequirementNotSet, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="expected_requirement",
@@ -102,7 +99,7 @@ class ComponentWithOption(xstack.Component):
     identifier = "ComponentWithOption"
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithOption, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_option(
             name="test_option",
@@ -116,7 +113,7 @@ class ComponentWithPreExposeOption(xstack.Component):
     identifier = "ComponentWithPreExposeOption"
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithPreExposeOption, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_option(
             name="test_option",
@@ -154,7 +151,7 @@ class ComponentWithTenOptions(xstack.Component):
     RUN_ORDER = []
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithTenOptions, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         for i in range(10):
             self.declare_option(
@@ -175,7 +172,7 @@ class ComponentWithOutputs(xstack.Component):
     RUN_ORDER = []
 
     def __init__(self, *args, **kwargs):
-        super(ComponentWithOutputs, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         for i in range(3):
             self.declare_output(
@@ -199,7 +196,7 @@ class ParentHookingComponent(xstack.Component):
     identifier = "ParentHookingComponent"
 
     def __init__(self, *args, **kwargs):
-        super(ParentHookingComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.parent_on_enter = None
 
@@ -221,7 +218,7 @@ class AdditionalDataComponent(xstack.Component):
     identifier = "AdditionalDataComponent"
 
     def __init__(self, *args, **kwargs):
-        super(AdditionalDataComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.payload = dict()
         self.received = None
 
@@ -230,6 +227,57 @@ class AdditionalDataComponent(xstack.Component):
 
     def on_deserialise(self, additional_data):
         self.received = additional_data
+
+    def run(self):
+        return True
+
+
+class ReturnsFalseComponent(xstack.Component):
+    """
+    Reports failure by returning False from run
+    """
+    identifier = "ReturnsFalseComponent"
+
+    def run(self):
+        return False
+
+
+class NestedBuildComponent(xstack.Component):
+    """
+    Builds the components below the component labelled by its "Target" option
+    """
+    identifier = "NestedBuildComponent"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.declare_option(name="Target", value="")
+
+    def run(self):
+        target = self.stack.get_component_by_label(self.option("Target").get())
+        return self.stack.build(build_below=target)
+
+
+class MigratingComponent(xstack.Component):
+    """
+    Version 2 renamed its "Old Name" option to "New Name"
+    """
+    identifier = "MigratingComponent"
+    version = 2
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.declare_option(name="New Name", value="")
+
+    @classmethod
+    def migrate(cls, data, from_version):
+        options = data.get("options", dict())
+
+        if from_version < 2 and "Old Name" in options:
+            options["New Name"] = options.pop("Old Name")
+
+        return data
 
     def run(self):
         return True

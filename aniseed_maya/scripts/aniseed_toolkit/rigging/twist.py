@@ -4,7 +4,7 @@ them, each of which blends between the root and tip and aims at the tip.
 """
 import typing
 
-import maya.cmds as mc
+from maya import cmds
 import mref
 
 from ..core import maths as _maths
@@ -176,7 +176,7 @@ class TwistSetup:
         self._location = location
         self._config = config
 
-        # -- Store out outgoing variables
+        # -- Store our outgoing variables
         self._org = None
         self._root = None
         self._root_control = None
@@ -236,21 +236,20 @@ class TwistSetup:
         vector = _maths.direction_between(
             node_a=self._root,
             node_b=self._tip,
-            print_result=True,
         )
 
         for t in self._twists:
-            mc.setAttr(
+            cmds.setAttr(
                 f"{t['aim_node']}.primaryInputAxisX",
                 vector.x,
             )
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{t['aim_node']}.primaryInputAxisY",
                 vector.y,
             )
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{t['aim_node']}.primaryInputAxisZ",
                 vector.z,
             )
@@ -269,7 +268,7 @@ class TwistSetup:
             )
         )
 
-        mc.setAttr(
+        cmds.setAttr(
             f"{self._twists[twist_index]['blend_node']}.target[1].weight",
             blend_factor,
         )
@@ -280,8 +279,8 @@ class TwistSetup:
         Creates the nodes of the twist setup
         """
 
-        self._org = mc.rename(
-            mc.createNode("transform"),
+        self._org = cmds.rename(
+            cmds.createNode("transform"),
             self._config.generate_name(
                 classification="org",
                 description=self._description + "TwistGroup",
@@ -307,16 +306,16 @@ class TwistSetup:
             config=self._config,
         )
 
-        self._root = mc.rename(
-            mc.createNode("transform"),
+        self._root = cmds.rename(
+            cmds.createNode("transform"),
             self._config.generate_name(
                 classification="mech",
                 description=self._description + "Root",
                 location=self._location,
             ),
         )
-        self._tip = mc.rename(
-            mc.createNode("transform"),
+        self._tip = cmds.rename(
+            cmds.createNode("transform"),
             self._config.generate_name(
                 classification="mech",
                 description=self._description + "Tip",
@@ -324,22 +323,22 @@ class TwistSetup:
             ),
         )
 
-        mc.parent(
+        cmds.parent(
             self._root,
             self._org
         )
 
-        mc.parent(
+        cmds.parent(
             self._tip,
             self._org,
         )
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             self._root_control.ctl,
             self._root,
         )
 
-        mc.parentConstraint(
+        cmds.parentConstraint(
             self._tip_control.ctl,
             self._tip,
         )
@@ -364,61 +363,59 @@ class TwistSetup:
             )
             connection_point = twist.zero
 
-            blend_matrix = mc.createNode("blendMatrix")
-            final_rotation_blender = mc.createNode("blendColors")
+            blend_matrix = cmds.createNode("blendMatrix")
+            final_rotation_blender = cmds.createNode("blendColors")
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{self._root}.matrix",
                 f"{blend_matrix}.target[0].targetMatrix",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{self._tip}.matrix",
                 f"{blend_matrix}.target[1].targetMatrix",
             )
 
-            decompose_matrix = mc.rename(
-                mc.createNode("decomposeMatrix"),
-            )
+            decompose_matrix = cmds.createNode("decomposeMatrix")
 
-            aim_matrix = mc.rename(
-                mc.createNode("aimMatrix"),
+            aim_matrix = cmds.rename(
+                cmds.createNode("aimMatrix"),
                 "aimMatrix",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{blend_matrix}.outputMatrix",
                 f"{aim_matrix}.inputMatrix",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{self._tip}.matrix",
                 f"{aim_matrix}.primary.primaryTargetMatrix",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{aim_matrix}.outputMatrix",
                 f"{decompose_matrix}.inputMatrix"
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{decompose_matrix}.outputTranslate",
                 f"{connection_point}.translate",
             )
 
-            mc.connectAttr(
+            cmds.connectAttr(
                 f"{decompose_matrix}.outputRotate",
                 f"{connection_point}.rotate",
             )
 
             #
             #
-            # mc.connectAttr(
+            # cmds.connectAttr(
             #     f"{final_rotation_blender}.output",
             #     f"{connection_point}.rotate",
             # )
 
-            mc.setAttr(
+            cmds.setAttr(
                 f"{blend_matrix}.target[1].weight",
                 blend_factor,
             )

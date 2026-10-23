@@ -1,5 +1,5 @@
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class ClearConstraintsTool(aniseed_toolkit.Tool):
@@ -18,6 +18,6 @@ class ClearConstraintsTool(aniseed_toolkit.Tool):
         if node:
             nodes = [node]
         else:
-            nodes = mc.ls(selection=True)
+            nodes = cmds.ls(selection=True)
 
         aniseed_toolkit.scene.constraints.remove_all(nodes)

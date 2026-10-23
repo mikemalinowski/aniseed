@@ -4,8 +4,11 @@ control placed at a guide without driving a joint.
 """
 import mref
 import aniseed
+import logging
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class JointlessSingular(aniseed.RigComponent, MirrorMixin):
@@ -40,10 +43,7 @@ class JointlessSingular(aniseed.RigComponent, MirrorMixin):
 
         self.declare_option(
             name="Description",
-            description=(
-                "Descriptive token used when naming the control (and the "
-                "auto-created joint, if ``Create Joint`` is enabled)."
-            ),
+            description="Descriptive token used when naming the control",
             value="Singular",
             group="Naming",
             pre_expose=True,
@@ -69,9 +69,9 @@ class JointlessSingular(aniseed.RigComponent, MirrorMixin):
             name="Add Offset Control",
             description=(
                 "If enabled, a second control is created and parented under "
-                "the main control. The offset control becomes the driving "
-                "control for the joint, letting animators add layered offsets "
-                "on top of the main control."
+                "the main control and set as the Offset Control output, "
+                "letting animators add layered offsets on top of the main "
+                "control."
             ),
             value=False,
             group="Behaviour",
@@ -82,7 +82,7 @@ class JointlessSingular(aniseed.RigComponent, MirrorMixin):
             name="Align Control To World",
             description=(
                 "If enabled, the generated control is aligned to world "
-                "orientation instead of inheriting the joint's orientation."
+                "orientation instead of inheriting the guide's orientation."
             ),
             value=False,
             group="Behaviour",
@@ -130,12 +130,12 @@ class JointlessSingular(aniseed.RigComponent, MirrorMixin):
         Checks that a parent is given and that the guide exists.
         """
         if not self.input("Parent").get(resolved=False):
-            print("You must specify a Parent")
+            log.warning(f"{self.label()}: You must specify a Parent")
             return False
 
         guide = self.input("Guide").get()
         if not guide or not mref.objExists(guide):
-            print("You must specify a valid Guide")
+            log.warning(f"{self.label()}: You must specify a valid Guide")
             return False
 
         return True

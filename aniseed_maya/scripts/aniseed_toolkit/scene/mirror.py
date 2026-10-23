@@ -8,11 +8,15 @@ their error behaviour. mref is used for the temporary joint used by
 rotate_flip.
 """
 import collections
+import logging
+import typing
 
 from maya import cmds
 import mref
 
 from . import joints as _joints
+
+log = logging.getLogger(__name__)
 
 
 MIRROR_PLANES = {
@@ -23,7 +27,7 @@ MIRROR_PLANES = {
 
 
 def mirror_transforms(
-    transforms: list[str] or str = None,
+    transforms: typing.Union[list[str], str] = None,
     across: str = "YZ",
     behaviour: bool = True,
     rotate_flip: bool = False,
@@ -39,7 +43,7 @@ def mirror_transforms(
 
     Mirrors the world space matrix of each transform across a plane through
     the world origin. Nodes which are not transforms or joints are skipped
-    (with a message printed).
+    (with a warning logged).
 
     Args:
         transforms: List of transform or joint names. Uses the selection if
@@ -90,7 +94,7 @@ def mirror_transforms(
         ]
 
         if node_type not in allowable_types:
-            print(f"{transform} is not a transform or joint, skipping")
+            log.warning(f"{transform} is not a transform or joint, skipping")
             continue
 
         # Get the worldspace matrix, as a list of 16 float values

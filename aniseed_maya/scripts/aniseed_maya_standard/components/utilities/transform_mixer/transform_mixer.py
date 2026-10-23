@@ -6,11 +6,14 @@ to be added and removed on the built mixer and the result stored back.
 Also provides the ConstraintMappingWidget used to edit the deformer to node
 mappings.
 """
+import logging
 import mref
 import aniseed
 import qtility
 import aniseed_toolkit
 from Qt import QtCore, QtWidgets
+
+log = logging.getLogger(__name__)
 
 
 class TransformMixer(aniseed.RigComponent):
@@ -91,6 +94,33 @@ class TransformMixer(aniseed.RigComponent):
 
         if requirement_name == "Store Data":
             return aniseed.widgets.ButtonWidget(button_name="Store Setup", func=self.snapshot)
+
+    def is_valid(self) -> bool:
+        """
+        Checks that every deformer in the Constraint Mapping is in the stored
+        Data. A deformer added since the last Store Setup is not, and would
+        not be rebuilt.
+        """
+        stored_deformers = [
+            deformer_data["name"]
+            for deformer_data in (self.option("Data").get() or dict()).get("deformers", list())
+        ]
+
+        for constraint_data in self.option("Constraint Mapping").get() or list():
+            deformer_name = constraint_data[0]
+
+            if deformer_name not in stored_deformers:
+                log.warning(
+                    f"{self.label()} : The deformer {deformer_name!r} is mapped but has not "
+                    f"been stored. Press Store Setup, or remove the mapping."
+                )
+                return False
+
+            if not constraint_data[-1]:
+                log.warning(f"{self.label()} : The deformer {deformer_name!r} is not mapped to a node")
+                return False
+
+        return True
 
     def run(self) -> bool:
         """
@@ -300,7 +330,7 @@ class ConstraintMappingWidget(QtWidgets.QWidget):
             component: The Transform Mixer component the mappings belong to
             parent: Optional parent widget
         """
-        super(ConstraintMappingWidget, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         self.component = component
         self.setLayout(QtWidgets.QVBoxLayout())

@@ -1,11 +1,14 @@
-try:
-    import maya.cmds as mc
+import functools
 
-except:
-    mc = None
+try:
+    from maya import cmds
+
+except ImportError:
+    cmds = None
 
 # --------------------------------------------------------------------------------------
 def undoable(func):
+    @functools.wraps(func)
     def wrapper(*args, **kwargs):
         with UndoChunk():
             return func(*args, **kwargs)
@@ -14,7 +17,7 @@ def undoable(func):
 
 # --------------------------------------------------------------------------------------
 # noinspection PyUnresolvedReferences
-class UndoChunk(object):
+class UndoChunk:
 
     # ----------------------------------------------------------------------------------
     def __init__(self, label="undo section"):
@@ -23,24 +26,25 @@ class UndoChunk(object):
 
     # ----------------------------------------------------------------------------------
     def __enter__(self):
-        if mc:
-            mc.undoInfo(openChunk=True, chunkName=self._label)
+        if cmds:
+            cmds.undoInfo(openChunk=True, chunkName=self._label)
         return self
 
     # ----------------------------------------------------------------------------------
     def __exit__(self, *exc_info):
-        if mc and not self._closed:
-            mc.undoInfo(closeChunk=True)
+        if cmds and not self._closed:
+            cmds.undoInfo(closeChunk=True)
 
     # ----------------------------------------------------------------------------------
     def restore(self):
-        if not mc:
+        if not cmds:
             return
-        mc.undoInfo(closeChunk=True)
+        cmds.undoInfo(closeChunk=True)
         self._closed = True
 
         try:
-            mc.undo()
+            cmds.undo()
 
-        except StandardError:
+        # -- Nothing to undo is not an error for a restore
+        except RuntimeError:
             pass

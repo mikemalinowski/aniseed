@@ -20,6 +20,9 @@ class RigComponent(xstack.Component):
         """
         This should be re-implemented in your component and should contain all the
         code which you want to trigger during the build.
+
+        Returning exactly False marks the component as failed and stops the
+        build. Returning None or True is a success.
         """
         return True
 
@@ -80,7 +83,7 @@ class RigComponent(xstack.Component):
 
     # ----------------------------------------------------------------------------------
     @property
-    def rig(self) -> "aniseed_everywhere.Rig":
+    def rig(self) -> "aniseed.Rig":
         """
         Returns the Rig Instance this component belongs to
 
@@ -123,3 +126,16 @@ class RigComponent(xstack.Component):
                 label = f"{label} {location.upper()}"
 
         return label
+
+
+# --------------------------------------------------------------------------------------
+class MissingRigComponent(xstack.MissingComponent, RigComponent):
+    """
+    Stands in for a component whose type is not available, such as one from an
+    aniseed package that is not installed or one that has since been removed.
+
+    It keeps all of the data from the recipe and writes it back unchanged, so the
+    rig can still be opened and saved without losing anything, but it cannot be
+    built. Remove it, switch it to an available component type, or install what
+    provides the missing type.
+    """

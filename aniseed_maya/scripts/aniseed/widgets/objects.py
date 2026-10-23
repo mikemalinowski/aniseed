@@ -1,10 +1,13 @@
 import xstack
+import logging
 import qtility
 import functools
 import crosswalk
 from Qt import QtWidgets, QtCore, QtGui
 
 from .. import resources
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------------------
@@ -54,7 +57,8 @@ class CustomLineEdit(QtWidgets.QLineEdit):
 
             parent = parent.parent
 
-            # -- The last parent is the rig, so dont add that
+            # -- Each ancestor's menu is nested within the menu of the
+            # -- component below it, so stop once there are no more
             if not parent:
                 break
 
@@ -144,7 +148,7 @@ class ObjectSelector(QtWidgets.QWidget):
             crosswalk.selection.select(self.get_value())
 
         except RuntimeError:
-            print(f"[aniseed] Failed to select '{self.get_value()}'")
+            log.warning(f"Failed to select '{self.get_value()}'")
 
     # ----------------------------------------------------------------------------------
     def update_size(self):

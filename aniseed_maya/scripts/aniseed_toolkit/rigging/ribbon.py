@@ -4,7 +4,7 @@ follicle per joint which the joints are constrained to. The surface is skinned
 to a set of driving joints placed at the given transform matrices.
 """
 import mref
-import maya.cmds as mc
+from maya import cmds
 
 from ..scene import joints as _joints
 from ..rig import tagging as _tagging
@@ -110,7 +110,6 @@ class Ribbon:
         width = _joints.chain_length(
             start=self.start_joint,
             end=self.end_joint,
-            log_result=True,
         ) * 0.1
 
         # -- Get the joint positions
@@ -139,23 +138,24 @@ class Ribbon:
         )
 
         # -- Create center curve
-        center_curve = mc.curve(
+        center_curve = cmds.curve(
             d=3,
             p=joint_positions,
             name="ribbon_center_crv",
         )
+        temporary_curves = [center_curve]
 
         # -- Duplicate and offset curves left/right
         if not self.ribbon:
-            print("we have not been given a ribbon, so we have to make one!")
-            curve_left = mc.duplicate(center_curve, name="ribbon_left_crv")[0]
-            curve_right = mc.duplicate(center_curve, name="ribbon_right_crv")[0]
-            mc.move(width * 0.5, curve_left, x=True, r=True, os=True)
-            mc.move(-width * 0.5, curve_right, x=True, r=True, os=True)
+            curve_left = cmds.duplicate(center_curve, name="ribbon_left_crv")[0]
+            curve_right = cmds.duplicate(center_curve, name="ribbon_right_crv")[0]
+            cmds.move(width * 0.5, curve_left, x=True, r=True, os=True)
+            cmds.move(-width * 0.5, curve_right, x=True, r=True, os=True)
+            temporary_curves.extend([curve_left, curve_right])
 
             # -- Loft surface
             self.ribbon = mref.get(
-                mc.loft(
+                cmds.loft(
                     curve_left,
                     curve_right,
                     ch=False,
@@ -166,9 +166,8 @@ class Ribbon:
             )
             # Rebuild strip to proper number of spans
             span_count = len(self.transform_matrices) + 2
-            mc.rebuildSurface(self.ribbon.full_name(), ch=0, rpo=1, rt=0, end=1, kr=0, kcp=0, kc=1, sv=span_count, su=0, du=1, tol=0.01, fr=0, dir=2)
+            cmds.rebuildSurface(self.ribbon.full_name(), ch=0, rpo=1, rt=0, end=1, kr=0, kcp=0, kc=1, sv=span_count, su=0, du=1, tol=0.01, fr=0, dir=2)
         else:
-            print("using pre-existing ribbon!")
             self.ribbon = mref.get(self.ribbon)
 
 
@@ -226,7 +225,7 @@ class Ribbon:
             self.upvectors.append(upvector)
 
             if last_rotator:
-                mc.aimConstraint(
+                cmds.aimConstraint(
                     rotator.full_name(),
                     last_rotator.full_name(),
                     aimVector=[1, 0, 0],
@@ -247,20 +246,14 @@ class Ribbon:
 
         for idx in range(len(self.joints)):
 
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 self.rotators[idx].full_name(), #follicle_transform.full_name(),
                 self.joints[idx].full_name(),
                 mo=True,
             )
 
         # -- Delete our temporary items
-        try:
-            mc.delete(center_curve)
-            mc.delete(curve_left)
-            mc.delete(curve_right)
-
-        except:
-            pass
+        cmds.delete(temporary_curves)
 
         # -- Read the guide data to get the control transforms
 
@@ -285,17 +278,17 @@ class Ribbon:
             self.driving_joints.append(driving_joint)
 
         # -- Apply the skin data if there is any
-        # mc.select([j.full_name() for j in control_joints])
+        # cmds.select([j.full_name() for j in control_joints])
         joint_names = [j.full_name() for j in self.driving_joints]
         ribbon_name = self.ribbon.full_name()
-        mc.select(joint_names)
-        skin = mc.skinCluster(
+        cmds.select(joint_names)
+        skin = cmds.skinCluster(
             joint_names,
             self.ribbon.full_name(),
             toSelectedBones=True,
         )
         self.skin = mref.get(skin)
 
-        # -- If there is no skin data then we apply a default skin
+        # -- Skin data is not applied yet
         if self.skin_data:
             pass

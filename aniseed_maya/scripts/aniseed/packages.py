@@ -21,8 +21,11 @@ import re
 import sys
 import json
 import typing
+import logging
 
 from . import constants
+
+log = logging.getLogger(__name__)
 
 
 MARKER = "aniseed_package.json"
@@ -62,37 +65,37 @@ class AniseedPackage:
                 return json.load(f) or dict()
 
         except ValueError:
-            print(f"Could not read {MARKER} in {self.root}, treating it as empty")
+            log.warning(f"Could not read {MARKER} in {self.root}, treating it as empty")
             return dict()
 
     # ----------------------------------------------------------------------------------
-    def _sub_folder(self, folder_name: str) -> str or None:
+    def _sub_folder(self, folder_name: str) -> typing.Optional[str]:
         path = os.path.join(self.root, folder_name)
         return path if os.path.isdir(path) else None
 
     # ----------------------------------------------------------------------------------
     @property
-    def components(self) -> str or None:
+    def components(self) -> typing.Optional[str]:
         return self._sub_folder("components")
 
     # ----------------------------------------------------------------------------------
     @property
-    def mixins(self) -> str or None:
+    def mixins(self) -> typing.Optional[str]:
         return self._sub_folder("mixins")
 
     # ----------------------------------------------------------------------------------
     @property
-    def widgets(self) -> str or None:
+    def widgets(self) -> typing.Optional[str]:
         return self._sub_folder("widgets")
 
     # ----------------------------------------------------------------------------------
     @property
-    def hosts(self) -> str or None:
+    def hosts(self) -> typing.Optional[str]:
         return self._sub_folder("hosts")
 
     # ----------------------------------------------------------------------------------
     @property
-    def tools(self) -> str or None:
+    def tools(self) -> typing.Optional[str]:
         return self._sub_folder("tools")
 
     # ----------------------------------------------------------------------------------
@@ -115,7 +118,7 @@ class AniseedPackage:
 
 
 # -- Packages are discovered once and then cached for the session
-_PACKAGES: typing.List[AniseedPackage] or None = None
+_PACKAGES: typing.Optional[typing.List[AniseedPackage]] = None
 
 
 # --------------------------------------------------------------------------------------
@@ -187,14 +190,14 @@ def discover(refresh: bool = False) -> typing.List[AniseedPackage]:
             # -- Packages are imported by their name, so it must be a valid
             # -- python module name
             if not package.name.isidentifier():
-                print(f"Skipping aniseed package {candidate}: {package.name} is not a valid python name")
+                log.warning(f"Skipping aniseed package {candidate}: {package.name} is not a valid python name")
                 continue
 
             # -- Only one package of any given name can be imported, so the
             # -- higher priority package wins
             existing = get(package.name, packages)
             if existing:
-                print(f"Skipping aniseed package {candidate}: {package.name} is already provided by {existing.root}")
+                log.warning(f"Skipping aniseed package {candidate}: {package.name} is already provided by {existing.root}")
                 continue
 
             packages.append(package)
@@ -205,7 +208,7 @@ def discover(refresh: bool = False) -> typing.List[AniseedPackage]:
     for package in packages:
         for required_name in package.requires:
             if required_name not in names:
-                print(f"Aniseed package {package.name} requires {required_name}, which could not be found")
+                log.warning(f"Aniseed package {package.name} requires {required_name}, which could not be found")
 
     _PACKAGES = packages
     return packages
@@ -226,7 +229,7 @@ def _register_python_path(package: AniseedPackage):
 
 
 # --------------------------------------------------------------------------------------
-def get(name: str, packages: typing.List[AniseedPackage] or None = None) -> AniseedPackage or None:
+def get(name: str, packages: typing.Optional[typing.List[AniseedPackage]] = None) -> typing.Optional[AniseedPackage]:
     """
     Returns the package with the given name
     """
@@ -241,6 +244,7 @@ def active() -> typing.List[AniseedPackage]:
     """
     Returns the packages which should be used within the current host
     """
+    # -- Imported here to break the import cycle, as host imports this module
     from . import host
 
     host_name = host.get().name

@@ -92,7 +92,7 @@ class BlendshapeFacialRig(aniseed.RigComponent):
         input per entry in shape_list grouped by side, and control, parent,
         guide and shape options for each control group.
         """
-        super(BlendshapeFacialRig, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",

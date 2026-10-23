@@ -6,9 +6,6 @@ import functools
 
 import mref
 
-from ..core import maths as _maths
-from ..core import units as _units
-
 
 class TransformMixer:
     """
@@ -260,7 +257,7 @@ class TransformMixer:
         # -- the deformer, so the combiner is two nodes upstream
         try:
             scale_combiner = deformer.attr("scale").inputs()[0].node().inputs()[0]
-        except:
+        except IndexError:
             scale_combiner = mref.create("plusMinusAverage", name=f"addscale_{label}")
             add_one = mref.create("plusMinusAverage", name=f"scaleFromZero_{label}")
             for axis in ["x", "y", "z"]:
@@ -478,7 +475,6 @@ class TransformMixer:
         self.get_pose.cache_clear()
         self.get_deformer.cache_clear()
 
-    @_maths.timed_function_call
     def serialise(self):
         """
         Returns the mixer as a dictionary, which can be rebuilt with
@@ -498,8 +494,6 @@ class TransformMixer:
                     }
                 ]
             }
-
-        Note: the timed_function_call decorator prints the time taken.
         """
         data = {
             "deformers": [],
@@ -550,9 +544,8 @@ class TransformMixer:
     @classmethod
     def deserialise(cls, data, parent=None):
         """
-        Creates a new mixer from data returned by serialise. The target
-        transforms are converted from cm (see units.matrix_from_cm) whereas
-        the deformer transforms are applied as they are.
+        Creates a new mixer from data returned by serialise. The deformer
+        and target transforms are applied as they are stored.
 
         Args:
             data: The serialised mixer data
@@ -574,6 +567,6 @@ class TransformMixer:
 
                 for target_data in pose_data["targets"]:
                     target = mixer.get_target(pose_data["name"], target_data["name"])
-                    target.set_matrix(_units.matrix_from_cm(target_data["transform"]))
+                    target.set_matrix(target_data["transform"])
 
         return mixer

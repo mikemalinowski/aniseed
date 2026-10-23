@@ -1,12 +1,15 @@
 import os
 import json
 import typing
+import logging
 import qtility
 import aniseed
 import aniseed_toolkit
 
-import maya.cmds as mc
+from maya import cmds
 import maya.api.OpenMaya as om
+
+log = logging.getLogger(__name__)
 
 
 class CopyShape(aniseed_toolkit.Tool):
@@ -20,16 +23,19 @@ class CopyShape(aniseed_toolkit.Tool):
 
     def run(self, node: str = ""):
         """
-        This will return a list of shape files which are present in the
-        aniseed toolkit shapes directory
+        This will copy the shape data of the given (or first selected) node
+        into memory, ready to be applied with the Paste Shape tool.
+
+        Args:
+            node: The node to copy the shape of
 
         Returns:
-            List of absolute paths to the json shape files
+            None
         """
         try:
-            node = node or mc.ls(sl=True)[0]
+            node = node or cmds.ls(sl=True)[0]
         except IndexError:
-            print("You must give or select a node")
+            log.warning("You must give or select a node")
             return
 
         CopyShape.CACHE = aniseed_toolkit.run(
@@ -48,17 +54,21 @@ class PasteShape(aniseed_toolkit.Tool):
 
     def run(self, node: str = "", clear=True):
         """
-        This will return a list of shape files which are present in the
-        aniseed toolkit shapes directory
+        This will apply the shape data copied with the Copy Shape tool to
+        the selected nodes.
+
+        Args:
+            node: Unused, the selected nodes are always used
+            clear: If true, any pre-existing shapes are removed first
 
         Returns:
-            List of absolute paths to the json shape files
+            None
         """
         if not CopyShape.CACHE:
-            print("No copied shape data")
+            log.warning("No copied shape data")
             return
 
-        for node in mc.ls(selection=True):
+        for node in cmds.ls(selection=True):
             CopyShape._CACHE = aniseed_toolkit.run(
                 "Apply Shape",
                 node=node,
@@ -131,7 +141,7 @@ class SaveShape(aniseed_toolkit.Tool):
         Returns:
             Dict of the data stored in the filepath
         """
-        node = node or mc.ls(selection=True)[0]
+        node = node or cmds.ls(selection=True)[0]
 
         if not filepath:
             filepath = qtility.request.filepath(
@@ -181,7 +191,7 @@ class ApplyShape(aniseed_toolkit.Tool):
         Returns:
             List of shape nodes created
         """
-        for node in [node] if node else mc.ls(selection=True):
+        for node in [node] if node else cmds.ls(selection=True):
             if not data:
                 data = qtility.request.item(
                     items=aniseed_toolkit.run("Get Shape List"),
@@ -189,6 +199,9 @@ class ApplyShape(aniseed_toolkit.Tool):
                     message="Select Shape",
                     editable=False,
                 )
+
+                if not data:
+                    return
 
             aniseed_toolkit.scene.shapes.load_shape(
                 node=node,
@@ -257,7 +270,7 @@ class LoadRigControlShapesFromFile(aniseed_toolkit.Tool):
             all_data = json.load(f)
 
         for control, shape_data in all_data.items():
-            if mc.objExists(control):
+            if cmds.objExists(control):
                 aniseed_toolkit.run("Apply Shape", control, shape_data)
 
     @classmethod

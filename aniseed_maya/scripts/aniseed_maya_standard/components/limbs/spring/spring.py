@@ -6,9 +6,12 @@ joints which slide along that curve (with up-vectors from a second, scaled
 curve). Joints can optionally be laid along the curve on entering the stack.
 """
 import os
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 # noinspection PyUnresolvedReferences
@@ -438,7 +441,7 @@ class Spring(aniseed.RigComponent):
         in the scene. Otherwise falls back to the first selected NURBS
         curve and writes that selection back into the input, so the
         component is fully configured after this call. Returns None and
-        prints an explanation if no valid curve can be resolved.
+        logs a warning if no valid curve can be resolved.
         """
         guide_curve = self.input("Guide Curve").get()
         if guide_curve and mref.objExists(guide_curve):
@@ -446,12 +449,12 @@ class Spring(aniseed.RigComponent):
 
         selection = mref.ls(selection=True).names()
         if not selection:
-            print("Spring: cannot create joints — Guide Curve input is missing and nothing is selected.")
+            log.warning("Spring: cannot create joints — Guide Curve input is missing and nothing is selected.")
             return None
 
         candidate = selection[0]
         if not mref.listRelatives(candidate, shapes=True, type="nurbsCurve"):
-            print(f"Spring: cannot create joints — selected object '{candidate}' is not a NURBS curve transform.")
+            log.warning(f"Spring: cannot create joints — selected object '{candidate}' is not a NURBS curve transform.")
             return None
 
         self.input("Guide Curve").set(candidate)

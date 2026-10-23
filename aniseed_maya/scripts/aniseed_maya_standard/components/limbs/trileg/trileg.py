@@ -9,12 +9,15 @@ import os
 import mref
 import snappy
 import typing
+import logging
 import aniseed
 import functools
 import collections
 import aniseed_toolkit
 from maya import mel
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 foot = aniseed_toolkit.rigging.foot
 
@@ -61,7 +64,7 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
         the naming, behaviour and foot roll options (plus hidden initialisation
         options) and the five blended joint outputs (Blended Foot is default).
         """
-        super(TriLegComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -105,7 +108,7 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
         # -- Note that this input is not currently used in the build
         self.declare_input(
             name="Foot Twist Joints",
-            description="All lower twist joints",
+            description="All foot twist joints. Not currently used by the build",
             validate=False,
             group="Optional Twist Joints",
         )
@@ -412,7 +415,7 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
 
         for input_name in _TRILEG_UNGENERATED_TWISTS:
             if mirrored_from.input(input_name).get():
-                print(
+                log.warning(
                     f"Mirror : {mirrored_from.label()} has {input_name} but they cannot be "
                     f"generated for {self.label()}. Add them to {self.label()} by hand."
                 )
@@ -442,18 +445,25 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
         leg_root = self.input("Leg Root").get()
         toe_tip = self.input("Toe").get()
 
-        all_joints = aniseed_toolkit.scene.joints.get_between(
-            leg_root,
-            toe_tip,
-        )
+        for input_name, joint in [("Leg Root", leg_root), ("Toe", toe_tip)]:
+            if not joint or not mref.objExists(joint):
+                log.warning(f"{self.label()}: The {input_name} input is not set to an existing joint")
+                return False
+
+        try:
+            all_joints = aniseed_toolkit.scene.joints.get_between(
+                leg_root,
+                toe_tip,
+            )
+        except ValueError:
+            log.warning(f"{self.label()}: The Toe joint ({toe_tip}) is not below the Leg Root joint ({leg_root})")
+            return False
 
         if len(all_joints) < 5:
-            print(
-                (
-                    f"Expected at least 5 joints "
-                    "(upper leg, lower leg, anke, foot, toe). "
-                    f"But got {len(all_joints)} joints"
-                )
+            log.warning(
+                f"{self.label()}: Expected at least 5 joints "
+                "(upper, mid, lower, foot, toe). "
+                f"But got {len(all_joints)} joints"
             )
             return False
 
@@ -463,12 +473,12 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
         )
 
         if facing_dir != facing_dir.NegativeX and facing_dir != facing_dir.PositiveX:
-            print("The leg must be aligned to the X axis")
+            log.warning(f"{self.label()}: The leg must be aligned to the X axis")
             return False
 
         for option_name in foot.ROLL_AXIS_OPTIONS:
             if self.option(option_name).get() not in foot.ROLL_AXES:
-                print(f"{option_name} must be one of: {', '.join(foot.ROLL_AXES)}")
+                log.warning(f"{self.label()}: {option_name} must be one of: {', '.join(foot.ROLL_AXES)}")
                 return False
 
         return True
@@ -1118,8 +1128,9 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
         """
         Creates a default five joint leg chain (upper, mid, lower, foot, toe)
         plus optional twist joints, and sets the Leg Root, Toe and twist joint
-        inputs to them. Note that the lower twist joints are created between
-        the mid and lower joints.
+        inputs to them. The lower twist joints are created between the lower
+        and foot joints, which is the bone create_twists drives them along.
+        Nothing is created if the user cancels a twist count prompt.
 
         The parent argument is ignored - the chain is always parented to the
         first selected object (if any), and the root is then snapped to it
@@ -1146,19 +1157,24 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper leg?",
         )
+        if upper_twist_count is None:
+            return
+
         lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
-            title="Upper Twist Count",
+            title="Lower Twist Count",
             message="How many twist joints do you want on the lower leg?",
         )
+        if lower_twist_count is None:
+            return
 
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["upper"] = {"jointOrientX": 90, "jointOrientY": -20, "jointOrientZ": -90}
-        joint_data["mid"] = {"tx": aniseed_toolkit.core.units.from_cm(42), "jointOrientZ": -50}
-        joint_data["lower"] = {"tx": aniseed_toolkit.core.units.from_cm(42), "jointOrientZ": 50}
-        joint_data["Foot"] = {"tx": aniseed_toolkit.core.units.from_cm(22), "jointOrientZ": 70}
-        joint_data["Toe"] = {"tx": aniseed_toolkit.core.units.from_cm(10)}
+        joint_data["mid"] = {"tx": 42, "jointOrientZ": -50}
+        joint_data["lower"] = {"tx": 42, "jointOrientZ": 50}
+        joint_data["Foot"] = {"tx": 22, "jointOrientZ": 70}
+        joint_data["Toe"] = {"tx": 10}
 
         all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -1188,8 +1204,8 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
 
         if lower_twist_count:
             lower_twists = aniseed_toolkit.scene.joints.create_twist_joints(
-                all_joints[1],
                 all_joints[2],
+                all_joints[3],
                 lower_twist_count,
                 description=prefix + "LowerLegTwist",
                 location=location,
@@ -1275,7 +1291,14 @@ class TriLegComponent(aniseed.RigComponent, MirrorMixin):
 
         forced_attributes = [(f"{tag.lower()}_roll", 0) for tag in self.guide_tags]
         forced_attributes += [("roll", 0), ("lock_ankle_rotation", 1)]
-        forced_attributes += [(f"Joint{i}Addition", 0) for i in range(3)]
+
+        # -- The joint addition attributes only exist when the multi-bone
+        # -- soft ik was created
+        if self.option("Apply Soft Ik").get():
+            forced_attributes += [
+                (f"Joint{i}Addition", 0)
+                for i in range(3)
+            ]
 
         for attribute_name, attribute_value in forced_attributes:
             snappy.new_forced_attribute(

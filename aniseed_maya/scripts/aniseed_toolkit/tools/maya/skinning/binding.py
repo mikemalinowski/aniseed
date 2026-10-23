@@ -1,6 +1,6 @@
 import aniseed_toolkit
 import maya
-import maya.cmds as mc
+from maya import cmds
 
 
 class CopySkinToUnskinnedMeshes(aniseed_toolkit.Tool):
@@ -26,8 +26,8 @@ class CopySkinToUnskinnedMeshes(aniseed_toolkit.Tool):
         """
         # -- If we are not given our inputs, then resolve them from the
         # -- current selection
-        skinned_mesh = skinned_mesh or mc.ls(sl=True)[0]
-        unbound_meshes = unbound_meshes or mc.ls(sl=True)[1:]
+        skinned_mesh = skinned_mesh or cmds.ls(sl=True)[0]
+        unbound_meshes = unbound_meshes or cmds.ls(sl=True)[1:]
 
         if not isinstance(unbound_meshes, list):
             unbound_meshes = [unbound_meshes]
@@ -59,5 +59,5 @@ class AddAllSkinJointsToSelectedSkins(aniseed_toolkit.Tool):
 
     def run(self):
         aniseed_toolkit.scene.skin.add_all_skin_joints_to_target_meshes(
-            mc.ls(selection=True),
+            cmds.ls(selection=True),
         )

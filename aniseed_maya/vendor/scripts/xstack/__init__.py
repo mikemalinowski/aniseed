@@ -54,7 +54,7 @@ Here is an example of a component using options and requirements.
         identifier = "respray_vehicle"
 
         def __init__(self, *args, **kwargs):
-            super(ResprayVehicle, self).__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
 
             self.declare_requirement(
                 name="vehicle_instance",
@@ -149,6 +149,7 @@ from .stack import Stack
 
 # -- Expose the Component. All components must ultimately inherit from this class
 from .component import Component
+from .component import MissingComponent
 
 from . import address
 from . import constants
@@ -160,7 +161,7 @@ try:
     from .app.demo import launch_demo
     from .app import launch
 
-except:
+except ImportError:
     pass
 
 __version__ = "2.0.1"

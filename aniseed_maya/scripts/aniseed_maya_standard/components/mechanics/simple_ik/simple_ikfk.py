@@ -8,8 +8,11 @@ import os
 import mref
 import snappy
 import aniseed
+import logging
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 # noinspection PyInterpreter
@@ -220,10 +223,29 @@ class SimpleIKFKComponent(aniseed.RigComponent, MirrorMixin):
         positive or negative X axis.
         """
 
-        limb_joints = aniseed_toolkit.scene.joints.get_between(
-            start=self.input("Root Joint").get(),
-            end=self.input("Tip Joint").get(),
-        )
+        root_joint = self.input("Root Joint").get()
+        tip_joint = self.input("Tip Joint").get()
+
+        for input_name, joint in [("Root Joint", root_joint), ("Tip Joint", tip_joint)]:
+            if not joint or not mref.objExists(joint):
+                log.warning(f"{self.label()}: The {input_name} input is not set to an existing joint")
+                return False
+
+        try:
+            limb_joints = aniseed_toolkit.scene.joints.get_between(
+                start=root_joint,
+                end=tip_joint,
+            )
+        except ValueError:
+            log.warning(f"{self.label()}: The Tip Joint ({tip_joint}) is not below the Root Joint ({root_joint})")
+            return False
+
+        if len(limb_joints) < 3:
+            log.warning(
+                f"{self.label()}: Expected at least three joints from the Root Joint to the "
+                f"Tip Joint, got {limb_joints}"
+            )
+            return False
 
         direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             start=limb_joints[0],
@@ -231,9 +253,10 @@ class SimpleIKFKComponent(aniseed.RigComponent, MirrorMixin):
         )
 
         if direction != direction.PositiveX and direction != direction.NegativeX:
-            print("Validation Warning : Chain is not failing Up/Down X")
-            print(f"    Tested Chain : {limb_joints}")
-            print(direction)
+            log.warning(
+                f"{self.label()}: Chain is not facing down positive or negative X "
+                f"(tested chain: {limb_joints}, direction: {direction})"
+            )
             return False
 
         return True
@@ -510,12 +533,12 @@ class SimpleIKFKComponent(aniseed.RigComponent, MirrorMixin):
         ik_transform = self.option("IK Control Transform").get()
         if ik_transform:
             if not mref.objExists(ik_transform):
-                print(
+                log.warning(
                     f"Mirror : {self.label()} IK Control Transform {ik_transform} "
                     f"does not exist"
                 )
             elif ik_transform == mirrored_from.option("IK Control Transform").get():
-                print(
+                log.warning(
                     f"Mirror : {self.label()} IK Control Transform {ik_transform} "
                     f"is the same node as the original's"
                 )

@@ -10,9 +10,12 @@ import mref
 import snappy
 import aniseed
 import functools
+import logging
 import collections
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 foot = aniseed_toolkit.rigging.foot
 
@@ -25,7 +28,9 @@ _LEG_TWISTS = [
 
 class LegComponent(aniseed.RigComponent, MirrorMixin):
     """
-    This is some documentation that the user will see. You should adjust the guides...
+    An ik/fk leg for a four joint chain (upper leg, lower leg, foot, toe) with
+    a reverse foot driven by the foot guides. Adjust the guides to place the
+    foot pivots before building.
     """
     identifier = "Limb : Leg"
 
@@ -50,7 +55,7 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         the naming, behaviour and foot roll options (plus hidden initialisation
         options) and the blended joint, ik foot and upvector outputs.
         """
-        super(LegComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -381,7 +386,7 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         This is where we define what functionality we want to actually
         expose to the user. Mirroring is offered by MirrorMixin.
         """
-        menu = super(LegComponent, self).user_functions()
+        menu = super().user_functions()
 
         # -- If we dont have any joints we dont want to show any tools
         # -- other than the joint creation tool
@@ -492,11 +497,21 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         Before building, lets check that we have all the information we require
         for building.
         """
+        for input_name in ["Leg Root", "Toe"]:
+            joint = self.input(input_name).get()
+            if not joint or not mref.objExists(joint):
+                log.warning(f"{self.label()}: The {input_name} input is not set to an existing joint")
+                return False
+
         # -- To be valid we expect there to be specifically four joints
-        all_joints = self.all_joints()
+        try:
+            all_joints = self.all_joints()
+        except ValueError:
+            log.warning(f"{self.label()}: The Toe joint is not below the Leg Root joint")
+            return False
 
         if len(all_joints) < 4:
-            print("Expected four joints for leg")
+            log.warning(f"{self.label()}: Expected four joints from the Leg Root to the Toe")
             return False
 
         # -- We also expect that the bones to be facing down X - at least
@@ -506,12 +521,12 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
             all_joints[2],
         )
         if facing_dir != facing_dir.NegativeX and facing_dir != facing_dir.PositiveX:
-            print("The leg must be aligned to the X axis")
+            log.warning(f"{self.label()}: The leg must be aligned to the X axis")
             return False
 
         for option_name in foot.ROLL_AXIS_OPTIONS:
             if self.option(option_name).get() not in foot.ROLL_AXES:
-                print(f"{option_name} must be one of: {', '.join(foot.ROLL_AXES)}")
+                log.warning(f"{self.label()}: {option_name} must be one of: {', '.join(foot.ROLL_AXES)}")
                 return False
 
         return True
@@ -896,7 +911,8 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         """
         Creates a default four joint leg chain (upper leg, lower leg, foot, toe)
         plus optional upper and lower twist joints, and sets the Leg Root, Toe
-        and twist joint inputs to them.
+        and twist joint inputs to them. Nothing is created if the user cancels
+        a twist count prompt.
 
         The parent argument is ignored - the chain is always parented to (and
         positioned at) the first selected object, if any.
@@ -917,11 +933,16 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper leg?",
         )
+        if upper_twist_count is None:
+            return
+
         lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
-            title="Upper Twist Count",
+            title="Lower Twist Count",
             message="How many twist joints do you want on the lower leg?",
         )
+        if lower_twist_count is None:
+            return
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -929,9 +950,9 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["UpperLeg"] = {"jointOrientX": 90, "jointOrientY": -4, "jointOrientZ": -90}
-        joint_data["LowerLeg"] = {"tx": aniseed_toolkit.core.units.to_cm(42), "jointOrientZ": -11}
-        joint_data["Foot"] = {"tx": aniseed_toolkit.core.units.to_cm(42), "jointOrientZ": 55}
-        joint_data["Toe"] = {"tx": aniseed_toolkit.core.units.to_cm(10), "jointOrientZ": 42}
+        joint_data["LowerLeg"] = {"tx": 42, "jointOrientZ": -11}
+        joint_data["Foot"] = {"tx": 42, "jointOrientZ": 55}
+        joint_data["Toe"] = {"tx": 10, "jointOrientZ": 42}
 
         all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -981,13 +1002,13 @@ class LegComponent(aniseed.RigComponent, MirrorMixin):
         """
         Adds space switch components for the ik foot (World/Parent, defaulting to
         World) and the upvector (World/Parent/Foot, defaulting to Foot). Skipped
-        with a printed message if no "Core : Global Control Root" component is in
+        with a logged message if no "Core : Global Control Root" component is in
         the stack.
         """
         global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
 
         if not global_srt_component:
-            print("No global srt found, skipping spaceswitch setup")
+            log.info("No global srt found, skipping spaceswitch setup")
             return
 
         world = global_srt_component.output("Main Control").address()

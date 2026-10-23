@@ -14,11 +14,11 @@ class SetJointDrawStyle(aniseed_toolkit.Tool):
             visible: bool = True,
     ):
         """
-        This will determine the positions for a bezier spline in order
-        to keep the joints transforms.
+        This will show or hide the bones of the selected joints by setting
+        their draw style.
 
         Args:
-            joints: List of joints
+            visible: If true the bones are shown, otherwise they are hidden
         """
         draw_style = 0  # -- Show the bone
         if not visible:
@@ -41,11 +41,11 @@ class SetJointHierarchyDrawStyle(aniseed_toolkit.Tool):
             visible: bool = True,
     ):
         """
-        This will determine the positions for a bezier spline in order
-        to keep the joints transforms.
+        This will show or hide the bones of the selected joints, and of
+        every joint below them, by setting their draw style.
 
         Args:
-            joints: List of joints
+            visible: If true the bones are shown, otherwise they are hidden
         """
         draw_style = 0  # -- Show the bone
         if not visible:
@@ -59,7 +59,8 @@ class SetJointHierarchyDrawStyle(aniseed_toolkit.Tool):
 
         for joint in joints:
             if joint.has_attribute("drawStyle"):
+                # -- Locked or connected draw styles are left as they are
                 try:
                     joint.drawStyle.set(draw_style)
-                except:
+                except RuntimeError:
                     pass

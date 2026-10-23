@@ -2,9 +2,12 @@
 Provides the "Augment : Add Parent Control" component, which creates a
 control under a node's current parent and then parents the node beneath it.
 """
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 class InsertParentControlComponent(aniseed.RigComponent):
@@ -115,6 +118,20 @@ class InsertParentControlComponent(aniseed.RigComponent):
             return aniseed.widgets.ObjectSelector(component=self)
 
         return None
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the "Node" input and the "Name" option are given.
+        """
+        if not self.input("Node").get():
+            log.warning(f"{self.label()} : Node is not set")
+            return False
+
+        if not self.option("Name").get():
+            log.warning(f"{self.label()} : Name is empty, so the control cannot be named")
+            return False
+
+        return True
 
     def run(self) -> bool:
         """

@@ -1,6 +1,6 @@
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 

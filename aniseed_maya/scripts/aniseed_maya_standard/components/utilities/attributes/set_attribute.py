@@ -5,8 +5,11 @@ string and coerced into each attribute's python type, with booleans resolved
 from common truthy/falsy strings. An Ignore Errors option controls whether
 unresolvable nodes are skipped or raise.
 """
+import logging
 import mref
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 _TRUTHY_STRINGS = frozenset({"true", "1", "yes", "on"})
@@ -70,7 +73,7 @@ class SetAttributeMany(aniseed.RigComponent):
         self.declare_option(
             name="Ignore Errors",
             value=False,
-            description="",
+            description="If true, nodes that do not exist are skipped with a warning rather than failing the build.",
         )
 
     def input_widget(self, requirement_name: str):
@@ -102,9 +105,9 @@ class SetAttributeMany(aniseed.RigComponent):
                 attribute = mref.get(node_name).attr(attribute_name)
 
             except AttributeError:
-                print(f"Could not set attribute on {node_name}")
                 if not self.option("Ignore Errors").get():
                     raise Exception(f"Could not set attribute on {node_name}")
+                log.warning(f"Could not set attribute on {node_name}, skipping")
                 continue
 
             python_type = attribute.python_type()

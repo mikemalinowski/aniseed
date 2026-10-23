@@ -6,6 +6,7 @@ Vector maths uses OpenMaya's MVector, which some functions also return.
 Node positions are read with xform through mref, so components (such as
 vertices) can be given as well as transforms.
 """
+import logging
 import time
 
 from maya.api import OpenMaya as om
@@ -13,10 +14,12 @@ import mref
 
 from ..registry import tool
 
+log = logging.getLogger(__name__)
+
 
 def timed_function_call(func):
     """
-    Decorator which prints how long each call of the decorated function
+    Decorator which logs how long each call of the decorated function
     took, in seconds.
 
     Args:
@@ -29,7 +32,7 @@ def timed_function_call(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
-        print("{} took {} seconds".format(func.__name__, end_time - start_time))
+        log.info("%s took %s seconds", func.__name__, end_time - start_time)
         return result
     return wrapper
 
@@ -75,7 +78,7 @@ def factor_between(node: str = "", from_this: str = "", to_this: str = "", print
         node: The node to measure
         from_this: The first node to compare to
         to_this: The second node to compare to
-        print_result: If True, the result is printed
+        print_result: If True, the result is logged
 
     Returns:
         The clamped factor
@@ -92,7 +95,7 @@ def factor_between(node: str = "", from_this: str = "", to_this: str = "", print
     )
 
     if print_result:
-        print(f"Factor of {node} between {from_this} and {to_this} is {distance_factor}")
+        log.info(f"Factor of {node} between {from_this} and {to_this} is {distance_factor}")
 
     return distance_factor
 
@@ -100,7 +103,7 @@ def factor_between(node: str = "", from_this: str = "", to_this: str = "", print
 def direction_between(
     node_a: str = "",
     node_b: str = "",
-    print_result: bool = True,
+    print_result: bool = False,
 ) -> list[float]:
     """
     Returns the normalised direction from node_a to node_b, expressed in
@@ -112,7 +115,7 @@ def direction_between(
     Args:
         node_a: The node to measure from
         node_b: The node to measure to
-        print_result: If True, the result is printed
+        print_result: If True, the result is logged
 
     Returns:
         The direction as an MVector
@@ -141,7 +144,7 @@ def direction_between(
     a.delete()
 
     if print_result:
-        print(f"Direction between {node_a} and {node_b} is {n}")
+        log.info(f"Direction between {node_a} and {node_b} is {n}")
 
     return n
 

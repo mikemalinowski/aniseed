@@ -1,6 +1,79 @@
+import logging
+
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
+
+log = logging.getLogger(__name__)
+
+
+def _rig_path(node: str) -> str:
+    """
+    Returns the full DAG path of the aniseed rig node the given node belongs
+    to (the closest node in its hierarchy with an aniseed_rig attribute), or an
+    empty string if it is not part of an aniseed rig. Full paths are used so
+    rigs without a namespace, whose top nodes may share a name, stay distinct.
+
+    Args:
+        node: Any node within a rig.
+
+    Returns:
+        The rig node's full DAG path, or an empty string.
+    """
+    parts = cmds.ls(node, long=True)[0].split("|")
+
+    for idx in range(len(parts) - 1, 0, -1):
+        path = "|".join(parts[:idx + 1])
+        if cmds.objExists(f"{path}.aniseed_rig"):
+            return path
+    return ""
+
+
+def _rig_controls(namespace: str = "") -> list[str] | None:
+    """
+    Returns the controls of the rig to work on:
+
+      * the rig in the given namespace, if one is given
+      * otherwise the rig the first selected node belongs to
+      * otherwise every aniseed rig in the scene
+
+    Rigs with or without a namespace are both supported.
+
+    Args:
+        namespace: Optional namespace of the rig, used instead of the
+            selection when given.
+
+    Returns:
+        The control names, or None if the selection is not part of an
+        aniseed rig.
+    """
+    controls = aniseed_toolkit.rig.controls.all_controls()
+
+    # -- An explicit namespace wins. Match on the whole namespace (with its
+    # -- colon), so RIG_1 does not also pick up RIG_10
+    if namespace:
+        prefix = namespace.rstrip(":") + ":"
+        return [
+            control
+            for control in controls
+            if control.split("|")[-1].startswith(prefix)
+        ]
+
+    # -- Otherwise use the rig the selection belongs to, found through the
+    # -- DAG rather than the name, so rigs without a namespace work too
+    selection = cmds.ls(selection=True)
+    if selection:
+        rig_path = _rig_path(selection[0])
+        if not rig_path:
+            return None
+
+        return [
+            control
+            for control in controls
+            if cmds.ls(control, long=True)[0].startswith(f"{rig_path}|")
+        ]
+
+    return controls
 
 
 class SelectControls(aniseed_toolkit.Tool):
@@ -14,20 +87,24 @@ class SelectControls(aniseed_toolkit.Tool):
 
     def run(self, namespace: str = ""):
         """
-        This will select all the controls for the given rig (if there is a selection
-        or all the controls in all rigs if there is not a selection).
-        """
-        namespace = ""
-        if mc.ls(selection=True):
-            if ":" in namespace:
-                namespace = mc.ls(selection=True)[0].split(":")[0]
+        Selects every control of a rig: the rig the first selected node
+        belongs to, or every aniseed rig in the scene if nothing is selected.
+        Rigs with or without a namespace are both supported.
 
-        mc.select(
-            aniseed_toolkit.run(
-                "Get Controls",
-                namespace,
-            ),
-        )
+        Args:
+            namespace: Optional namespace of the rig to select, used instead
+                of the selection when given.
+
+        Returns:
+            None
+        """
+        controls = _rig_controls(namespace)
+
+        if controls is None:
+            cmds.warning("The selection is not part of an aniseed rig")
+            return
+
+        cmds.select(controls)
 
 
 class ZeroSelection(aniseed_toolkit.Tool):
@@ -51,7 +128,7 @@ class ZeroSelection(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        for control in mc.ls(sl=True):
+        for control in cmds.ls(sl=True):
             control = aniseed_toolkit.run("Get Control", control)
 
             if not control:
@@ -60,7 +137,7 @@ class ZeroSelection(aniseed_toolkit.Tool):
             aniseed_toolkit.run("Zero Control", control.ctl)
 
             if key_on_reset:
-                mc.setKeyframe(control.ctl)
+                cmds.setKeyframe(control.ctl)
 
 
 class ZeroRig(aniseed_toolkit.Tool):
@@ -74,25 +151,30 @@ class ZeroRig(aniseed_toolkit.Tool):
 
     def run(self, key_on_reset: bool = False, namespace: str = ""):
         """
-        This will zero out all the animatable channels for the selected
-        controls.
+        Zero out all the animatable channels on every control of a rig: the
+        rig the first selected node belongs to, or every aniseed rig in the
+        scene if nothing is selected. Rigs with or without a namespace are
+        both supported.
 
         Args:
-            key_on_reset (bool, optional): If True, the objects will be keyed
-                after being reset
+            key_on_reset: If True, the controls are keyed after being reset.
+            namespace: Optional namespace of the rig to zero, used instead of
+                the selection when given.
 
         Returns:
             None
         """
-        namespace = ""
-        if mc.ls(selection=True):
-            namespace = mc.ls(selection=True)[0].split(":")[0]
+        controls = _rig_controls(namespace)
 
-        for control in aniseed_toolkit.run("Get Controls", namespace):
+        if controls is None:
+            cmds.warning("The selection is not part of an aniseed rig")
+            return
+
+        for control in controls:
             aniseed_toolkit.run("Zero Control", control)
 
             if key_on_reset:
-                mc.setKeyframe(control)
+                cmds.setKeyframe(control)
 
 
 
@@ -107,12 +189,26 @@ class SelectOpposite(aniseed_toolkit.Tool):
 
     def run(self):
         """
-        This will select controls of the opposing location (side)
+        This will select the controls of the opposing location (side) to the
+        selected controls. Opposites which do not exist are skipped.
         """
+        selection = cmds.ls(selection=True)
 
-        mc.select(
-            aniseed_toolkit.run("Get Opposites"),
-        )
+        if not selection:
+            log.warning("Select the controls to find the opposites of")
+            return
+
+        opposites = [
+            opposite
+            for opposite in aniseed_toolkit.run("Get Opposites", selection)
+            if cmds.objExists(opposite)
+        ]
+
+        if not opposites:
+            log.warning("No opposite controls were found for the selection")
+            return
+
+        cmds.select(opposites)
 
 
 class GetSelectedRigs(aniseed_toolkit.Tool):
@@ -127,7 +223,7 @@ class GetSelectedRigs(aniseed_toolkit.Tool):
         """
         selected_rigs = []
 
-        for selected in mc.ls(sl=True):
+        for selected in cmds.ls(sl=True):
             rig_node = aniseed_toolkit.run("Resolve Rig Node", selected)
 
             if rig_node:
@@ -136,7 +232,7 @@ class GetSelectedRigs(aniseed_toolkit.Tool):
         selected_rigs = list(set(selected_rigs))
 
         return [
-            aniseed.Rig(host=rig)
+            aniseed.Rig.for_host(rig)
             for rig in selected_rigs
         ]
 
@@ -158,7 +254,7 @@ class ZeroControl(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        for attribute_name in mc.listAttr(node, k=True) or list():
+        for attribute_name in cmds.listAttr(node, k=True) or list():
 
             if "scale" in attribute_name:
                 value = 1.0
@@ -169,29 +265,36 @@ class ZeroControl(aniseed_toolkit.Tool):
             else:
                 continue
 
+            # -- Locked or connected channels cannot be reset, and are
+            # -- left as they are
             try:
-                mc.setAttr(
+                cmds.setAttr(
                     f"{node}.{attribute_name}",
                     value,
                 )
 
-            except:
+            except RuntimeError:
                 pass
 
-        for attribute_name in mc.listAttr(node, k=True, ud=True) or list():
-            value = mc.attributeQuery(
+        for attribute_name in cmds.listAttr(node, k=True, ud=True) or list():
+            default_value = cmds.attributeQuery(
                 attribute_name,
                 node=node,
                 listDefault=True,
             )
 
+            if not default_value:
+                continue
+
+            # -- Locked or connected attributes cannot be reset, and are
+            # -- left as they are
             try:
-                mc.setAttr(
+                cmds.setAttr(
                     f"{node}.{attribute_name}",
-                    value,
+                    *default_value,
                 )
 
-            except:
+            except RuntimeError:
                 continue
 
 
@@ -206,11 +309,14 @@ class SelectAlternateControls(aniseed_toolkit.Tool):
 
     def run(self, node: str = "", replace_this="_LF", with_this="_RT") -> None:
         """
-        This will zero out all the animatable channels for the
-        given node
+        This will select the alternate of every rig control whose name
+        contains replace_this: the control with replace_this replaced by
+        with_this, where one exists.
 
         Args:
-            node: The node to zero out (reset)
+            node: Unused
+            replace_this: The part of the control names to replace
+            with_this: The string to replace it with
 
         Returns:
             None
@@ -224,10 +330,10 @@ class SelectAlternateControls(aniseed_toolkit.Tool):
                 continue
 
             alternate = control.replace(replace_this, with_this)
-            if mc.objExists(alternate):
+            if cmds.objExists(alternate):
                 alternate_controls.append(alternate)
 
-        mc.select(alternate_controls)
+        cmds.select(alternate_controls)
 
 class SelectFilteredControls(aniseed_toolkit.Tool):
 
@@ -240,11 +346,12 @@ class SelectFilteredControls(aniseed_toolkit.Tool):
 
     def run(self, node: str = "", name_filter="_LF") -> None:
         """
-        This will zero out all the animatable channels for the
-        given node
+        This will select every rig control whose name contains the given
+        filter.
 
         Args:
-            node: The node to zero out (reset)
+            node: Unused
+            name_filter: The string the control names must contain
 
         Returns:
             None
@@ -256,7 +363,7 @@ class SelectFilteredControls(aniseed_toolkit.Tool):
             if name_filter in control:
                 filtered_controls.append(control)
 
-        mc.select(filtered_controls)
+        cmds.select(filtered_controls)
 
 
 class SelectControlsByLocation(aniseed_toolkit.Tool):
@@ -270,14 +377,13 @@ class SelectControlsByLocation(aniseed_toolkit.Tool):
 
     def run(self, node: str = "") -> None:
         """
-        This will zero out all the animatable channels for the
-        given node
+        This will select every rig control which shares the location (side)
+        of the first selected control.
 
         Args:
-            node: The node to zero out (reset)
+            node: Unused
 
         Returns:
             None
         """
-        filtered_controls = []
-        mc.select(aniseed_toolkit.run("Get By Location"))
+        cmds.select(aniseed_toolkit.run("Get By Location"))

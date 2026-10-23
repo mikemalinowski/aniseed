@@ -1,5 +1,5 @@
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class CopyPoseTool(aniseed_toolkit.Tool):
@@ -21,12 +21,12 @@ class CopyPoseTool(aniseed_toolkit.Tool):
             nodes: List of nodes to store. If none are given then the
                 selection will be used
         """
-        nodes = nodes or mc.ls(sl=True)
+        nodes = nodes or cmds.ls(sl=True)
         CopyPoseTool.POSES = []
 
         for node in nodes:
             CopyPoseTool.POSES.append(
-                mc.xform(
+                cmds.xform(
                     node,
                     query=True,
                     matrix=True,
@@ -44,16 +44,15 @@ class PastePoseTool(aniseed_toolkit.Tool):
 
     def run(self, nodes: list[str] or None = None):
         """
-        This will apply the previously stored local space transforms back to the objects.
-
-        If "Selection Only" is turned on, then the pose will only be applied to matching
-        objects which are also selected.
+        This will apply the previously stored local space transforms back to the
+        given nodes, in the order they were copied.
 
         Args:
-            Nodes to paste the pose onto
+            nodes: Nodes to paste the pose onto. If none are given then the
+                selection will be used
         """
 
-        nodes = nodes or mc.ls(sl=True)
+        nodes = nodes or cmds.ls(sl=True)
 
         for idx, matrix in enumerate(CopyPoseTool.POSES):
 
@@ -63,7 +62,7 @@ class PastePoseTool(aniseed_toolkit.Tool):
             except IndexError:
                 return
 
-            mc.xform(
+            cmds.xform(
                 node,
                 matrix=CopyPoseTool.POSES[idx],
             )
@@ -80,19 +79,19 @@ class CopyWorldSpacePoseTool(aniseed_toolkit.Tool):
 
     def run(self, nodes: list[str] or None = None):
         """
-        This will store the current local space transform of the selected
+        This will store the current world space transform of the selected
         controls and store them.
 
         Args:
             nodes: List of nodes to store. If none are given then the
                 selection will be used
         """
-        nodes = nodes or mc.ls(sl=True)
+        nodes = nodes or cmds.ls(sl=True)
         CopyWorldSpacePoseTool.POSES = []
 
         for node in nodes:
             CopyWorldSpacePoseTool.POSES.append(
-                mc.xform(
+                cmds.xform(
                     node,
                     query=True,
                     matrix=True,
@@ -111,16 +110,15 @@ class PasteWorldSpacePoseTool(aniseed_toolkit.Tool):
 
     def run(self, nodes: list[str] or None = None):
         """
-        This will apply the previously stored world space transforms back to the objects.
-
-        If "Selection Only" is turned on, then the pose will only be applied to matching
-        objects which are also selected.
+        This will apply the previously stored world space transforms back to the
+        given nodes, in the order they were copied.
 
         Args:
-            Nodes to paste the pose onto
+            nodes: Nodes to paste the pose onto. If none are given then the
+                selection will be used
         """
 
-        nodes = nodes or mc.ls(sl=True)
+        nodes = nodes or cmds.ls(sl=True)
 
         for idx, matrix in enumerate(CopyWorldSpacePoseTool.POSES):
 
@@ -130,7 +128,7 @@ class PasteWorldSpacePoseTool(aniseed_toolkit.Tool):
             except IndexError:
                 return
 
-            mc.xform(
+            cmds.xform(
                 node,
                 matrix=CopyWorldSpacePoseTool.POSES[idx],
                 worldSpace=True,

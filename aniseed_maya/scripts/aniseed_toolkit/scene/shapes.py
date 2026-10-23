@@ -12,6 +12,7 @@ Nodes are handled through mref. Two things deliberately stay outside it:
 """
 import functools
 import json
+import logging
 import os
 import typing
 
@@ -21,7 +22,8 @@ import mref
 
 from ..registry import tool
 from .. import resources
-from ..core import units as _units
+
+log = logging.getLogger(__name__)
 
 
 def _get_node(node, error=ValueError) -> mref.ReferencedItem:
@@ -106,7 +108,7 @@ def apply_color(node: str = "", r: float = 0, g: float = 0, b: float = 0) -> Non
     # -- The override may be locked or driven (e.g. by a display layer)
     try:
         item.attr("overrideEnabled").set(True)
-    except Exception:
+    except RuntimeError:
         pass
 
     _set_override_colour(item, rgb)
@@ -120,7 +122,7 @@ def combine(nodes: typing.List[str] = None):
     """
     Moves the nurbsCurve shapes of all the given nodes under the first given
     node and then deletes those other nodes. If fewer than two nodes are
-    given a message is printed and nothing is changed.
+    given a warning is logged and nothing is changed.
 
     Args:
         nodes: List of nodes to combine, with the first one being the node
@@ -133,7 +135,7 @@ def combine(nodes: typing.List[str] = None):
         TypeError: If one of the nodes to merge in has no nurbsCurve shapes.
     """
     if len(nodes) < 2:
-        print("At least two nodes must be given")
+        log.warning("At least two nodes must be given")
         return
 
     base_node = nodes[0]
@@ -156,7 +158,7 @@ def rotate(
     x: float = 0.0,
     y: float = 0.0,
     z: float = 0.0,
-    pivot: list[float] or str = None,
+    pivot: typing.Union[list[float], str] = None,
 ) -> None:
     """
     Spins the CVs of the node's nurbsCurve shapes around the shape's local
@@ -366,7 +368,7 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
     """
     For each pair of nodes, replaces the shapes of the to_node with a copy of
     the shapes of the from_node, mirrored in world space across the given
-    axis. Pairs whose to_node does not exist are skipped with a message.
+    axis. Pairs whose to_node does not exist are skipped with a warning.
 
     The to_node is left selected (see load_shape).
 
@@ -383,7 +385,7 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
 
         to_node = to_nodes[idx]
         if not mref.objExists(to_node):
-            print("Could not find node with name : %s" % to_node)
+            log.warning("Could not find node with name : %s", to_node)
             continue
 
         mirror_scale = _get_mirror_array(axis)
@@ -446,7 +448,7 @@ def shape_to_dict(node: str = "") -> typing.Dict:
     Returns:
         A dictionary of the form {"node": node, "curves": [...]}, where each
         curve holds its form, degree, knots and object space cvs. An empty
-        dictionary is returned (and a message printed) if there are no
+        dictionary is returned (and a warning logged) if there are no
         shapes.
 
     Raises:
@@ -462,7 +464,7 @@ def shape_to_dict(node: str = "") -> typing.Dict:
         shapes = [item]
 
     if not shapes:
-        print("no shapes found")
+        log.warning("No shapes found under %s", node)
         return {}
 
     # -- Define out output data. Right now we're only storing
@@ -488,7 +490,7 @@ def shape_to_dict(node: str = "") -> typing.Dict:
 
 
 @functools.lru_cache(maxsize=None)
-def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
+def shape_data_from_file(shape_file: str = "") -> typing.Optional[typing.Dict]:
     """
     This will attempt to get the shape dictionary data from a shape file.
     The shape file can either be the local name of a shape in the shapes
@@ -505,7 +507,7 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
             of a shape in the shapes directory)
 
     Returns:
-        dict, or None (and a message is printed) if the file cannot be found
+        dict, or None (and a warning is logged) if the file cannot be found
     """
     if not shape_file.endswith(".json"):
         shape_file = shape_file + ".json"
@@ -514,7 +516,7 @@ def shape_data_from_file(shape_file: str = "") -> typing.Dict or None:
         shape_file = resources.get("shapes/" + shape_file)
 
     if not os.path.exists(shape_file):
-        print("could not find shape : %s" % shape_file)
+        log.warning("Could not find shape : %s", shape_file)
         return None
 
     with open(shape_file, "r") as f:
@@ -552,15 +554,15 @@ def save_to_file(node: str = "", filepath: str = "") -> typing.Dict:
 
 def load_shape(
         node: str = "",
-        data: typing.Dict or str = "",
+        data: typing.Union[typing.Dict, str] = "",
         clear: bool = True,
         color=None,
         scale_by=1,
 ) -> typing.List[str]:
     """
     Applies the given shape data to the given node, creating one nurbsCurve
-    shape under the node per curve in the data. The cvs in the data are in
-    centimetres and are converted to the scene's units.
+    shape under the node per curve in the data. The cvs in the data are
+    applied as they are, in centimetres.
 
     The node is left selected afterwards.
 
@@ -577,15 +579,17 @@ def load_shape(
 
     Returns:
         List of the names of the shape nodes created. An empty list is
-        returned (and a message printed) if the shape cannot be found, in
+        returned (and a warning logged) if the shape cannot be found, in
         which case nothing is changed.
     """
+
+    requested_shape = data
 
     if isinstance(data, str):
         data = shape_data_from_file(data)
 
     if not data:
-        print("Could not find shape : %s" % data)
+        log.warning("Could not find shape : %s", requested_shape)
         return []
 
     if clear:
@@ -600,11 +604,8 @@ def load_shape(
     for curve_data in data["curves"]:
         # -- Create a curve with the given cv's
         points = [
-            [
-                _units.from_cm(v)
-                for v in p
-            ]
-            for p in curve_data["cvs"]
+            list(point)
+            for point in curve_data["cvs"]
         ]
 
         transform = mref.curve(

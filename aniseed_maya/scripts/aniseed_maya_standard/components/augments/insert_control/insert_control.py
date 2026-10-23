@@ -3,10 +3,13 @@ Provides the "Augment : Insert Control" component, which creates a control
 beneath a parent node and optionally moves the parent's existing transform
 children under that control.
 """
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class InsertControlComponent(aniseed.RigComponent, MirrorMixin):
@@ -128,6 +131,20 @@ class InsertControlComponent(aniseed.RigComponent, MirrorMixin):
             return aniseed.widgets.ObjectSelector(component=self)
 
         return None
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the "Parent" input and the "Name" option are given.
+        """
+        if not self.input("Parent").get():
+            log.warning(f"{self.label()} : Parent is not set")
+            return False
+
+        if not self.option("Name").get():
+            log.warning(f"{self.label()} : Name is empty, so the control cannot be named")
+            return False
+
+        return True
 
     def run(self) -> bool:
         """

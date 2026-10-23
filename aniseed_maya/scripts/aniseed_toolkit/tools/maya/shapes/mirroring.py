@@ -1,8 +1,12 @@
+import logging
+
 import scribble
 import qtility
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 import maya.api.OpenMaya as om
+
+log = logging.getLogger(__name__)
 
 AXIS = ["x", "y", "z"]
 
@@ -37,7 +41,7 @@ class MirrorShape(aniseed_toolkit.Tool):
 
         Returns: None
         """
-        for node in mc.ls(selection=True):
+        for node in cmds.ls(selection=True):
             aniseed_toolkit.scene.shapes.mirror([node], axis)
 
 
@@ -60,13 +64,13 @@ class AutoMirrorShapes(aniseed_toolkit.Tool):
 
             to_node = control.replace(from_tag, to_tag)
 
-            if not mc.objExists(to_node):
+            if not cmds.objExists(to_node):
                 continue
 
             aniseed_toolkit.run(
                 "Mirror Across",
-                from_node=control,
-                to_node=to_node,
+                from_nodes=control,
+                to_nodes=to_node,
                 axis=axis,
             )
 
@@ -93,7 +97,7 @@ class MirrorAcross(aniseed_toolkit.Tool):
             None
         """
         if not from_nodes:
-            from_nodes = mc.ls(sl=True)
+            from_nodes = cmds.ls(sl=True)
         elif isinstance(from_nodes, str):
             from_nodes = [from_nodes]
 
@@ -122,11 +126,16 @@ class MirrorAcross(aniseed_toolkit.Tool):
                 message="Give a mapping (such as _LF:_RT)",
                 text=mapping,
             )
-            shape_prefs["location_mapping"] = mapping
-            shape_prefs.save()
 
             if not mapping:
                 return
+
+            if ":" not in mapping:
+                log.warning(f"'{mapping}' is not a mapping in the form _LF:_RT")
+                return
+
+            shape_prefs["location_mapping"] = mapping
+            shape_prefs.save()
 
             for from_node in from_nodes:
                 to_node = from_node.replace(

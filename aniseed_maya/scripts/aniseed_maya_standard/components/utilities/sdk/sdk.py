@@ -5,10 +5,13 @@ node. The curve shape is stored on the component, captured from the live
 curve with the Store Set Driven Key Data button, so it rebuilds
 identically.
 """
+import logging
 import typing
 
 import mref
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 class SetDrivenKey(aniseed.RigComponent):
@@ -157,7 +160,7 @@ class SetDrivenKey(aniseed.RigComponent):
             "Destination Attribute",
         ):
             if not self.input(input_name).get():
-                print(f"{input_name} is required")
+                log.warning(f"{self.label()} : {input_name} is required")
                 return False
 
         return True

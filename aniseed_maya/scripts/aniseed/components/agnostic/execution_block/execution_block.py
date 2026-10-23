@@ -3,10 +3,14 @@ Provides the "Stack : Execution Block" component, which defines a block of
 components the Aniseed App exposes as a build button, and the
 "Stack : Run Execution Block" component, which builds another execution block
 from within the current build. Blocks that are ancestors of the runner are
-excluded from selection to avoid the most obvious recursion case.
+excluded from selection to avoid the most obvious recursion case, and the
+stack refuses any nested build of a block which is already being built.
 """
 import os
+import logging
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 class ExecutionBlock(aniseed.RigComponent):
@@ -107,12 +111,12 @@ class RunExecutionBlock(aniseed.RigComponent):
         """
         Checks that an execution block label has been chosen and that an
         Execution Block with that label exists in the stack. The reason for
-        failure is printed.
+        failure is logged.
         """
         component_label = self.input("Execution Block Label").get()
 
         if not component_label:
-            print("No Component Label Selected")
+            log.warning(f"{self.label()} has no Execution Block Label selected")
             return False
 
         component = self.stack.get_component_by_label(
@@ -121,16 +125,19 @@ class RunExecutionBlock(aniseed.RigComponent):
         )
 
         if not component:
-            print(f"{component_label} could not be found.")
+            log.warning(f"{self.label()} : {component_label} could not be found.")
             return False
 
         return True
 
     def run(self):
         """
-        Builds the stack below the chosen Execution Block. The result of that
-        nested build is returned, but the stack ignores the return value of run,
-        so a failed nested build does not fail the outer build.
+        Builds the stack below the chosen Execution Block. This is a nested
+        build, so it leaves the status of the rest of the build alone. Its
+        result is returned, so if it fails, this component fails and the outer
+        build stops. The stack refuses the nested build if the block is already
+        being built (such as two blocks which run each other), which also fails
+        this component.
         """
         component_label = self.input("Execution Block Label").get()
 
@@ -142,6 +149,4 @@ class RunExecutionBlock(aniseed.RigComponent):
         if not component:
             return False
 
-        # -- Note that the stack ignores the value returned from run, so a
-        # -- failed nested build does not fail the outer build
         return self.stack.build(build_below=component)

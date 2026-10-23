@@ -8,6 +8,7 @@ MixerTools helpers used to edit, mirror, save and load the pose data.
 """
 import os
 import json
+import logging
 import mref
 import copy
 import qtility
@@ -15,6 +16,8 @@ import functools
 import aniseed
 import aniseed_toolkit
 from Qt import QtWidgets
+
+log = logging.getLogger(__name__)
 
 
 class FaceComponent(aniseed.RigComponent):
@@ -132,7 +135,7 @@ class FaceComponent(aniseed.RigComponent):
         and pass settings through to the mouth and eyes sub components. The
         single output is the FaceRig org.
         """
-        super(FaceComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -589,8 +592,8 @@ class FaceComponent(aniseed.RigComponent):
 
                 try:
                     attribute_host.add_proxy(f"{side}_" + attr.name(include_node=False), attr)
-                except Exception:
-                    pass
+                except RuntimeError:
+                    log.warning(f"Could not proxy {attr.name()} onto the face attribute host")
 
         # -- Set the outputs
         self.output("FaceRig").set(org.name())
@@ -778,7 +781,7 @@ class HighLevelControlRig(aniseed_toolkit.rigging.facial.FacialControlRig):
                 settings
             attribute_host: The node to proxy the animator facing attributes onto
         """
-        super(HighLevelControlRig, self).__init__(
+        super().__init__(
             config=component.config,
             read_setting=lambda name: component.input(name).get(),
             attribute_host=attribute_host,
@@ -908,7 +911,7 @@ class FacialTools(QtWidgets.QWidget):
             component: The face component the tools operate on
             parent: Optional parent widget
         """
-        super(FacialTools, self).__init__(parent=parent)
+        super().__init__(parent=parent)
 
         # -- Store a reference to the component
         self.component = component
@@ -1053,7 +1056,8 @@ class MixerTools:
             for channel, value in [("translate", 0), ("rotate", 0), ("scale", 1)]:
                 try:
                     node.attr(f"{channel}{axis}").set(value)
-                except Exception:
+                except RuntimeError:
+                    # -- Locked or connected channels are left as they are
                     pass
 
     def snap_pose(self):

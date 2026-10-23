@@ -10,6 +10,7 @@ This plugin contains three different modules:
         a bezier curve.
 """
 import os
+import logging
 import copy
 import mref
 import typing
@@ -20,6 +21,8 @@ from PySide6 import QtWidgets
 
 import maya.api.OpenMaya as om
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class SplineSpine(aniseed.RigComponent, MirrorMixin):
@@ -42,7 +45,7 @@ class SplineSpine(aniseed.RigComponent, MirrorMixin):
         and control counts) and the transform/control outputs. Per-joint outputs
         are rebuilt whenever the root or tip joint input changes.
         """
-        super(SplineSpine, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # -- Object Inputs
         self.declare_input(name="Parent", value="", group="Control Rig")
@@ -189,13 +192,22 @@ class SplineSpine(aniseed.RigComponent, MirrorMixin):
 
         # -- If we're not given a joint count then we need to
         # -- prompt for one
-        joint_count = joint_count or int(
-            qtility.request.text(
+        if not joint_count:
+            requested_count = qtility.request.text(
                 title="Joint Count",
                 message="How many joints do you want?"
-            ),
-        )
-        if not joint_count or joint_count < 2:
+            )
+
+            if not requested_count:
+                return
+
+            try:
+                joint_count = int(requested_count)
+            except ValueError:
+                log.warning(f"'{requested_count}' is not a whole number of joints")
+                return
+
+        if joint_count < 2:
             return
 
         # -- Resolve the translation increments for the joints based
@@ -264,11 +276,11 @@ class SplineSpine(aniseed.RigComponent, MirrorMixin):
         tip_joint = self.input("Tip Joint").get()
 
         if not root_joint or not mref.objExists(root_joint):
-            print("No root joint specified")
+            log.warning("No root joint specified")
             return False
 
         if not tip_joint or not mref.objExists(tip_joint):
-            print("No tip joint specified")
+            log.warning("No tip joint specified")
             return False
 
         return True
@@ -792,7 +804,7 @@ class SplineSpine(aniseed.RigComponent, MirrorMixin):
         guide data. This ensures our code paths can always assume they have access
         to guide data.
         """
-        base_number = aniseed_toolkit.core.units.from_cm(50.0)
+        base_number = 50.0
         identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
 
         data = dict(
@@ -1026,7 +1038,7 @@ class QuadSplineSpine(SplineSpine):
         Locks the component to four controls, hiding the Number Of Controls
         and FK Interaction Mode options.
         """
-        super(QuadSplineSpine, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # -- In the quad setup we're locked specifically to four
         # -- controls.
@@ -1094,7 +1106,7 @@ class TriSplineSpine(SplineSpine):
         Adds the Ribbon Cross Vector option and locks the component to five
         (hidden) controls - three primary and two bezier style.
         """
-        super(TriSplineSpine, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # -- This component as a new option to define the cross vector
         # -- of the ribbon (that is the direction the width should be in).
@@ -1114,7 +1126,7 @@ class TriSplineSpine(SplineSpine):
         """
         if option_name == "Ribbon Cross Vector":
             return aniseed.widgets.VectorWidget()
-        return super(TriSplineSpine, self).option_widget(option_name)
+        return super().option_widget(option_name)
 
     def user_func_create_guide(self):
         """
@@ -1125,7 +1137,7 @@ class TriSplineSpine(SplineSpine):
         if self.has_guide():
             return []
 
-        guides = super(TriSplineSpine, self).user_func_create_guide()
+        guides = super().user_func_create_guide()
         mref.get(guides[2]).set_parent(guides[0])
         mref.get(guides[-1]).set_parent(guides[0])
         return guides

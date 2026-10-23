@@ -6,12 +6,15 @@ connections on the shapes. "Utility : Store Control Shapes" is a deprecated,
 no-op holder of legacy shape data, and "Utility : Delete Shapes" removes all
 shapes from a list of nodes.
 """
+import logging
 import os
 import mref
 import aniseed
 import aniseed_toolkit
 
 from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 # noinspection PyUnresolvedReferences
@@ -216,7 +219,7 @@ class ApplyControlShapes(aniseed.RigComponent):
                     try:
                         cmds.connectAttr(driving_attribute, destination_attribute)
                     except RuntimeError:
-                        print(f"could not reconnect {driving_attribute} to {destination_attribute}")
+                        log.warning(f"Could not reconnect {driving_attribute} to {destination_attribute}")
 
         return True
 
@@ -306,7 +309,7 @@ class DeleteShapes(aniseed.RigComponent):
         self.declare_input(
             name="Nodes",
             value=[],
-            description="The nodes that the attribute will be set on. Each node must already have the named attribute.",
+            description="The nodes whose shapes will be deleted.",
         )
 
     def input_widget(self, requirement_name: str):

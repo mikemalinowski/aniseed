@@ -1,4 +1,5 @@
 import os
+import contextlib
 import factories
 
 from . import packages
@@ -42,6 +43,27 @@ class EmbeddedHost:
         Called when a rig has been loaded
         """
         return None
+
+    @contextlib.contextmanager
+    def build_context(self, rig):
+        """
+        Context manager that every build of a rig runs within. Re-implement it
+        to wrap a build in host behaviour, such as a single undo step. By
+        default it does nothing.
+
+        Args:
+            rig: The rig being built
+        """
+        yield
+
+    @contextlib.contextmanager
+    def without_undo(self):
+        """
+        Context manager for scene changes the user should not be able to undo,
+        such as aniseed writing a rig's recipe to its host. By default it does
+        nothing.
+        """
+        yield
 
     def control_shapes(self) -> list:
         """

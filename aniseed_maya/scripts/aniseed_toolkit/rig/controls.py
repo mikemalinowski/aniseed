@@ -91,7 +91,7 @@ def get(node):
     if not rig_node:
         return None
 
-    return aniseed.Rig(host=rig_node)
+    return aniseed.Rig.for_host(rig_node)
 
 
 @tool(

@@ -5,10 +5,13 @@ are chained (or flat, if Flat Hierarchy is set) and can optionally have an
 offset control. It is also heavily commented as an example component.
 """
 import os
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class SimpleFkComponent(aniseed.RigComponent, MirrorMixin):
@@ -24,7 +27,7 @@ class SimpleFkComponent(aniseed.RigComponent, MirrorMixin):
         Declares the Parent and Joints To Drive inputs, the naming, shape and
         hierarchy/offset control options and the root and tip control outputs.
         """
-        super(SimpleFkComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -145,7 +148,7 @@ class SimpleFkComponent(aniseed.RigComponent, MirrorMixin):
         joints = self.input("Joints To Drive").get()
 
         if not joints:
-            print("No joints given to drive")
+            log.warning("No joints given to drive")
             return False
 
         return True
@@ -167,6 +170,10 @@ class SimpleFkComponent(aniseed.RigComponent, MirrorMixin):
         # -- the user to tailor the result
         label = self.option("Label").get()
         location = self.option("Location").get()
+
+        # -- Remove the per-control outputs declared by any previous build, as
+        # -- the number of joints may have changed since then
+        aniseed_toolkit.rig.component_outputs.clear_outputs(self, "Fk Control ")
 
         for idx, joint_to_drive in enumerate(joints_to_drive):
 
@@ -196,7 +203,7 @@ class SimpleFkComponent(aniseed.RigComponent, MirrorMixin):
                 ).ctl
 
             # -- Set our outputs
-            if not self.output("Root Control").get():
+            if idx == 0:
                 self.output("Root Control").set(control.ctl)
 
             self.output("Tip Control").set(control.ctl)

@@ -9,11 +9,14 @@ import os
 import mref
 import snappy
 import typing
+import logging
 import aniseed
 import functools
 import collections
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 # -- The twist joint inputs, with the options holding how many to generate
@@ -40,7 +43,7 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
         options. Outputs expose the blended arm joints, the ik hand,
         upvector and shoulder controls.
         """
-        super(ArmComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -51,14 +54,14 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
 
         self.declare_input(
             name="Shoulder",
-            description="The root of the spine",
+            description="The shoulder joint, which is the root of the arm chain",
             validate=True,
             group="Required Joints"
         )
 
         self.declare_input(
             name="Hand",
-            description="The tip of the spine",
+            description="The hand joint, which is the tip of the arm chain",
             validate=True,
             group="Required Joints"
         )
@@ -258,7 +261,7 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
         These are functions that will be exposed to the user if they
         right click the component. Mirroring is offered by MirrorMixin.
         """
-        menu = super(ArmComponent, self).user_functions()
+        menu = super().user_functions()
         shoulder_joint = self.input("Shoulder").get()
 
         # -- If there is no shoulder joint we expose the option
@@ -350,20 +353,38 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
         This gives us the chance to validate the skeleton
         before we commit to building.
         """
-        arm_joints = aniseed_toolkit.scene.joints.get_between(
-            self.input("Shoulder").get(),
-            self.input("Hand").get(),
-        )[1:]
+        shoulder = self.input("Shoulder").get()
+        hand = self.input("Hand").get()
 
+        for input_name, joint in [("Shoulder", shoulder), ("Hand", hand)]:
+            if not joint or not mref.objExists(joint):
+                log.warning(f"{self.label()}: The {input_name} input is not set to an existing joint")
+                return False
+
+        try:
+            arm_joints = aniseed_toolkit.scene.joints.get_between(shoulder, hand)
+        except ValueError:
+            log.warning(f"{self.label()}: The Hand joint ({hand}) is not below the Shoulder joint ({shoulder})")
+            return False
+
+        if len(arm_joints) < 4:
+            log.warning(
+                f"{self.label()}: Expected at least four joints from the Shoulder to the Hand "
+                f"(shoulder, upper arm, lower arm, hand), got {arm_joints}"
+            )
+            return False
+
+        arm_joints = arm_joints[1:]
         direction = aniseed_toolkit.scene.joints.get_chain_facing_direction(
             arm_joints[0],
             arm_joints[-1],
         )
 
         if direction != direction.PositiveX and direction != direction.NegativeX:
-            print("Validation Warning : Chain is not failing Up/Down X")
-            print(f"    Tested Chain : {arm_joints}")
-            print(direction)
+            log.warning(
+                f"{self.label()}: Chain is not facing down positive or negative X "
+                f"(tested chain: {arm_joints}, direction: {direction})"
+            )
             return False
 
         return True
@@ -664,7 +685,8 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
 
     def user_func_create_skeleton(self, parent=None, upper_twist_count=None, lower_twist_count=None):
         """
-        This will create a skeleton structure automatically
+        This will create a skeleton structure automatically. Nothing is
+        created if the user cancels a twist count prompt.
         """
         if not parent:
             parent = aniseed_toolkit.core.selection.first_selected()
@@ -674,11 +696,16 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
             title="Upper Twist Count",
             message="How many twist joints do you want on the upper arm?",
         )
+        if upper_twist_count is None:
+            return
+
         lower_twist_count = aniseed.dialogs.request_count(
             lower_twist_count,
-            title="Upper Twist Count",
+            title="Lower Twist Count",
             message="How many twist joints do you want on the lower arm?",
         )
+        if lower_twist_count is None:
+            return
 
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -686,9 +713,9 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
         # -- Joint transform attributes
         joint_data = collections.OrderedDict()
         joint_data["shoulder"] = {}
-        joint_data["upperarm"] = {"tx": aniseed_toolkit.core.units.to_cm(9), "jointOrientX": 7, "jointOrientZ": -50}
-        joint_data["lowerarm"] = {"tx": aniseed_toolkit.core.units.to_cm(24), "jointOrientY": -20,}
-        joint_data["hand"] = {"tx": aniseed_toolkit.core.units.to_cm(24)}
+        joint_data["upperarm"] = {"tx": 9, "jointOrientX": 7, "jointOrientZ": -50}
+        joint_data["lowerarm"] = {"tx": 24, "jointOrientY": -20,}
+        joint_data["hand"] = {"tx": 24}
 
         all_joints = aniseed_toolkit.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -735,7 +762,7 @@ class ArmComponent(aniseed.RigComponent, MirrorMixin):
         global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
 
         if not global_srt_component:
-            print("No global srt found, skipping spaceswitch setup")
+            log.info("No global srt found, skipping spaceswitch setup")
             return
 
         world = global_srt_component.output("Main Control").address()

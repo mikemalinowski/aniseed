@@ -5,6 +5,8 @@ The tags are stored as a comma separated string in an aniseed_tagging
 attribute. Node names are returned exactly as maya reports them, so the
 queries which return node names use cmds rather than mref.
 """
+import logging
+
 from maya import cmds
 import mref
 
@@ -14,17 +16,18 @@ from ..core._nodes import resolve as _resolve
 
 _TAG_ATTRIBUTE_ = "aniseed_tagging"
 
+log = logging.getLogger(__name__)
 
 
 @tool(
     "Tag Node",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def tag(node: str = "", tag: str = "") -> None:
     """
     Adds the given tag to the node, creating the tagging attribute if
-    needed. If the node already has the tag, a message is printed and
+    needed. If the node already has the tag, a message is logged and
     nothing is changed.
 
     Args:
@@ -45,7 +48,7 @@ def tag(node: str = "", tag: str = "") -> None:
     existing_tags = get_tags(node)
 
     if tag in existing_tags:
-        print("tag already exists")
+        log.info(f"{node} is already tagged with {tag}")
         return
 
     existing_tags.append(tag)
@@ -85,7 +88,7 @@ def _descendants_by_depth(node: str, include_self: bool) -> list[str]:
 @tool(
     "Find First Child With Tag",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
     """
@@ -109,7 +112,7 @@ def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
 @tool(
     "Find All Children With Tag",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def all_children(node: str = "", tag: str = "", include_self=False) -> list:
     """
@@ -135,7 +138,7 @@ def all_children(node: str = "", tag: str = "", include_self=False) -> list:
 @tool(
     "Find All With Tag",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def find_all(tag: str = "", include_self=False) -> None:
     """
@@ -158,7 +161,7 @@ def find_all(tag: str = "", include_self=False) -> None:
 @tool(
     "Has Tag",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def has_tag(node: str = "", tag: str = "") -> bool:
     """
@@ -178,7 +181,7 @@ def has_tag(node: str = "", tag: str = "") -> bool:
 @tool(
     "Get Tag Data",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Tagging"],
 )
 def get_tags(node: str = "") -> list[str]:
     """

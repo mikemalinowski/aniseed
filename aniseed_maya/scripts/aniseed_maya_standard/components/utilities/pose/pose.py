@@ -5,12 +5,15 @@ descendants) and re-applies them on every build. Poses are captured with
 the Store Pose button, and menu entries allow storing or applying the pose
 for just the selected nodes.
 """
+import logging
 import os
 import mref
 import typing
 import aniseed
 
 from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 class PosingComponent(aniseed.RigComponent):
@@ -20,7 +23,7 @@ class PosingComponent(aniseed.RigComponent):
     rebuilding from guides.
 
     Note that the matrices are captured and applied in object (local)
-    space, despite the option descriptions referring to world-space.
+    space.
     """
 
     identifier = "Utility : Apply Pose"
@@ -55,7 +58,7 @@ class PosingComponent(aniseed.RigComponent):
             name="_StorePose",
             value=True,
             group="Functionality",
-            description="Press to capture the current world-space transforms of the input nodes (and their children when enabled) into the component.",
+            description="Press to capture the current object-space (local) transforms of the input nodes (and their children when enabled) into the component.",
         )
 
         self.declare_option(
@@ -99,7 +102,7 @@ class PosingComponent(aniseed.RigComponent):
         Checks that at least one node has been given.
         """
         if not self.input("Nodes").get():
-            print("No node given")
+            log.warning(f"{self.label()} : No node given")
             return False
 
         return True
@@ -192,7 +195,7 @@ class PosingComponent(aniseed.RigComponent):
                 continue
 
             if not mref.objExists(node):
-                print(f"Could not apply Pose to {node} as it does not exist. Skipping.")
+                log.warning(f"Could not apply Pose to {node} as it does not exist. Skipping.")
                 continue
 
             mref.get(node).set_matrix(matrix)

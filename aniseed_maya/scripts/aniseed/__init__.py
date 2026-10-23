@@ -10,20 +10,14 @@ to perform tasks. This package handles the re-routing between applications and t
 underlying api.
 
 IMPORTANT NOTE: When implementing application specific components you DO NOT need
-to use crosswalk at all. It is only used at the framwork level because the amount
+to use crosswalk at all. It is only used at the framework level because the amount
 of interaction is minimal.
-"""
-"""
-TODO:
-    * Remove Invalid Components
-    * Save/load should have a mechanism to build meshes/surfaces (patches)... or should the components have an exposed function for this?
-    * Search/Replace on components (again...)
-    * Mirror?
 """
 from .rig import Rig
 from .rig import get_rig
 from .host import EmbeddedHost
 from .component import RigComponent
+from .component import MissingRigComponent
 from .config import RigConfiguration
 from .app import AppConfig
 from .app import AppWidget
@@ -37,7 +31,7 @@ from . import resources
 from . import environment
 from . import dialogs
 
-__version__ = "4.0.0"
+__version__ = constants.VERSION
 
 # -- Discover the aniseed packages up front. This only searches disk (nothing
 # -- within the packages is imported), but it means every package is

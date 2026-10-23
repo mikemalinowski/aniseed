@@ -1,8 +1,12 @@
+import logging
+
 import mref
 import aniseed_toolkit
 import snappy
 import maya
 from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 class KeyRigControls(aniseed_toolkit.Tool):
@@ -117,7 +121,7 @@ class SnapIKFKBasedOnSlider(aniseed_toolkit.Tool):
                 ikfk_group = group
 
         if not ikfk_group:
-            print("Could not find an ikfk group")
+            log.warning("Could not find an ikfk group for the selection")
             return
 
         # -- Get the ikfk attribute and value
@@ -126,12 +130,12 @@ class SnapIKFKBasedOnSlider(aniseed_toolkit.Tool):
 
         if ikfk_value > 0.001:
             # -- Switch to ik
-            print("switching to ik")
+            log.info("Switching to ik")
             SnapIKOnly().run(nodes=nodes)
             cmds.setAttr(f"{namespace}{ikfk_attribute}", 0.0)
         else:
             # -- Switch to fk
-            print("switching to fk")
+            log.info("Switching to fk")
             SnapFKOnly().run(nodes=nodes)
             cmds.setAttr(f"{namespace}{ikfk_attribute}", 1.0)
 

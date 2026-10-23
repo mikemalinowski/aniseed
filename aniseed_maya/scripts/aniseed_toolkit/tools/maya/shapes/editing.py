@@ -1,6 +1,6 @@
 import typing
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class CombineShapes(aniseed_toolkit.Tool):
@@ -24,7 +24,7 @@ class CombineShapes(aniseed_toolkit.Tool):
             None
         """
         if not nodes:
-            nodes = mc.ls(selection=True)
+            nodes = cmds.ls(selection=True)
 
         if not nodes:
             return
@@ -63,7 +63,7 @@ class RotateShapes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        for node in [node] if node else mc.ls(selection=True):
+        for node in [node] if node else cmds.ls(selection=True):
             aniseed_toolkit.scene.shapes.rotate(node, x, y, z)
 
 
@@ -85,7 +85,7 @@ class OffsetShapes(aniseed_toolkit.Tool):
         z: float = 1.0,
     ) -> None:
         """
-        This will do an in-place scaling of the shapes for a given node
+        This will move the shapes of a given node by the given offset
 
         Args:
             node: The node whose shapes should be offset
@@ -97,7 +97,7 @@ class OffsetShapes(aniseed_toolkit.Tool):
         Returns:
             None
         """
-        for node in [node] if node else mc.ls(selection=True):
+        for node in [node] if node else cmds.ls(selection=True):
             aniseed_toolkit.scene.shapes.offset(
                 node=node,
                 offset_by=offset_by,
@@ -127,16 +127,16 @@ class ScaleShapes(aniseed_toolkit.Tool):
         This will do an in-place scaling of the shapes for a given node
 
         Args:
-            node: The node whose shapes should be offset
-            scale_by: The amount to offset the shapes by
-            x: A multiplier for the offset amount specifically on the x axis
-            y: A multiplier for the offset amount specifically on the y axis
-            z: A multiplier for the offset amount specifically on the z axis
+            node: The node whose shapes should be scaled
+            scale_by: The amount to scale the shapes by
+            x: A multiplier for the scale amount specifically on the x axis
+            y: A multiplier for the scale amount specifically on the y axis
+            z: A multiplier for the scale amount specifically on the z axis
 
         Returns:
             None
         """
-        for node in [node] if node else mc.ls(selection=True):
+        for node in [node] if node else cmds.ls(selection=True):
             aniseed_toolkit.scene.shapes.scale(
                 node=node,
                 scale_by=scale_by,

@@ -1,7 +1,9 @@
 import os
+import copy
 import time
 import json
 import typing
+import logging
 import functools
 import traceback
 import factories
@@ -12,6 +14,9 @@ from . import compat
 from . import address
 from .constants import Status
 from .component import Component
+from .component import MissingComponent
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------------------
@@ -44,17 +49,45 @@ class Stack:
 
     changed(): Emitted whenever a component is added or removed or the build order
         is changed in any way.
+
+    build_started(): Emitted when a build (or validation) starts.
+
+    build_progressed(percentage): Emitted as each component is built.
+
+    build_completed(): Emitted when a build completes successfully. It is not
+        emitted when a build fails.
+
+    build_finished(successful): Emitted whenever a build (or validation) that
+        emitted build_started ends, whether it succeeded or not.
+
+    build_failed(component, details): Emitted before build_finished when a build
+        fails, with the first component that failed or was invalid (or None if
+        the failure was not down to one component), and the reason as text -
+        the traceback if the component raised an exception.
+
+    Builds started from within a component's run (nested builds) emit none of
+    the build signals: the outer build reports the overall result.
+
+    component_reporting(component, stage): Emitted just before the build report
+        lines for a component are printed, where stage is "validate" or
+        "build". Unlike the build signals it is emitted in nested builds too,
+        so a listener (such as the app's log) can find each component's part
+        of the report.
     """
     status = constants.Status
+
+    # -- The class used to stand in for components whose type is not
+    # -- available when loading serialised data
+    missing_component_class = MissingComponent
 
     # ----------------------------------------------------------------------------------
     def __init__(
             self,
             label: str = "",
-            component_paths: typing.List or None = None,
+            component_paths: typing.Optional[typing.List] = None,
             component_base_class=Component
     ):
-        super(Stack, self).__init__()
+        super().__init__()
 
         # -- The label of a stack has no functional bearing, but can be useful
         # -- from a usability perspective.
@@ -84,6 +117,17 @@ class Stack:
         self.build_started = signalling.Signal()
         self.build_progressed = signalling.Signal()
         self.build_completed = signalling.Signal()
+        self.build_finished = signalling.Signal()
+        self.build_failed = signalling.Signal()
+        self.component_reporting = signalling.Signal()
+
+        # -- The build_below components of the builds currently running, outermost
+        # -- first. Anything in this list means we are inside a build.
+        self._active_builds: typing.List = list()
+
+        # -- The first failure reported by a nested build, so the outer build
+        # -- can report the component that actually failed
+        self._nested_failure = None
 
     @functools.cached_property
     def component_library(self) -> factories.Factory:
@@ -128,13 +172,14 @@ class Stack:
             child_index=None,
             force_uuid: str = None,
             suppress_events: bool = False,
-    ) -> Component or None:
+    ) -> typing.Optional[Component]:
         """
         This will add a component of the given component type to the stack with the given
         label.
 
         Any inputs or options passed will have those values set at the time the
-        component is added.
+        component is added. Any that the component does not declare are skipped
+        with a warning.
 
         If a parent uuid is given it will be assigned as a child of that component in
         the build order. If one is not given then it will be added to the end of the
@@ -143,10 +188,13 @@ class Stack:
         if a forced uuid is given then the component will be assigned that uuid at time
         of initialisation rather than one being generated. This is typically only used
         when loading from pre-defined data.
+
+        None is returned if the component type is not available or fails to
+        initialise.
         """
         # -- Check we can access this component type
         if component_type not in self.component_library.identifiers():
-            print(f"{component_type} is not recognised")
+            log.warning(f"{component_type} is not recognised")
             return None
 
         # -- We're instancing a class which comes from third party code. Because of
@@ -162,9 +210,32 @@ class Stack:
             )
 
         except Exception:
-            print(f"Failed to initialise component:  {component_type}")
-            print(traceback.print_exc())
+            log.exception(f"Failed to initialise component:  {component_type}")
             return None
+
+        return self._add_component_instance(
+            component_instance,
+            inputs=inputs,
+            options=options,
+            parent=parent,
+            child_index=child_index,
+            suppress_events=suppress_events,
+        )
+
+    def _add_component_instance(
+            self,
+            component_instance: Component,
+            inputs: typing.Dict = None,
+            options: typing.Dict = None,
+            parent: Component = None,
+            child_index=None,
+            suppress_events: bool = False,
+    ) -> Component:
+        """
+        Applies the given inputs and options to an instanced component and adds it
+        into the hierarchy of the stack.
+        """
+        component_type = component_instance.identifier
 
         # -- If we're given a parent, inherit any attributes that are flagged
         # -- as expecting inheritance.
@@ -185,22 +256,29 @@ class Stack:
 
         # -- Set any option values we were given
         for option_name, value in (options or dict()).items():
-            try:
-                component_instance.option(option_name).set(value)
+            option = component_instance.option(option_name)
 
-            except AttributeError:
+            if not option:
+                log.warning(
+                    f"{component_instance.label()} ({component_type}) has no option "
+                    f"called '{option_name}', so its value has been dropped"
+                )
                 continue
+
+            option.set(value)
 
         # -- Set any input values we were given
         for input_name, value in (inputs or dict()).items():
-            try:
-                component_instance.input(input_name).set(value)
+            input_ = component_instance.input(input_name)
 
-            except AttributeError:
-                print(
-                    f"{input_name} does not exist as a "
-                    f"input for {component_type}"
+            if not input_:
+                log.warning(
+                    f"{component_instance.label()} ({component_type}) has no input "
+                    f"called '{input_name}', so its value has been dropped"
                 )
+                continue
+
+            input_.set(value)
 
         # -- Whenever we have value changes, ensure we save the result
         component_instance.changed.connect(self.changed.emit)
@@ -232,10 +310,11 @@ class Stack:
         component.set_parent(None)
         self.root_components.remove(component)
 
+        # noinspection PyBroadException
         try:
             component.on_removed_from_stack()
         except Exception:
-            traceback.print_exc()
+            log.exception(f"on_removed_from_stack failed for {component.label()}")
 
         self.component_removed.emit()
         self.changed.emit()
@@ -287,24 +366,7 @@ class Stack:
         data = compat.to_latest(data)
         self.label = data.get("label", "stack")
 
-        for root_data in data.get("tree", []):
-            root_component = self.add_component(
-                root_data["component_type"],
-                root_data["label"],
-                inputs=root_data["inputs"],
-                options=root_data["options"],
-                force_uuid=root_data["uuid"],
-                parent=None,
-                suppress_events=True,
-            )
-            if not root_data.get("enabled", True):
-                root_component.set_enabled(False)
-
-            # -- Let the component restore any additional data before its
-            # -- children are added, as they may rely on it
-            root_component.deserialise_additional_data(root_data.get("additional_data"))
-
-            self._add_child_components(parent=root_component, child_list=root_data["children"])
+        self._add_child_components(parent=None, child_list=data.get("tree", []))
 
     def deserialise(self, data: typing.Dict, clear: bool = True):
         """
@@ -317,30 +379,92 @@ class Stack:
 
     def _add_child_components(self, parent, child_list, regenerate_uuids=False):
         for child_data in child_list:
-            created_component = self.add_component(
-                child_data["component_type"],
-                child_data["label"],
-                inputs=child_data["inputs"],
-                options=child_data["options"],
-                force_uuid=None if regenerate_uuids else child_data["uuid"],
+            self._add_component_from_data(
+                child_data,
+                parent=parent,
+                regenerate_uuids=regenerate_uuids,
+            )
+
+    def _add_component_from_data(self, data: typing.Dict, parent, regenerate_uuids=False) -> Component:
+        """
+        Adds a component, and all its children, from serialised data.
+
+        Data saved by an older version of the component is migrated first. If the
+        component type is not available (or fails to initialise) a placeholder of
+        missing_component_class is added instead, which keeps the data so that
+        nothing is lost when the stack is next serialised.
+        """
+        component_type = data["component_type"]
+        force_uuid = None if regenerate_uuids else data.get("uuid")
+
+        component_class = None
+        if component_type in self.component_library.identifiers():
+            component_class = self.component_library.request(component_type)
+
+        # -- Data saved before components were versioned counts as version 1
+        stored_version = data.get("version", 1)
+
+        if component_class and stored_version < component_class.version:
+
+            # noinspection PyBroadException
+            try:
+                data = component_class.migrate(copy.deepcopy(data), stored_version)
+
+            except Exception:
+                log.exception(
+                    f"Failed to migrate {data['label']} ({component_type}) from version "
+                    f"{stored_version} to {component_class.version}"
+                )
+                component_class = None
+
+        component = None
+
+        if component_class:
+            component = self.add_component(
+                component_type,
+                data["label"],
+                inputs=data.get("inputs"),
+                options=data.get("options"),
+                force_uuid=force_uuid,
                 suppress_events=True,
                 parent=parent,
             )
-            # -- If the component was marked as disabled, then we disable it
-            # -- now
-            if not child_data.get("enabled", True):
-                created_component.set_enabled(False)
 
-            # -- Let the component restore any additional data before its
-            # -- children are added, as they may rely on it
-            created_component.deserialise_additional_data(child_data.get("additional_data"))
-
-            # -- Create any children
-            self._add_child_components(
-                created_component,
-                child_data["children"],
-                regenerate_uuids=regenerate_uuids,
+        if not component:
+            log.warning(
+                f"The component type '{component_type}' could not be loaded, so "
+                f"{data['label']} has been loaded as a placeholder. It keeps its data "
+                f"but cannot be built."
             )
+            component = self._add_component_instance(
+                self.missing_component_class(
+                    label=data["label"],
+                    stack=self,
+                    uuid_=force_uuid,
+                    missing_identifier=component_type,
+                    data=data,
+                ),
+                parent=parent,
+                suppress_events=True,
+            )
+
+        # -- If the component was marked as disabled, then we disable it
+        # -- now
+        if not data.get("enabled", True):
+            component.set_enabled(False)
+
+        # -- Let the component restore any additional data before its
+        # -- children are added, as they may rely on it
+        component.deserialise_additional_data(data.get("additional_data"))
+
+        # -- Create any children
+        self._add_child_components(
+            component,
+            data.get("children", []),
+            regenerate_uuids=regenerate_uuids,
+        )
+
+        return component
 
     def import_subtree_under(self, parent: "Component|None", filepath: str) -> None:
         """
@@ -356,7 +480,7 @@ class Stack:
         existing components in this stack. Labels are preserved, so any
         internal cross-references (which are label-based) continue to
         work after import. If a loaded component has a label that
-        already exists in this stack, a warning is printed — address
+        already exists in this stack, a warning is logged — address
         resolution will pick the first matching label, which may not be
         the intended one.
 
@@ -365,7 +489,7 @@ class Stack:
         :param filepath: Absolute path to the JSON file.
         """
         if not filepath or not os.path.exists(filepath):
-            print(f"{filepath} does not exist")
+            log.warning(f"{filepath} does not exist")
             return
 
         with open(filepath, "r") as f:
@@ -393,7 +517,7 @@ class Stack:
         incoming_labels = self._collect_labels(roots)
         collisions = existing_labels & incoming_labels
         if collisions:
-            print(
+            log.warning(
                 f"xstack.import_subtree_under: label collision(s) with existing "
                 f"components: {sorted(collisions)}. Address resolution may be "
                 f"ambiguous; consider renaming."
@@ -425,7 +549,7 @@ class Stack:
         data.
         """
         if not filepath:
-            print("No filepath given to save to")
+            log.warning("No filepath given to save to")
             return
 
         # -- Ensure we're fully serialised
@@ -454,10 +578,11 @@ class Stack:
         components = self.components()
 
         for component in components:
+            # noinspection PyBroadException
             try:
                 component.on_removed_from_stack()
             except Exception:
-                traceback.print_exc()
+                log.exception(f"on_removed_from_stack failed for {component.label()}")
             self.component_removed.emit()
 
         self.root_components = []
@@ -466,8 +591,8 @@ class Stack:
     @classmethod
     def open(
             cls,
-            data: str or typing.Dict,
-            component_paths: typing.List or None = None,
+            data: typing.Union[str, typing.Dict],
+            component_paths: typing.Optional[typing.List] = None,
     ) -> "Stack":
         """
         Loads a Stack from either a JSON file path or an in-memory
@@ -531,7 +656,7 @@ class Stack:
 
         return all_components
 
-    def get_component_by_uuid(self, uuid_: str) -> Component or None:
+    def get_component_by_uuid(self, uuid_: str) -> typing.Optional[Component]:
         """
         This will cycle the hierarchy and search it for a component
         with the given uuid.
@@ -542,7 +667,7 @@ class Stack:
 
         return None
 
-    def get_component_by_label(self, label, of_type=None) -> Component or None:
+    def get_component_by_label(self, label, of_type=None) -> typing.Optional[Component]:
         """
         This will cycle the hierarchy and search it for a component
         with the given uuid.
@@ -560,7 +685,7 @@ class Stack:
 
         return None
 
-    def get_component_by_type(self, of_type) -> Component or None:
+    def get_component_by_type(self, of_type) -> typing.Optional[Component]:
         """
         This will cycle the hierarchy and search it for a component
         with the given uuid.
@@ -593,7 +718,8 @@ class Stack:
         components = []
         for component in candidates:
 
-            if not component.is_enabled():
+            # -- A disabled component also disables all of its children
+            if not self._is_enabled_in_hierarchy(component):
                 continue
 
             if build_only and component != build_only:
@@ -606,6 +732,23 @@ class Stack:
             if build_up_to and component == build_up_to:
                 break
         return components
+
+    @staticmethod
+    def _is_enabled_in_hierarchy(component: Component) -> bool:
+        """
+        Returns True if the component and all of its ancestors are enabled
+        """
+        while component:
+            if not component.is_enabled():
+                return False
+            component = component.parent
+        return True
+
+    def is_building(self) -> bool:
+        """
+        Returns True whilst a build (or validation) of this stack is running
+        """
+        return bool(self._active_builds)
 
     def build(
             self,
@@ -621,15 +764,45 @@ class Stack:
 
         If neither are specified then all components will be built within the defined
         build order.
-        """
-        self.build_started.emit()
 
-        # -- Before doing any thing, ensure we have set every component
-        # -- to not executed.
-        for component in self.components():
-            component.set_status(
-                Status.NotExecuted,
+        A build started from within a component's run is a nested build. It only
+        resets the status of the components it builds, emits no build signals, and
+        is refused if it would build something that is already being built (such
+        as two execution blocks which run each other).
+        """
+        nested = self.is_building()
+
+        if nested and build_below in self._active_builds:
+            target = build_below.label() if build_below else "The stack"
+            log.error(
+                f"{target} is already being built, so it cannot be built again "
+                f"from within its own build. Check for components which run each "
+                f"other's builds."
             )
+            self._nested_failure = None
+            return False
+
+        self._active_builds.append(build_below)
+
+        try:
+            return self._build(
+                build_up_to=build_up_to,
+                build_only=build_only,
+                build_below=build_below,
+                validate_only=validate_only,
+                nested=nested,
+            )
+
+        finally:
+            self._active_builds.pop()
+
+    def _build(self, build_up_to, build_only, build_below, validate_only, nested) -> bool:
+        """
+        Performs the build for the build method, which manages nesting
+        """
+        if not nested:
+            self._nested_failure = None
+            self.build_started.emit()
 
         components_to_build = self._get_components_to_build(
             build_up_to=build_up_to,
@@ -637,59 +810,68 @@ class Stack:
             build_below=build_below,
         )
 
-        # -- Lets be positive and assume everything is ok until we're told
-        # -- otherwise.
-        invalid_result = False
+        # -- Before doing any thing, ensure we have set every component
+        # -- to not executed. A nested build leaves the status of the outer
+        # -- build's components alone.
+        for component in components_to_build if nested else self.components():
+            component.set_status(
+                Status.NotExecuted,
+            )
+
         overall_build_start = time.time()
 
-        # -- Cycle the build order. Notice that we're not given the component
-        # -- themselves but the uuid to retrieve the component. Note that we
-        # -- are not building at this point, we are doing a full pass over all the
-        # -- components and checking they are valid.
-        # -- If there are invalid components, we still continue, but we log the
-        # -- fact and set the status.
+        # -- The first component to fail, and why
+        failure = None
+
+        # -- Cycle the build order. Note that we are not building at this point,
+        # -- we are doing a full pass over all the components and checking they
+        # -- are valid. If there are invalid components, we still continue, but
+        # -- we log the fact and set the status.
         for component in components_to_build:
 
             # -- We're executing third party code at this point, so we cannot
             # -- gaurantee the quality of execution. Therefore we wrap it in
             # -- a try, to ensure a failure in the third party code does not
             # -- cause a failure at the stackx level
+            # -- The validate and build lines below are the build report rather
+            # -- than diagnostics, so they are printed as they are. A log record
+            # -- only prefixes its first line, which breaks the report's columns.
+            # noinspection PyBroadException
             try:
-
-                print("-" * 100)
-                print(f"About to Validate : {component.label()} ")
+                self.component_reporting.emit(component, "validate")
+                print(f"About to Validate : {component.label()}")
 
                 if not component.is_valid():
                     component.set_status(
                         Status.Invalid,
                     )
 
-                    print(f"    {component.label()} FAILED its is_valid test")
-                    invalid_result = True
+                    reason = f"{component.label()} FAILED its is_valid test"
+                    log.warning(reason)
+                    failure = failure or (component, reason)
 
                 for input_ in component.inputs():
                     if input_.requires_validation() and not input_.validate():
-                        print(f"    {input_.name()} for {component.label()} is not set")
-                        invalid_result = True
+                        reason = f"{input_.name()} for {component.label()} is not set"
+                        log.warning(reason)
+                        failure = failure or (component, reason)
 
                         component.set_status(Status.Invalid)
 
             except Exception:
-                print(f"{component.label()} failed during validation check")
-                print(traceback.print_exc())
+                log.exception(f"{component.label()} failed during validation check")
                 component.set_status(
                     Status.Failed,
                 )
-                invalid_result = True
+                failure = failure or (component, traceback.format_exc())
 
-        if invalid_result:
-            print("Validation failed - please see output for details")
-            print("-" * 100)
-            return False
+        if failure:
+            log.warning("Validation failed - please see output for details")
+            return self._finish_build(False, nested, failure=failure)
 
         # -- If we only wanted to perform validation, we can exit at this point
         if validate_only:
-            return not invalid_result
+            return self._finish_build(True, nested, validate_only=True)
 
         # -- Run the pre-build events
         self.run_events(components_to_build, "on_build_started")
@@ -698,49 +880,81 @@ class Stack:
         for idx, component in enumerate(components_to_build):
 
             # -- Emit a progression signal
-            percentage = (float(idx) / len(components_to_build)) * 100
-            self.build_progressed.emit(percentage)
+            if not nested:
+                percentage = (float(idx) / len(components_to_build)) * 100
+                self.build_progressed.emit(percentage)
+
             start_time = time.time()
+
+            # -- Any nested build this component runs will record its failure here
+            self._nested_failure = None
 
             # -- Just as during the validation, we're executing third party code, so
             # -- we wrap this process in a broad exception
             # noinspection PyBroadException
             try:
-                print("-" * 100)
-                print(f"About to Build : {component.label()} ")
+                self.component_reporting.emit(component, "build")
+                print(f"About to Build : {component.label()}")
                 component.describe()
                 result = component.wrapped_run()
                 component.describe_outputs()
-                print(f"Component Build Status : {component.status()} ({time.time() - start_time:.3f}s)")
+                print(
+                    f"Component Build Status : {component.status()} "
+                    f"({time.time() - start_time:.3f}s)"
+                )
 
             except Exception:
-
-                print("Build failed. Please see the script editor for a traceback.")
-                print(traceback.print_exc())
-                self.run_events(components_to_build, "on_build_finished", False)
-                return False
+                log.exception("Build failed")
+                component.set_status(Status.Failed)
+                failure = (component, traceback.format_exc())
+                result = False
 
             if not result:
+
+                # -- Where the component failed because a build it ran failed,
+                # -- report the component which actually failed
+                failure = failure or self._nested_failure or (component, component.last_error())
+
                 self.run_events(components_to_build, "on_build_finished", False)
-                return False
+                return self._finish_build(False, nested, failure=failure)
 
         # -- Emit our completion
         self.run_events(components_to_build, "on_build_finished", True)
         print(f"Build Succeeded. ({time.time() - overall_build_start:.3f}s)")
-        self.build_progressed.emit(100)
-        self.build_completed.emit()
 
-        return True
+        return self._finish_build(True, nested)
+
+    def _finish_build(self, successful: bool, nested: bool, failure=None, validate_only=False) -> bool:
+        """
+        Emits the signals for the end of a build and returns whether it was
+        successful. A nested build emits nothing, but records its failure so
+        the outer build can report it.
+        """
+        if nested:
+            if not successful:
+                self._nested_failure = failure
+            return successful
+
+        if successful and not validate_only:
+            self.build_progressed.emit(100)
+            self.build_completed.emit()
+
+        if not successful:
+            component, details = failure or (None, "")
+            self.build_failed.emit(component, details)
+
+        self.build_finished.emit(successful)
+        return successful
 
     def run_events(self, components, event_name, *args, **kwargs):
         for component in components:
+            # noinspection PyBroadException
             try:
                 func_ = getattr(component, event_name)
                 func_(*args, **kwargs)
 
             except Exception:
-                print(f"{component.label()} failed during its pre build")
-                print(traceback.print_exc())
+                log.exception(f"{component.label()} failed during {event_name}")
 
     # ----------------------------------------------------------------------------------
     def resolve_attribute(self, attribute_address):
@@ -755,7 +969,8 @@ class Stack:
         component type.
 
         Where options or inputs match the data will be carried over. All children
-        will also be carried over.
+        will also be carried over. This includes the stored data of a
+        MissingComponent, so switching one to an available type keeps its values.
         """
         component_parent = component.parent
         component_child_index = component.child_index()
@@ -767,15 +982,30 @@ class Stack:
         )
         new_component.set_parent(component_parent, component_child_index)
 
+        if isinstance(component, MissingComponent):
+            stored_data = component.serialise()
+            option_values = stored_data.get("options") or dict()
+            input_values = stored_data.get("inputs") or dict()
+
+        else:
+            option_values = {
+                option.name(): option.get(resolved=False)
+                for option in component.options()
+            }
+            input_values = {
+                input_.name(): input_.get(resolved=False)
+                for input_ in component.inputs()
+            }
+
         # -- Propogate any matching option data
-        for option in component.options():
-            if new_component.option(option.name()):
-                new_component.option(option.name()).set(option.get(resolved=False))
+        for name, value in option_values.items():
+            if new_component.option(name):
+                new_component.option(name).set(value)
 
         # -- Propogate any matching inputs
-        for input_ in component.inputs():
-            if new_component.input(input_.name()):
-                new_component.input(input_.name()).set(input_.get(resolved=False))
+        for name, value in input_values.items():
+            if new_component.input(name):
+                new_component.input(name).set(value)
 
         # -- Make all the children of the component become
         # -- children of the new component instead

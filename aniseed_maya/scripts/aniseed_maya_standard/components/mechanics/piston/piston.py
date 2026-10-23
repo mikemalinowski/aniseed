@@ -190,9 +190,7 @@ class PistonComponent(aniseed.RigComponent, MirrorMixin):
         )
 
         upvector_axis = self.option("Upvector Axis").get().upper()
-        upvector.attr(f"translate{upvector_axis}").set(
-            aniseed_toolkit.core.units.from_cm(10),
-        )
+        upvector.attr(f"translate{upvector_axis}").set(10)
 
         # -- Each end aims at the opposite control, sharing the upvector
         aim_pairs = [

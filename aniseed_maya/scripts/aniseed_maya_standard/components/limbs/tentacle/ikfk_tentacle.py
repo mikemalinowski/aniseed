@@ -6,11 +6,12 @@ distributed with Aniseed and must be made available for this to build. This
 component is not production ready.
 """
 # NOT PRODUCTION READY!
+import logging
 import mref
 import aniseed
 import qtility
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 from Qt import QtWidgets
 
 # -- This tentacle component uses the Blur Studios twist spline setup
@@ -21,7 +22,9 @@ from Qt import QtWidgets
 try:
     import twistSplineBuilder
 except ImportError:
-    pass
+    twistSplineBuilder = None
+
+log = logging.getLogger(__name__)
 
 
 # ------------------------------------------------------------------------------
@@ -35,7 +38,7 @@ class TentacleComponent(aniseed.RigComponent):
         count, twist and (currently unused) space switch / fk options. Per-joint
         outputs are rebuilt whenever the start or end joint input changes.
         """
-        super(TentacleComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -47,15 +50,15 @@ class TentacleComponent(aniseed.RigComponent):
         self.declare_input(
             name="Start Joint",
             description="The first joint in the tentacle chain",
-            validate=False,
-            group="Optional Twist Joints",
+            validate=True,
+            group="Required Joints",
         )
 
         self.declare_input(
             name="End Joint",
             description="The last joint in the tentacle chain",
-            validate=False,
-            group="Optional Twist Joints",
+            validate=True,
+            group="Required Joints",
         )
 
         self.declare_option(
@@ -146,22 +149,18 @@ class TentacleComponent(aniseed.RigComponent):
 
     def user_functions(self) -> dict:
         """
-        We expose functionality for creating joints as well as building and
-        removing the guide. We also expose functionality to change the joint
-        count.
+        Exposes a "Create Joints" menu entry when the start joint is not set
+        or does not exist.
         """
-        menu = super(TentacleComponent, self).user_functions()
+        menu = super().user_functions()
 
         # -- Only show the skeleton creation tools if we dont have a skeleton
         joint = self.input("Start Joint").get()
 
-        # -- If we dont have any joints we dont want to show any tools
-        # -- other than the joint creation tool.
-        # -- Note: When there are joints this returns None rather than the
-        # -- menu. This is existing behaviour and is preserved.
         if not joint or not mref.objExists(joint):
             menu["Create Joints"] = self.user_func_create_skeleton
-            return menu
+
+        return menu
 
     def user_func_create_skeleton(self, joint_count: int = None, parent: str = None) -> list:
         """
@@ -176,22 +175,30 @@ class TentacleComponent(aniseed.RigComponent):
         # -- If we dont have a parent then attempt to resolve
         # -- it from the active selection
         try:
-            parent = parent or mc.ls(sl=True)[0]
+            parent = parent or cmds.ls(sl=True)[0]
         except IndexError:
             parent = None
 
         # -- If we're not given a joint count then we prompt the user
         # -- to give one
-        joint_count = joint_count or int(
-            qtility.request.text(
+        if not joint_count:
+            requested_count = qtility.request.text(
                 title="Joint Count",
                 message="How many joints do you want?"
-            ),
-        )
+            )
+
+            if not requested_count:
+                return []
+
+            try:
+                joint_count = int(requested_count)
+            except ValueError:
+                log.warning(f"'{requested_count}' is not a whole number of joints")
+                return []
 
         # -- Validate the number the user gave
-        if not joint_count or joint_count < 2:
-            return
+        if joint_count < 2:
+            return []
 
         # -- We want to keep track of the joints we create so that
         # -- we can return them
@@ -213,7 +220,7 @@ class TentacleComponent(aniseed.RigComponent):
                 config=self.config
             )
             if idx != 0:
-                mc.setAttr(
+                cmds.setAttr(
                     f"{joint}.translateX",
                     increment,
                 )
@@ -235,6 +242,28 @@ class TentacleComponent(aniseed.RigComponent):
         control_count = self.option("Control Count").get()
 
         return (chain_length / (control_count - 1)) / 3.0
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the twist spline builder is available, that the start and
+        end joints are set and that there are at least two controls.
+        """
+        if twistSplineBuilder is None:
+            log.warning(
+                "The twistSplineBuilder module (Blur Studios TwistSpline) could "
+                "not be imported, so the tentacle cannot be built"
+            )
+            return False
+
+        if not self.input("Start Joint").get() or not self.input("End Joint").get():
+            log.warning(f"{self.label()} : Start Joint and End Joint must both be set")
+            return False
+
+        if self.option("Control Count").get() < 2:
+            log.warning(f"{self.label()} : Control Count must be at least two")
+            return False
+
+        return True
 
     def run(self) -> bool:
         """
@@ -421,9 +450,8 @@ class TentacleBuilder:
         transforms.
         """
         # -- Create the top level org
-        self.org = mc.createNode(
+        self.org = cmds.createNode(
             "transform",
-
             name=self.config.generate_name(
                 classification="org",
                 description="tentacle_setup",
@@ -432,16 +460,16 @@ class TentacleBuilder:
         )
 
         # -- Create the no transform child
-        self.no_transform = mc.createNode(
+        self.no_transform = cmds.createNode(
             "transform",
             name=self.config.generate_name(
                 classification="org",
                 description="tentacle_no_transform",
                 location=self.location,
             ),
+            parent=self.org,
         )
-        mc.setAttr(f"{self.no_transform}.inheritsTransform", False)
-        mc.parent(self.no_transform, self.org)
+        cmds.setAttr(f"{self.no_transform}.inheritsTransform", False)
 
         # -- For all the artefacts which are a child of the scene root, we
         # -- place them under our org or no transform group.
@@ -449,7 +477,7 @@ class TentacleBuilder:
             parent = self.org
             if node.startswith("Rig_"):
                 parent = self.no_transform
-            mc.parent(node, parent)
+            cmds.parent(node, parent)
 
     def _populate_lookup(self):
         """
@@ -460,7 +488,7 @@ class TentacleBuilder:
         nodes = self._root_artefacts()
 
         for node in nodes[:]:
-            nodes.extend(mc.listRelatives(node, ad=True))
+            nodes.extend(cmds.listRelatives(node, ad=True))
 
         for node in nodes:
             self.lookup[node] = aniseed_toolkit.run("Get MObject", node)
@@ -561,10 +589,10 @@ class TentacleBuilder:
         node_types = ["transform", "joint"]
         for identifier, m_object in self.lookup.items():
 
-            if not mc.objExists(identifier):
+            if not cmds.objExists(identifier):
                 continue
 
-            if not mc.nodeType(identifier) in node_types:
+            if not cmds.nodeType(identifier) in node_types:
                 continue
 
             classification = "mech"
@@ -581,7 +609,7 @@ class TentacleBuilder:
                 location=self.location,
             )
 
-            mc.rename(
+            cmds.rename(
                 identifier, name
             )
 
@@ -597,13 +625,13 @@ class TentacleBuilder:
 
             object_name = aniseed_toolkit.run("MObject Name", m_object)
 
-            if not mc.nodeType(object_name) == "transform":
+            if not cmds.nodeType(object_name) == "transform":
                 continue
 
             if not object_name in self.blur_control_names():
                 continue
 
-            parent = mc.listRelatives(object_name, parent=True)[0]
+            parent = cmds.listRelatives(object_name, parent=True)[0]
             label = identifier.split("_")[2].replace("Default", "")
 
             new_control = aniseed_toolkit.run(
@@ -636,7 +664,7 @@ class TentacleBuilder:
             )
             proxy_driver.match_to(new_control.ctl)
 
-            mc.parentConstraint(new_control.ctl, proxy_driver_b.name())
+            cmds.parentConstraint(new_control.ctl, proxy_driver_b.name())
 
             counter += 1
             aniseed_toolkit.run(
@@ -651,10 +679,10 @@ class TentacleBuilder:
                     new_control.ctl,
                 )
             )
-            desired_channelbox_attributes = mc.listAttr(object_name, k=True) or []
+            desired_channelbox_attributes = cmds.listAttr(object_name, k=True) or []
 
-            for custom_attribute in mc.listAttr(object_name, ud=True) or []:
-                attr_type = mc.attributeQuery(
+            for custom_attribute in cmds.listAttr(object_name, ud=True) or []:
+                attr_type = cmds.attributeQuery(
                     custom_attribute,
                     node=object_name,
                     attributeType=True,
@@ -662,62 +690,65 @@ class TentacleBuilder:
 
                 additional_options = dict()
 
-                has_min = mc.attributeQuery(
+                has_min = cmds.attributeQuery(
                     custom_attribute,
                     node=object_name,
                     minExists=True,
                 )
-                has_max = mc.attributeQuery(
+                has_max = cmds.attributeQuery(
                     custom_attribute,
                     node=object_name,
                     maxExists=True,
                 )
 
                 if has_min:
-                    additional_options["minValue"] = mc.attributeQuery(
+                    additional_options["minValue"] = cmds.attributeQuery(
                         custom_attribute,
                         node=object_name,
                         min=True,
                     )[0]
 
                 if has_max:
-                    additional_options["maxValue"] = mc.attributeQuery(
+                    additional_options["maxValue"] = cmds.attributeQuery(
                         custom_attribute,
                         node=object_name,
                         max=True,
                     )[0]
 
-                mc.addAttr(
+                cmds.addAttr(
                     new_control.ctl,
                     shortName=custom_attribute,
                     attributeType=attr_type,
-                    dv=mc.getAttr(f"{object_name}.{custom_attribute}"),
+                    dv=cmds.getAttr(f"{object_name}.{custom_attribute}"),
                     k=True,
                     **additional_options
                 )
 
-            for attr in mc.listAttr(new_control.ctl, k=True)[:]:
+            for attr in cmds.listAttr(new_control.ctl, k=True)[:]:
                 if attr not in desired_channelbox_attributes:
-                    mc.setAttr(f"{new_control.ctl}.{attr}", k=False, cb=False, lock=True)
+                    cmds.setAttr(f"{new_control.ctl}.{attr}", k=False, cb=False, lock=True)
 
                 else:
-                    mc.connectAttr(
+                    cmds.connectAttr(
                         f"{new_control.ctl}.{attr}",
                         f"{object_name}.{attr}",
                     )
 
-            for attr in mc.listAttr(proxy_driver_b.name(), k=True)[:]:
+            for attr in cmds.listAttr(proxy_driver_b.name(), k=True)[:]:
                 try:
-                    mc.connectAttr(
+                    cmds.connectAttr(
                         f"{proxy_driver_b.name()}.{attr}",
                         f"{object_name}.{attr}",
                         force=True,
                     )
-                except: pass
+                except RuntimeError:
+                    # -- Not every keyable proxy attribute exists or is free to
+                    # -- connect on the blur control, and those are skipped
+                    pass
 
             # -- Finally we need to move the shape nodes over to the new node
-            for shape in mc.listRelatives(new_control.ctl, shapes=True):
-                mc.delete(shape)
+            for shape in cmds.listRelatives(new_control.ctl, shapes=True):
+                cmds.delete(shape)
 
-            for shape in mc.listRelatives(object_name, shapes=True) or list():
-                mc.parent(shape, new_control.ctl, shape=True, relative=True)
+            for shape in cmds.listRelatives(object_name, shapes=True) or list():
+                cmds.parent(shape, new_control.ctl, shape=True, relative=True)

@@ -3,7 +3,7 @@ Aligning a joint chain for ik: re-orients every joint in a chain to face down a
 given axis with a given pole vector axis, handling pins, child transforms and
 twist joints.
 """
-import maya.cmds as mc
+from maya import cmds
 
 from ..core import maths as _maths
 from ..scene import joints as _joints
@@ -50,7 +50,7 @@ def align_bones_for_ik(
     Returns:
         None
     """
-    # -- Now we have all the data we need, remove any pins
+    # -- Remove any pins, they are restored once the chain is aligned
     pinned_joints = list()
 
     all_joints_in_chain = _joints.get_between(start=root, end=tip)
@@ -61,7 +61,7 @@ def align_bones_for_ik(
             _pinning.remove_pins([joint])
 
     try:
-        joint_parent = mc.listRelatives(root, parent=True)[0]
+        joint_parent = cmds.listRelatives(root, parent=True)[0]
     except (TypeError, IndexError):
         joint_parent = None
 
@@ -82,11 +82,11 @@ def align_bones_for_ik(
     twist_factors = dict()
 
     for idx, joint in enumerate(actual_chain):
-        for child in mc.listRelatives(joint, children=True) or list():
+        for child in cmds.listRelatives(joint, children=True) or list():
             if child in actual_chain:
                 continue
 
-            child_transforms[child] = mc.xform(
+            child_transforms[child] = cmds.xform(
                 child,
                 query=True,
                 matrix=True,
@@ -98,7 +98,6 @@ def align_bones_for_ik(
                     node=child,
                     from_this=joint,
                     to_this=actual_chain[idx + 1],
-                    print_result=True,
                 )
 
     replicated_joints = _joints.replicate_chain(
@@ -112,7 +111,7 @@ def align_bones_for_ik(
 
     for idx, joint in enumerate(replicated_joints):
         try:
-            mc.parent(
+            cmds.parent(
                 joint,
                 world=True,
             )
@@ -128,7 +127,7 @@ def align_bones_for_ik(
 
         # -- special case for the first one
         if idx == 0:
-            cns = mc.aimConstraint(
+            cns = cmds.aimConstraint(
                 replicated_joints[idx + 1],
                 joint,
                 worldUpType="object",
@@ -137,10 +136,10 @@ def align_bones_for_ik(
                 upVector=inverted_upvector_axis,
                 maintainOffset=False,
             )
-            mc.delete(cns)
+            cmds.delete(cns)
             continue
 
-        cns = mc.aimConstraint(
+        cns = cmds.aimConstraint(
             replicated_joints[idx + 1],
             joint,
             worldUpType="object",
@@ -149,20 +148,20 @@ def align_bones_for_ik(
             upVector=inverted_upvector_axis,
             maintainOffset=False,
         )
-        mc.delete(cns)
+        cmds.delete(cns)
 
     # -- Re parent the joints before copying the data
     for idx, joint in enumerate(replicated_joints):
 
         if idx == 0:
             if joint_parent:
-                mc.parent(
+                cmds.parent(
                     joint,
                     joint_parent
                 )
             continue
 
-        mc.parent(
+        cmds.parent(
             joint,
             replicated_joints[idx - 1],
         )
@@ -171,9 +170,9 @@ def align_bones_for_ik(
         replicated_joints,
     )
 
-    # -- Zero the last joints rotation
+    # -- Zero the last joint's rotation
     for axis in AXIS:
-        mc.setAttr(
+        cmds.setAttr(
             f"{replicated_joints[-1]}.rotate{axis.upper()}",
             0,
         )
@@ -186,7 +185,7 @@ def align_bones_for_ik(
 
     if retain_child_transforms:
         for child, matrix in child_transforms.items():
-            mc.xform(
+            cmds.xform(
                 child,
                 matrix=child_transforms[child],
                 worldSpace=True,
@@ -195,7 +194,7 @@ def align_bones_for_ik(
     # -- Deal with twist joints
     for idx, joint in enumerate(actual_chain):
 
-        for child in mc.listRelatives(joint, children=True) or list():
+        for child in cmds.listRelatives(joint, children=True) or list():
 
             if child in actual_chain:
                 continue
@@ -204,7 +203,7 @@ def align_bones_for_ik(
             if "twist" not in child.lower():
                 continue
 
-            # -- If we dont have an additional joint to aim down, skip it
+            # -- If we don't have an additional joint to aim down, skip it
             if idx >= len(actual_chain):
                 continue
 
@@ -217,11 +216,11 @@ def align_bones_for_ik(
             )
 
             for axis in AXIS:
-                mc.setAttr(f"{child}.r{axis.lower()}", 0)
-                mc.setAttr(f"{child}.jointOrient{axis.upper()}", 0)
+                cmds.setAttr(f"{child}.r{axis.lower()}", 0)
+                cmds.setAttr(f"{child}.jointOrient{axis.upper()}", 0)
 
 
-    mc.delete(replicated_joints)
+    cmds.delete(replicated_joints)
 
     # -- Restore the pins which were removed
     if pinned_joints:

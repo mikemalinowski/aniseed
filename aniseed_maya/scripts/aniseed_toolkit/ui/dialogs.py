@@ -3,12 +3,16 @@ User dialogs, and versions of library functions which ask the user for any
 information they are not given. The library itself never prompts - these are
 for tools and for code which explicitly wants interaction.
 """
+import logging
+
 from maya import cmds
 import qtility
 import scribble
 
 from ..scene import hierarchy_io
 from ..scene import mirror
+
+log = logging.getLogger(__name__)
 
 
 def ask_for_mirror_plane() -> str or None:
@@ -121,6 +125,9 @@ def global_mirror(
     """
     across = across or ask_for_mirror_plane()
 
+    if not across:
+        return
+
     if name_replacement is None:
         name_replacement = ask_for_rename_data()
 
@@ -180,13 +187,13 @@ def load_hierarchy_file(
             root_parent = cmds.ls(selection=True)[0]
 
         except IndexError:
-            print("Could not resolve parent")
+            log.warning("Select (or give) the node to load the hierarchy under")
             return
 
-    filepath = filepath or ask_for_filepath("Save Joint File", save=False)
+    filepath = filepath or ask_for_filepath("Load Joint File", save=False)
 
+    # -- The user cancelled the file dialog
     if not filepath:
-        print("Could not resolve file")
         return
 
     return hierarchy_io.load_hierarchy_file(

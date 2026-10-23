@@ -29,7 +29,11 @@ class GetDirectionClass(aniseed_toolkit.Tool):
         Return
             Direction class
         """
-        return aniseed_toolkit.core.direction.Direction(direction)
+        direction_instance = aniseed_toolkit.core.direction.Direction(
+            aniseed_toolkit.core.direction.Direction.Unknown,
+        )
+        direction_instance.set_direction(direction)
+        return direction_instance
 
 
 class GetUpvectorDirection(aniseed_toolkit.Tool):
@@ -83,5 +87,4 @@ class AimAtTool(aniseed_toolkit.Tool):
             aim_this = selection_list[0]
             at_this = selection_list[1]
             up_target = selection_list[2]
-        print("up target : ", up_target)
         aniseed_toolkit.scene.transforms.aim_at(aim_this, at_this, aim_axis, up_axis, up_target)

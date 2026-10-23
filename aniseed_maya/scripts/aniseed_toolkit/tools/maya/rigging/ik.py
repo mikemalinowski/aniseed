@@ -1,6 +1,10 @@
+import logging
+
 import qtility
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 
@@ -40,18 +44,18 @@ class AlignBonesForIk(aniseed_toolkit.Tool):
             None
         """
 
-        pre_selection = mc.ls(sl=True)
+        pre_selection = cmds.ls(sl=True)
 
-        if not root and not len(mc.ls(sl=True)) == 2:
-            print("You must provide a root or a selection")
+        if not root and not len(cmds.ls(sl=True)) == 2:
+            log.warning("You must provide a root or a selection")
             return None
 
-        if not tip and not len(mc.ls(sl=True)) == 2:
-            print("You must provide a tip or a selection")
+        if not tip and not len(cmds.ls(sl=True)) == 2:
+            log.warning("You must provide a tip or a selection")
             return None
 
-        root = root or mc.ls(sl=True)[0]
-        tip = tip or mc.ls(sl=True)[1]
+        root = root or cmds.ls(sl=True)[0]
+        tip = tip or cmds.ls(sl=True)[1]
 
         if not primary_axis:
             primary_axis = qtility.request.item(
@@ -95,7 +99,7 @@ class AlignBonesForIk(aniseed_toolkit.Tool):
             retain_child_transforms=retain_child_transforms,
         )
 
-        mc.select(pre_selection)
+        cmds.select(pre_selection)
 
     @classmethod
     def get_aim_dir(cls, aim_label):

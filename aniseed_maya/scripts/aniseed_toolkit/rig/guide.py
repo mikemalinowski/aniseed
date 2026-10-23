@@ -89,7 +89,7 @@ def create(
             maintainOffset=False,
         )
 
-    # -- We dont want the joints to snap back
+    # -- We don't want the joints to snap back
     cns[0].attr("enableRestPosition").set(False)
 
     if not constrain:
@@ -208,7 +208,7 @@ def create_tween(drive_this, from_this, to_this, parent=None):
         shape="core_sphere",
         constrain=False,
     )
-    # -- We specifically dont constrain in the create function as this
+    # -- We specifically don't constrain in the create function as this
     # -- creates a parent constraint and  for a tween we specifically
     # -- want a position constraint.
     mref.pointConstraint(tween_control, drive_this)
@@ -229,7 +229,7 @@ def create_tween(drive_this, from_this, to_this, parent=None):
         maintainOffset=False,
     )
 
-    # -- We dont want the joints to snap back
+    # -- We don't want the joints to snap back
     cns.attr("enableRestPosition").set(False)
 
     tween_node = mref.get(tween_control)

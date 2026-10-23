@@ -6,12 +6,15 @@ components and adds a central master aim control parenting both eye aims.
 Both can generate their joints when added to the stack.
 """
 import os
+import logging
 import mref
 import typing
 import aniseed
 import aniseed_toolkit
 from maya import cmds
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 # -- The labels used to prefix the side specific inputs of the eyes component
@@ -45,6 +48,31 @@ def get_cross_axis(forward_axis: str, up_axis: str) -> str:
     all_axis.remove(forward_axis)
     all_axis.remove(up_axis)
     return all_axis[0]
+
+
+def missing_joint_inputs(component, prefix: str = "") -> list:
+    """
+    Returns the names of the joint inputs the component needs for the options
+    it has set (the eye joint, the lid joints when Include Eye Lids is on and
+    the pupil joint when Add Pupil is on) but which are not set.
+
+    Args:
+        component: The eye or eyes component to check
+        prefix: Prefix of the input names, e.g. "Left " for the eyes component
+    """
+    required = ["Eye Joint"]
+
+    if component.option("Include Eye Lids").get():
+        required.extend(["Upper Eye Lid Joint", "Lower Eye Lid Joint"])
+
+    if component.option("Add Pupil").get():
+        required.append("Pupil Joint")
+
+    return [
+        f"{prefix}{input_name}"
+        for input_name in required
+        if not component.input(f"{prefix}{input_name}").get()
+    ]
 
 
 def flip_joint(joint: str, axis: str, hold: typing.Iterable = ()) -> None:
@@ -97,7 +125,7 @@ class EyesComponent(aniseed.RigComponent):
         eye components (aim distance, blink, pupil, axes, lid follow defaults)
         and per side control outputs plus the central aim control and org.
         """
-        super(EyesComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -180,7 +208,7 @@ class EyesComponent(aniseed.RigComponent):
 
         self.declare_option(
             name="Aim Distance",
-            value=aniseed_toolkit.core.units.to_cm(30),
+            value=30,
             group="Behaviour",
         )
 
@@ -316,12 +344,26 @@ class EyesComponent(aniseed.RigComponent):
         """
         Exposes a "Create Joints" menu entry when no left eye joint is set.
         """
-        menu = super(EyesComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Left Eye Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
 
         return menu
+
+    def is_valid(self) -> bool:
+        """
+        Checks that both sides have the joints their options need.
+        """
+        missing = []
+        for side in SIDES:
+            missing.extend(missing_joint_inputs(self, prefix=f"{side} "))
+
+        if missing:
+            log.warning(f"{self.label()} : these joint inputs are not set: {', '.join(missing)}")
+            return False
+
+        return True
 
     def run(self):
         """
@@ -460,12 +502,18 @@ class EyesComponent(aniseed.RigComponent):
     def user_func_create_skeleton(self):
         """
         Creates the joints for both eyes using the single eye components,
-        snapping them to the first selected node (which must exist), offsetting
-        them to either side and parenting them to it. The side specific inputs
-        are then populated with the created joints.
+        snapping them to the first selected node, offsetting them to either
+        side and parenting them to it. The side specific inputs are then
+        populated with the created joints. Nothing is created if nothing is
+        selected.
         """
 
-        parent = mref.selected()[0]
+        selection = mref.selected()
+        if not selection:
+            log.warning("Select the node to create the eye joints under, then use Create Joints")
+            return
+
+        parent = selection[0]
 
         cross_axis = get_cross_axis(
             self.option("Forward Axis").get(),
@@ -515,7 +563,7 @@ class EyeComponent(aniseed.RigComponent, MirrorMixin):
         inputs, the naming, aim, axis, blink and lid follow options and the
         eye, aim, eye lid and pupil control outputs.
         """
-        super(EyeComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -572,7 +620,7 @@ class EyeComponent(aniseed.RigComponent, MirrorMixin):
 
         self.declare_option(
             name="Aim Distance",
-            value=aniseed_toolkit.core.units.to_cm(30),
+            value=30,
             group="Behaviour",
         )
 
@@ -675,16 +723,15 @@ class EyeComponent(aniseed.RigComponent, MirrorMixin):
 
     def input_widget(self, requirement_name: str):
         """
-        Returns an object selector for the parent and eye joint inputs. Note
-        that the eye lid names checked here ("Upper Eyelid Joint") do not
-        match the declared inputs, so the lid inputs get no widget.
+        Returns an object selector for the parent, eye joint and eye lid
+        joint inputs.
         """
 
         object_requirements = [
             "Parent",
             "Eye Joint",
-            "Upper Eyelid Joint",
-            "Lower Eyelid Joint",
+            "Upper Eye Lid Joint",
+            "Lower Eye Lid Joint",
         ]
 
         if requirement_name in object_requirements:
@@ -704,17 +751,26 @@ class EyeComponent(aniseed.RigComponent, MirrorMixin):
 
     def user_functions(self) -> typing.Dict[str, callable]:
         """
-        Exposes a "Create Joints" menu entry when no eye joint is set. When
-        the eye joint is set this returns None rather than the menu.
+        Exposes a "Create Joints" menu entry when no eye joint is set.
         """
-        menu = super(EyeComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Eye Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
-            return menu
 
-        # -- Note: when the eye joint is set no menu is returned (preserved
-        # -- behaviour)
+        return menu
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the joints the options need are set.
+        """
+        missing = missing_joint_inputs(self)
+
+        if missing:
+            log.warning(f"{self.label()} : these joint inputs are not set: {', '.join(missing)}")
+            return False
+
+        return True
 
     def user_func_create_skeleton(self):
         """

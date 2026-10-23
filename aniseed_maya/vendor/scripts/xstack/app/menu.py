@@ -53,6 +53,9 @@ class TreeMenu(QtWidgets.QMenu):
         # -- items
         self.add_additional_actions()
 
+        # -- Offer to show the component's part of the latest build's log
+        self.add_show_in_log_action()
+
         # -- Finally we add the help menu item
         help_action = QtWidgets.QAction(f"Help", self._parent)
         help_action.triggered.connect(
@@ -62,6 +65,25 @@ class TreeMenu(QtWidgets.QMenu):
             ),
         )
         self.addAction(help_action)
+
+    def add_show_in_log_action(self):
+        log_view = getattr(self.app, "log_view", None)
+
+        # -- Apps built with the log tab turned off have nothing to show
+        if not log_view:
+            return
+
+        show_in_log_action = QtWidgets.QAction("Show In Log", self._parent)
+        show_in_log_action.triggered.connect(
+            functools.partial(
+                self.app.show_component_in_log,
+                self.component,
+            ),
+        )
+
+        # -- Only components the latest build reached are in the log
+        show_in_log_action.setEnabled(log_view.has_component(self.component))
+        self.addAction(show_in_log_action)
 
     def add_additional_actions(self):
 

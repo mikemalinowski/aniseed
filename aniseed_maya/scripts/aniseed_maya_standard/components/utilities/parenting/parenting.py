@@ -1,20 +1,29 @@
 """
 Provides parenting components. "Utility : Parent Hierarchy" parents each
 node in a list under the one before it to form a chain, and "Utility :
-Reparent (Multi)" parents a list of nodes under a single new parent.
-Parenting failures are silently ignored.
+Reparent (Multi)" parents a list of nodes under a single new parent, or
+under the world if no new parent is given. Parenting failures are logged and
+skipped.
 """
+import logging
 import mref
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 def _reparent(node, parent) -> None:
     """
-    Parents the node under the given parent, attempting to retain its
-    transform. Any failure is silently ignored.
+    Parents the node under the given parent (or the world when parent is
+    None), attempting to retain its transform. Any failure is logged and
+    skipped.
     """
     try:
         node = mref.get(node)
+
+        if parent is None and node.parent() is None:
+            return
+
         world_matrix = node.get_matrix(space="world")
         node.set_parent(parent)
 
@@ -23,8 +32,9 @@ def _reparent(node, parent) -> None:
         # -- is not at the origin. set_parent already retains the world
         # -- transform on its own.
         node.set_matrix(world_matrix)
-    except:
-        pass
+
+    except Exception as exc:
+        log.warning(f"Could not parent {node} under {parent if parent is not None else 'the world'} : {exc}")
 
 
 class MakeHierarchical(aniseed.RigComponent):
@@ -90,6 +100,7 @@ class SetParentMulti(aniseed.RigComponent):
         self.declare_input(
             name="New Parent",
             value="",
+            validate=False,
         )
 
     def input_widget(self, requirement_name):
@@ -105,9 +116,11 @@ class SetParentMulti(aniseed.RigComponent):
 
     def run(self) -> bool:
         """
-        Parents every node in Nodes To Reparent under the New Parent.
+        Parents every node in Nodes To Reparent under the New Parent, or
+        under the world if New Parent is empty.
         """
-        parent = mref.get(self.input("New Parent").get())
+        parent = self.input("New Parent").get()
+        parent = mref.get(parent) if parent else None
 
         for node in self.input("Nodes To Reparent").get():
             _reparent(node, parent)

@@ -53,12 +53,12 @@ class AddAttributeComponent(aniseed.RigComponent):
         self.declare_option(
             name="Channel Box",
             value=True,
-            description="The initial value to set on the new attribute. Leave empty to use the type's default.",
+            description="If true, the new attribute is shown in the channel box. Only applied when Keyable is off, as keyable attributes are always shown.",
         )
         self.declare_option(
             name="Keyable",
             value=True,
-            description="The initial value to set on the new attribute. Leave empty to use the type's default.",
+            description="If true, the new attribute is keyable.",
         )
 
         self.declare_output(

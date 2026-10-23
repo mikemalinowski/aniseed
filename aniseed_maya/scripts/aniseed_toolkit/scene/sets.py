@@ -1,12 +1,14 @@
 """
 Object set helpers.
 """
+import typing
+
 import mref
 
 from ..core import _nodes
 
 
-def add_to(nodes: str or list[str], set_name: str) -> None:
+def add_to(nodes: typing.Union[str, list[str]], set_name: str) -> None:
     """
     Adds the given node or nodes to the set with the given name. The set
     is created (empty, at the scene level) if it does not exist.

@@ -4,9 +4,12 @@ node between two targets using a pair of constraints of a chosen type
 (parent, point, orient or scale). If an Attribute Host is given, a float
 blend attribute is created on it to drive the weighting between the targets.
 """
+import logging
 import mref
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 class ConstrainBetween(aniseed.RigComponent):
@@ -66,6 +69,7 @@ class ConstrainBetween(aniseed.RigComponent):
         self.declare_input(
             name="Attribute Host",
             value="",
+            validate=False,
             description="Optional. The node on which the blend attribute will be created. Leave empty to skip creating the blend attribute and keep both constraints at their default weights.",
         )
 
@@ -89,6 +93,33 @@ class ConstrainBetween(aniseed.RigComponent):
 
         if requirement_name in object_list:
             return aniseed.widgets.ObjectSelector(component=self)
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the node and both targets are given, that Constraint Type
+        names a constraint command, and that an Attribute Label is given when
+        there is an Attribute Host.
+        """
+        for input_name in (
+            "Node To Constrain",
+            "First Constraint Target",
+            "Second Constraint Target",
+        ):
+            if not self.input(input_name).get():
+                log.warning(f"{self.label()} : {input_name} is not set")
+                return False
+
+        constraint_type = self.option("Constraint Type").get()
+
+        if not constraint_type or not hasattr(mref, constraint_type):
+            log.warning(f"{self.label()} : {constraint_type!r} is not a constraint command")
+            return False
+
+        if self.input("Attribute Host").get() and not self.option("Attribute Label").get():
+            log.warning(f"{self.label()} : An Attribute Host is given but the Attribute Label is empty")
+            return False
+
+        return True
 
     def run(self):
         """

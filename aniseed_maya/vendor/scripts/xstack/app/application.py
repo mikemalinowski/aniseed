@@ -1,4 +1,5 @@
 import typing
+import logging
 import functools
 import qtility
 from Qt import QtWidgets, QtGui, QtCore
@@ -9,6 +10,9 @@ from . import config
 from . import tree
 from . import settings
 from . import runner
+from . import log_view
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------------------
@@ -56,6 +60,35 @@ class AppWidget(QtWidgets.QWidget):
             ),
         )
 
+        # -- The content is split into tabs: the stack itself, and the log. The
+        # -- tabs are made once, and only the stack tab is rebuilt when the
+        # -- active stack changes, so the log survives switching stacks. The
+        # -- progress bar sits below the tabs so it shows on either.
+        self.tab_widget = QtWidgets.QTabWidget(self)
+        self.tab_widget.setDocumentMode(True)
+        self.tab_widget.setTabBarAutoHide(True)
+        self.layout().addWidget(self.tab_widget)
+        self.layout().addWidget(self.progress_bar)
+
+        self.stack_page = QtWidgets.QWidget(self)
+        self.stack_page.setLayout(
+            qtility.layouts.slimify(
+                QtWidgets.QVBoxLayout(),
+            ),
+        )
+        self.tab_widget.addTab(self.stack_page, self.app_config.label)
+
+        self.log_view = None
+
+        if self.app_config.show_log_tab:
+            self.log_view = log_view.LogView(
+                logger_names=self.app_config.log_logger_names,
+                parent=self,
+            )
+            self.log_view.counts_changed.connect(self.update_log_tab_title)
+            self.log_view.build_failed.connect(self.on_logged_build_failed)
+            self.tab_widget.addTab(self.log_view, "Log")
+
         # -- Add the splash widget whilst we're not seeing any rigs
         self.add_splash()
 
@@ -88,14 +121,24 @@ class AppWidget(QtWidgets.QWidget):
             self.run_thread.start()
 
         else:
-            self.stack.build_progressed.connect(self.update_progressbar)
-            self.stack.build(
-                build_up_to=build_up_to,
-                build_below=build_below,
-                build_only=build_only,
-                validate_only=validate_only,
-            )
-            self.build_complete.emit()
+            # -- Only listen to the stack for the duration of this build, so
+            # -- repeated builds do not stack up connections
+            stack = self.stack
+            stack.build_progressed.connect(self.update_progressbar)
+            stack.build_failed.connect(self.on_build_failed)
+
+            try:
+                stack.build(
+                    build_up_to=build_up_to,
+                    build_below=build_below,
+                    build_only=build_only,
+                    validate_only=validate_only,
+                )
+
+            finally:
+                stack.build_progressed.disconnect(self.update_progressbar)
+                stack.build_failed.disconnect(self.on_build_failed)
+                self.build_complete.emit()
 
     def update_progressbar(self, percentage):
         """
@@ -124,6 +167,70 @@ class AppWidget(QtWidgets.QWidget):
         self.menu_bar.setEnabled(True)
         self.editor_widget.setVisible(True)
 
+    def on_build_failed(self, component=None, details: str = ""):
+        """
+        This event is called when a build started from this widget fails. It
+        selects the component that failed, if there is one, so the user can see
+        it straight away. It is not called for threaded builds.
+
+        Args:
+            component: The component which failed or was invalid, or None
+            details: The reason for the failure
+        """
+        if component and self.tree_widget:
+            self.tree_widget.select_component(component)
+
+    # ----------------------------------------------------------------------------------
+    def on_logged_build_failed(self):
+        """
+        This event is called when the log tab sees a build fail, whichever way
+        the build was started. It brings the log to the front, unless the user
+        has turned that off in the preferences.
+        """
+        if self.log_view and self.app_config.get_setting("switch_to_log_on_failure"):
+            self.tab_widget.setCurrentWidget(self.log_view)
+
+    # ----------------------------------------------------------------------------------
+    def update_log_tab_title(self, warnings: int, errors: int):
+        """
+        Shows the number of warnings and errors in the title of the log tab, so
+        they are visible from the stack tab.
+        """
+        counts = []
+
+        if warnings:
+            counts.append(f"{warnings} warning{'s' if warnings > 1 else ''}")
+
+        if errors:
+            counts.append(f"{errors} error{'s' if errors > 1 else ''}")
+
+        title = "Log"
+        if counts:
+            title = f"Log ({', '.join(counts)})"
+
+        self.tab_widget.setTabText(self.tab_widget.indexOf(self.log_view), title)
+
+    # ----------------------------------------------------------------------------------
+    def show_component_in_log(self, component):
+        """
+        Brings the log tab to the front, scrolled to the given component's part
+        of the latest build's report.
+        """
+        if not self.log_view:
+            return
+
+        if self.log_view.show_component(component):
+            self.tab_widget.setCurrentWidget(self.log_view)
+
+    # ----------------------------------------------------------------------------------
+    def stack_layout(self) -> QtWidgets.QVBoxLayout:
+        """
+        Returns the layout of the stack tab. Subclasses which add widgets to the
+        stack's view should add them here rather than to the widget's own
+        layout, which holds the tabs.
+        """
+        return self.stack_page.layout()
+
     # ----------------------------------------------------------------------------------
     def add_splash(self):
         """
@@ -131,7 +238,7 @@ class AppWidget(QtWidgets.QWidget):
         """
         # -- Add the splash image to the background whilst its blank
         splash = QtWidgets.QLabel(parent=self)
-        self.layout().addWidget(splash)
+        self.stack_layout().addWidget(splash)
         splash.setPixmap(
             QtGui.QPixmap(
                 self.app_config.icon,
@@ -153,15 +260,19 @@ class AppWidget(QtWidgets.QWidget):
         return list()
     
     # ----------------------------------------------------------------------------------
-    def set_active_stack(self, stack: "xstack.Stack" or None):
+    def set_active_stack(self, stack: typing.Optional["xstack.Stack"]):
         """
         This function will rebuild the layout of the tool based on the stack we expect
         to be showing as the currently active stack
         """
         # -- Empty the current layout
         qtility.layouts.empty(
-            self.layout(),
+            self.stack_layout(),
         )
+
+        # -- The log captures the builds of whichever stack is showing
+        if self.log_view:
+            self.log_view.watch_stack(stack)
 
         # -- Always update self.stack so listeners and downstream code
         # -- (e.g. subclasses' set_active_stack overrides) see the new
@@ -269,11 +380,11 @@ class AppWidget(QtWidgets.QWidget):
         """
         # -- Empty the current layout
         qtility.layouts.empty(
-            self.layout(),
+            self.stack_layout(),
         )
 
         self.flexible_layout = QtWidgets.QVBoxLayout()
-        self.layout().addLayout(self.flexible_layout)
+        self.stack_layout().addLayout(self.flexible_layout)
 
         self.splitter = QtWidgets.QSplitter()
         self.flexible_layout.addWidget(self.splitter)
@@ -286,14 +397,14 @@ class AppWidget(QtWidgets.QWidget):
         self.editor_widget = options.ComponentEditor(parent=self)
         self.splitter.addWidget(self.editor_widget)
 
+        # -- The tree draws labels directly from the components, so a repaint is
+        # -- enough to show a name changed in the editor
+        self.editor_widget.label_changed.connect(self.tree_widget.viewport().update)
+
         self.flexible_layout.setStretch(0, 1)
         self.flexible_layout.setStretch(1, 0)
 
         self.set_layout_orientation()
-
-        self.progress_bar = QtWidgets.QProgressBar(self)
-        self.progress_bar.setVisible(False)
-        self.layout().addWidget(self.progress_bar)
 
         if self.app_config.splitter_bias is not None:
             orientation = self.splitter.orientation()
@@ -369,22 +480,50 @@ class AppWidget(QtWidgets.QWidget):
         )
 
         if not name:
-            return
+            return None
 
         new_stack = self.app_config.stack_class(
             label=name,
             component_paths=self.app_config.component_paths,
         )
 
-        self.set_active_stack(new_stack)
+        self.switch_stack(new_stack)
         self.build_menu()
 
         return new_stack
 
     # ----------------------------------------------------------------------------------
+    def switch_stack(self, stack: "xstack.Stack"):
+        """
+        Makes the given stack the one shown by the tool. The new stack and open
+        flows both come through here, so re-implement this (rather than
+        set_active_stack) to tie into switching stacks.
+
+        Args:
+            stack: The stack to show
+        """
+        self.set_active_stack(stack)
+
+    # ----------------------------------------------------------------------------------
+    def load_stack_file(self, filepath: str) -> "xstack.Stack":
+        """
+        Returns the stack to show for the given stack file. By default this is a
+        new stack loaded from the file. Re-implement this to load the file into
+        an existing stack instead.
+
+        Args:
+            filepath: The json file to load
+        """
+        return self.app_config.stack_class.open(
+            data=filepath,
+            component_paths=self.app_config.component_paths,
+        )
+
+    # ----------------------------------------------------------------------------------
     def open(self, filepath=None, silent=False):
         """
-        This defines the user flow for importing stack data
+        This defines the user flow for importing stack data. Returns the filepath
+        that was opened, or None if the user cancelled.
         """
 
         stack_label = self.app_config.label
@@ -400,7 +539,7 @@ class AppWidget(QtWidgets.QWidget):
             )
 
             if not confirmation:
-                return
+                return None
 
         if not filepath:
             filepath = qtility.request.filepath(
@@ -410,12 +549,20 @@ class AppWidget(QtWidgets.QWidget):
                 save=False,
             )
 
-        new_stack = self.app_config.stack_class.open(
-            data=filepath,
-            component_paths=self.app_config.component_paths,
-        )
+        if not filepath:
+            return None
 
-        self.set_active_stack(new_stack)
+        try:
+            new_stack = self.load_stack_file(filepath)
+
+        except (OSError, ValueError):
+            log.exception(f"Failed to open {filepath}")
+            return None
+
+        if not new_stack:
+            return None
+
+        self.switch_stack(new_stack)
 
         return filepath
 
@@ -432,6 +579,9 @@ class AppWidget(QtWidgets.QWidget):
             save=True,
             parent=self,
         )
+
+        if not filepath:
+            return
 
         self.stack.save(
             filepath,

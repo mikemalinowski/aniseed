@@ -3,6 +3,7 @@ import uuid
 import json
 import copy
 import typing
+import logging
 import traceback
 import signalling
 
@@ -11,6 +12,8 @@ from .attributes import Option
 from .attributes import Input
 from .attributes import Output
 from .constants import Status
+
+log = logging.getLogger(__name__)
 
 # -- Default for Component.duplicate's parent argument, meaning "the same parent
 # -- as the original". None cannot be used, as it means the root of the stack.
@@ -50,14 +53,48 @@ class Component:
     # -- a new component which can be added.
     deprecated = False
 
+    # -- The version of this component's serialised data. Increase it whenever
+    # -- a change to the component's inputs, options or additional data means
+    # -- older data needs converting, and implement migrate to convert it.
+    # -- Data saved before versioning existed is treated as version 1.
+    version = 1
+
     # ----------------------------------------------------------------------------------
     # This MUST be re-implemented
     def run(self) -> bool:
         """
         This should be re-implemented in your component and should contain all the
         code which you want to trigger during the build.
+
+        Returning exactly False marks the component as Failed and stops the
+        build. Returning None or True (or anything else) is a success. Raising
+        an exception is also a failure.
         """
         return True
+
+    # ----------------------------------------------------------------------------------
+    # You may re-implement this
+    @classmethod
+    def migrate(cls, data: dict, from_version: int) -> dict:
+        """
+        Re-implement this to convert serialised data saved by an older version
+        of this component. It is called before the data is applied whenever
+        the stored version is lower than the class's version attribute.
+
+        The data is this component's serialised dictionary (component_type,
+        label, inputs, options, additional_data, children and so on). Change
+        only this component's own entries, as each child migrates itself.
+
+        :param data: A copy of the component's serialised data
+        :type data: dict
+
+        :param from_version: The version the data was saved with
+        :type from_version: int
+
+        :return: The data in the form the current version expects
+        :rtype: dict
+        """
+        return data
 
     # ----------------------------------------------------------------------------------
     # You may re-implement this
@@ -257,8 +294,8 @@ class Component:
         return collated
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, label: str, stack: "stack.Stack", uuid_: str or None = None):
-        super(Component, self).__init__()
+    def __init__(self, label: str, stack: "stack.Stack", uuid_: typing.Optional[str] = None):
+        super().__init__()
 
         self.stack: "stack.Stack" = stack
 
@@ -269,6 +306,7 @@ class Component:
         self._outputs: typing.List[Output] = list()
         self._status: str = "not executed"
         self._enabled = True
+        self._last_error: str = ""
 
         # -- Hierarchy attributes
         self.parent = None
@@ -281,6 +319,13 @@ class Component:
         self.changed = signalling.Signal()
 
     def set_parent(self, parent=None, child_index=None):
+
+        # -- A component which already has a place in the stack is being moved,
+        # -- which changes the build order. That has to be reported as a change,
+        # -- or listeners which save the stack (such as aniseed's recipe on the
+        # -- rig) never hear of it. A component being placed for the first time
+        # -- is not reported here, as add_component reports the addition itself.
+        moving = self.parent is not None or self in self.stack.root_components
 
         # -- Ensure we're removed as a root component
         if self in self.stack.root_components:
@@ -307,6 +352,9 @@ class Component:
             else:
                 self.stack.root_components.append(self)
 
+        if moving:
+            self.changed.emit()
+
     def child_index(self):
         if self.parent:
             return self.parent.children.index(self)
@@ -319,23 +367,40 @@ class Component:
         This should NOT be re-implemented. This is used specifically by the Stack class
         to instigate your implement function whilst wrapped in the signal  and
         logging mechanisms.
+
+        The component is marked as Failed if run raises an exception or returns
+        exactly False. Anything else (including None) is a success. The reason
+        for a failure is available from last_error.
         """
         self.build_started.emit()
 
+        self._last_error = ""
         result = True
 
         try:
-            self.run()
-            self.set_status(Status.Success)
+            if self.run() is False:
+                self._last_error = f"{self.label()} reported that it failed (its run returned False)"
+                log.warning(self._last_error)
+                result = False
 
         except Exception:
-            self.set_status(Status.Failed)
-            traceback.print_exc()
+            self._last_error = traceback.format_exc()
+            log.exception(f"{self.label()} raised an exception during its run")
             result = False
 
+        self.set_status(Status.Success if result else Status.Failed)
         self.build_complete.emit()
 
         return result
+
+    # ----------------------------------------------------------------------------------
+    def last_error(self) -> str:
+        """
+        Returns the reason the last run of this component failed. This is the
+        traceback text if run raised, a short message if run returned False,
+        or an empty string if the last run succeeded (or it has not run).
+        """
+        return self._last_error
 
     # ----------------------------------------------------------------------------------
     def is_enabled(self):
@@ -550,7 +615,7 @@ class Component:
         return self._inputs
 
     # ----------------------------------------------------------------------------------
-    def input(self, name: str) -> Input or None:
+    def input(self, name: str) -> typing.Optional[Input]:
         """
         Returns the Input object for the given requirement name
         """
@@ -568,7 +633,7 @@ class Component:
         return self._options
 
     # ----------------------------------------------------------------------------------
-    def option(self, name: str) -> Option or None:
+    def option(self, name: str) -> typing.Optional[Option]:
         """
         Returns the Option object for the given option name
         """
@@ -588,7 +653,7 @@ class Component:
         return self._outputs
 
     # ----------------------------------------------------------------------------------
-    def output(self, name: str) -> Output or None:
+    def output(self, name: str) -> typing.Optional[Output]:
         """
         Returns the Option object for the given option name
         """
@@ -605,11 +670,13 @@ class Component:
     # ----------------------------------------------------------------------------------
     def describe(self):
         """
-        This will print a nicely formatted output description of the component
+        This will print a nicely formatted description of the component
         """
-        print(f"Component Type : {self.identifier}")
-        print(f"    Identifier : {self.uuid()}")
-        print(f"    Options    :")
+        lines = [
+            f"Component Type : {self.identifier}",
+            f"    Identifier : {self.uuid()}",
+            "    Options    :",
+        ]
 
         value_limit = 200
 
@@ -625,10 +692,9 @@ class Component:
             if len(resolved_value) > value_limit:
                 resolved_value = resolved_value[:value_limit - 3] + "..."
 
-            print(
-                f"        {option.name().ljust(option_len + 2, ' ')} : {resolved_value}")
+            lines.append(f"        {option.name().ljust(option_len + 2, ' ')} : {resolved_value}")
 
-        print(f"    Inputs :")
+        lines.append("    Inputs :")
 
         inputs_len = max(
             [
@@ -642,13 +708,20 @@ class Component:
             if len(resolved_value) > value_limit:
                 resolved_value = resolved_value[:value_limit - 3] + "..."
 
-            print(
-                f"        {input_.name().ljust(inputs_len + 2, ' ')} : {resolved_value}")
+            lines.append(f"        {input_.name().ljust(inputs_len + 2, ' ')} : {resolved_value}")
+
+        # -- This is part of the build report rather than diagnostics, so it is
+        # -- printed as is. A log record only prefixes its first line, which
+        # -- breaks the column alignment.
+        print("\n".join(lines))
 
     # ----------------------------------------------------------------------------------
     def describe_outputs(self):
-
-        print(f"    Outputs :")
+        """
+        This will print the current value of each output, as part of the build
+        report (see describe)
+        """
+        lines = ["    Outputs :"]
         value_limit = 200
 
         output_len = max(
@@ -663,8 +736,9 @@ class Component:
             if len(resolved_value) > value_limit:
                 resolved_value = resolved_value[:value_limit - 3] + "..."
 
-            print(
-                f"        {output.name().ljust(output_len + 2, ' ')} : {resolved_value}")
+            lines.append(f"        {output.name().ljust(output_len + 2, ' ')} : {resolved_value}")
+
+        print("\n".join(lines))
 
     # ----------------------------------------------------------------------------------
     def serialise(self) -> dict:
@@ -685,6 +759,7 @@ class Component:
 
         return dict(
             component_type=self.identifier,
+            version=self.version,
             inputs=input_data,
             options=option_data,
             label=self.label(),
@@ -711,8 +786,7 @@ class Component:
             return self.on_serialise() or dict()
 
         except Exception:
-            print(f"on_serialise failed for {self.label()} ({self.identifier})")
-            traceback.print_exc()
+            log.exception(f"on_serialise failed for {self.label()} ({self.identifier})")
             return dict()
 
     # ----------------------------------------------------------------------------------
@@ -731,8 +805,7 @@ class Component:
             self.on_deserialise(additional_data or dict())
 
         except Exception:
-            print(f"on_deserialise failed for {self.label()} ({self.identifier})")
-            traceback.print_exc()
+            log.exception(f"on_deserialise failed for {self.label()} ({self.identifier})")
 
     # ----------------------------------------------------------------------------------
     def save_settings(self, filepath):
@@ -1011,3 +1084,85 @@ class Component:
             lines.append(line)
 
         return " ".join(lines)
+
+
+# --------------------------------------------------------------------------------------
+class MissingComponent(Component):
+    """
+    This stands in for a component whose type is not available in the component
+    library, such as one from a package that is not installed or one that has
+    since been removed.
+
+    It keeps all of the data it was loaded from and serialises it back unchanged,
+    so saving the stack does not lose anything. It cannot be built: it fails
+    validation, naming the missing component type. Remove it, switch it to an
+    available component type, or make the missing type available to build.
+    """
+
+    identifier = "Missing Component"
+
+    # -- This is never offered as a component to add
+    deprecated = True
+
+    # ----------------------------------------------------------------------------------
+    def __init__(
+            self,
+            label: str,
+            stack: "stack.Stack",
+            uuid_: typing.Optional[str] = None,
+            missing_identifier: str = "",
+            data: typing.Optional[dict] = None,
+    ):
+        super().__init__(label=label, stack=stack, uuid_=uuid_)
+
+        # -- Show the missing type wherever a component's type is displayed,
+        # -- whilst keeping it distinct from the real type so lookups by type
+        # -- never mistake this for a working component
+        self.identifier = f"{MissingComponent.identifier} : {missing_identifier}"
+
+        self.missing_identifier: str = missing_identifier
+        self._data: dict = copy.deepcopy(data or dict())
+
+    # ----------------------------------------------------------------------------------
+    def is_valid(self) -> bool:
+        log.warning(
+            f"{self.label()} cannot be built because its component type "
+            f"'{self.missing_identifier}' is not available. Remove it, switch it "
+            f"to an available component type, or install what provides it."
+        )
+        return False
+
+    # ----------------------------------------------------------------------------------
+    def run(self) -> bool:
+        raise RuntimeError(
+            f"{self.label()} cannot be built because its component type "
+            f"'{self.missing_identifier}' is not available."
+        )
+
+    # ----------------------------------------------------------------------------------
+    def serialise(self) -> dict:
+        """
+        Returns the data this was loaded from, updated with anything that can
+        be changed on a missing component: its label, uuid, enabled state and
+        children.
+        """
+        data = copy.deepcopy(self._data)
+        data["label"] = self.label()
+        data["uuid"] = self.uuid()
+
+        if "enabled" in data or not self.is_enabled():
+            data["enabled"] = self.is_enabled()
+
+        data["children"] = [
+            child.serialise()
+            for child in self.children
+        ]
+        return data
+
+    # ----------------------------------------------------------------------------------
+    def duplicate(self, *args, **kwargs):
+        log.warning(
+            f"{self.label()} cannot be duplicated because its component type "
+            f"'{self.missing_identifier}' is not available."
+        )
+        return None

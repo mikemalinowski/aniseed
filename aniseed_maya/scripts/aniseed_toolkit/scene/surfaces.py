@@ -42,7 +42,7 @@ def _local_matrix(node_name):
 @tool(
     "Serialise Nurbs Surface",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Surfaces"],
 )
 def serialise(surface, relative_to=None):
     """
@@ -114,7 +114,7 @@ def serialise(surface, relative_to=None):
 @tool(
     "Construct Nurbs Surface",
     classification="Rigging",
-    categories=["Visibility"],
+    categories=["Surfaces"],
 )
 def construct(data, name="reconstructedSurface", parent_transform=None):
     """

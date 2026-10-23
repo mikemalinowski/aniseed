@@ -14,6 +14,7 @@ following deliberately stay outside it:
   ``MFnSkinCluster`` api, which does it in a single call per mesh.
 """
 import json
+import logging
 import os
 
 from maya import cmds
@@ -24,6 +25,8 @@ import mref
 
 from ..registry import tool
 from ..core import api as _api
+
+log = logging.getLogger(__name__)
 
 
 def _related_skin(mesh: str) -> str:
@@ -118,7 +121,7 @@ def reconnect_all_skins() -> None:
         )
 
 
-class LocalisedSkinCopy(object):
+class LocalisedSkinCopy:
     """
     Copies skin weights onto a stored set of vertices, from another skinned
     mesh. This works on the selection:
@@ -154,20 +157,20 @@ class LocalisedSkinCopy(object):
         a temporary duplicate of the stored mesh, and then copied vertex by
         vertex (using Maya's copy/paste vertex weights) onto the stored mesh.
 
-        A message is printed if there is nothing selected or nothing stored,
+        A warning is logged if there is nothing selected or nothing stored,
         but the copy is still attempted.
 
         Returns:
             None
         """
         if not cmds.ls(selection=True):
-            print('No mesh to copy weights from')
+            log.warning("No mesh to copy weights from")
 
         if not LocalisedSkinCopy._STORED_MESH:
-            print('No mesh to copy to')
+            log.warning("No mesh to copy to")
 
         if not LocalisedSkinCopy._STORED_VERTICES:
-            print('No vertices to copy to')
+            log.warning("No vertices to copy to")
 
         source_mesh = cmds.ls(selection=True)[0]
         cmds.select(clear=True)
@@ -202,7 +205,7 @@ _WEIGHT_VALUE_COPY_DESTINATION = None
 def declare_weight_value_copy_destination() -> None:
     """
     Stores the currently selected mesh as the destination for a subsequent
-    call to :func:`copy_weight_values_to_destination`. A message is printed
+    call to :func:`copy_weight_values_to_destination`. A warning is logged
     (and nothing stored) if nothing is selected.
 
     Returns:
@@ -213,7 +216,7 @@ def declare_weight_value_copy_destination() -> None:
     selection = cmds.ls(selection=True, o=True)
 
     if not selection:
-        print("No mesh selected to declare as destination")
+        log.warning("No mesh selected to declare as destination")
         return
 
     _WEIGHT_VALUE_COPY_DESTINATION = selection[0]
@@ -227,7 +230,7 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
     destination skin cluster will be added.
 
     The destination mesh must be declared first via
-    :func:`declare_weight_value_copy_destination`. A message is printed (and
+    :func:`declare_weight_value_copy_destination`. A warning is logged (and
     nothing changed) if there is no destination, no vertices, or either mesh
     has no skin cluster.
 
@@ -239,7 +242,7 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
         None
     """
     if not _WEIGHT_VALUE_COPY_DESTINATION:
-        print(
+        log.warning(
             "No destination mesh declared. "
             "Call declare_weight_value_copy_destination first."
         )
@@ -249,21 +252,21 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
         vertices = cmds.ls(selection=True, flatten=True) or []
 
     if not vertices:
-        print("No source vertices given or selected")
+        log.warning("No source vertices given or selected")
         return
 
     source_mesh = vertices[0].split(".")[0]
     source_skin = _related_skin(source_mesh)
 
     if not source_skin:
-        print(f"Source mesh {source_mesh} has no skin cluster")
+        log.warning(f"Source mesh {source_mesh} has no skin cluster")
         return
 
     destination_mesh = _WEIGHT_VALUE_COPY_DESTINATION
     destination_skin = _related_skin(destination_mesh)
 
     if not destination_skin:
-        print(f"Destination mesh {destination_mesh} has no skin cluster")
+        log.warning(f"Destination mesh {destination_mesh} has no skin cluster")
         return
 
     # -- Influence names stay cmds strings, as they are compared by name and
@@ -308,6 +311,160 @@ def copy_weight_values_to_destination(vertices: list[str] = None) -> None:
             destination_vertex,
             transformValue=paired_data,
         )
+
+
+# -- Skin data held by copy_skin_to_memory for paste_skin_to_matching_vertices:
+# -- {"mesh": source mesh name, "data": skin_to_dict result}
+_COPIED_SKIN = None
+
+
+def copy_skin_to_memory(mesh: str = "") -> dict:
+    """
+    Reads the skin weights of the given (or selected) mesh and holds them in
+    memory, ready for paste_skin_to_matching_vertices. A selected component
+    resolves to the mesh it belongs to.
+
+    Args:
+        mesh: The skinned mesh to copy from. If not given, the first selected
+            object is used.
+
+    Returns:
+        The copied skin data (see skin_to_dict).
+
+    Raises:
+        ValueError: If no mesh is given or selected, or the mesh has no
+            skin cluster.
+    """
+    global _COPIED_SKIN
+
+    if not mesh:
+        selection = cmds.ls(selection=True, objectsOnly=True)
+        if not selection:
+            raise ValueError("Select a skinned mesh to copy the skin weights from")
+        mesh = selection[0]
+
+    if not _related_skin(mesh):
+        raise ValueError(f"{mesh} has no skin cluster to copy from")
+
+    _COPIED_SKIN = {
+        "mesh": mesh,
+        "data": skin_to_dict(mesh),
+    }
+    return _COPIED_SKIN["data"]
+
+
+def paste_skin_to_matching_vertices(vertices: list[str] = None) -> dict:
+    """
+    Applies the skin weights held by copy_skin_to_memory to the given (or
+    selected) vertices, matching vertices by index: each target vertex takes
+    the weights of the copied vertex with the same id.
+
+    If the target mesh has no skin cluster, one is created bound to the
+    copied influences. Any copied influences the target's skin cluster is
+    missing are added to it. Selecting a whole mesh pastes onto every one of
+    its vertices. The paste is a single undo step.
+
+    Args:
+        vertices: The target vertices, e.g. ["mesh.vtx[0]", "mesh.vtx[4]"].
+            If not given, the selected vertices are used.
+
+    Returns:
+        {"mesh": target mesh, "skin": its skin cluster, "pasted": number of
+        vertices pasted, "skipped": vertex ids which have no matching vertex
+        in the copied data}
+
+    Raises:
+        ValueError: If nothing has been copied, no vertices are given or
+            selected, or a copied influence no longer exists in the scene.
+    """
+    if not _COPIED_SKIN:
+        raise ValueError("No skin weights in memory. Copy skin weights to memory first")
+
+    data = _COPIED_SKIN["data"]
+    influences = data["influences"]
+    copied_vertex_count = len(data["weights"][0]) if data["weights"] else 0
+
+    if not vertices:
+        vertices = cmds.ls(selection=True, flatten=True) or []
+
+    # -- A whole mesh selected means every one of its vertices
+    expanded = []
+    for item in vertices:
+        if ".vtx[" in item:
+            expanded.append(item)
+        elif "." not in item:
+            expanded.extend(cmds.ls(f"{item}.vtx[*]", flatten=True) or [])
+    vertices = expanded
+
+    if not vertices:
+        raise ValueError("Select the vertices (or mesh) to paste the skin weights onto")
+
+    missing = [influence for influence in influences if not cmds.objExists(influence)]
+    if missing:
+        raise ValueError(f"These copied influences no longer exist: {', '.join(missing)}")
+
+    target_mesh = vertices[0].split(".")[0]
+
+    cmds.undoInfo(openChunk=True, chunkName="paste_skin_to_matching_vertices")
+    try:
+        # -- Skin the target if it is not skinned yet, otherwise make sure
+        # -- it has every influence we are about to paste
+        target_skin = _related_skin(target_mesh)
+
+        if not target_skin:
+            target_skin = cmds.skinCluster(
+                influences,
+                target_mesh,
+                toSelectedBones=True,
+                maximumInfluences=data["max_influences"],
+            )[0]
+
+        else:
+            existing = set(cmds.skinCluster(target_skin, query=True, influence=True) or [])
+            for influence in influences:
+                if influence not in existing:
+                    cmds.skinCluster(
+                        target_skin,
+                        edit=True,
+                        addInfluence=influence,
+                        weight=0.0,
+                    )
+
+        pasted = 0
+        skipped = []
+
+        for vertex in vertices:
+            vertex_index = int(vertex.split("[")[-1].split("]")[0])
+
+            if vertex_index >= copied_vertex_count:
+                skipped.append(vertex_index)
+                continue
+
+            # -- Only pass the influences which carry weight, and zero every
+            # -- other influence on the target so the result matches exactly
+            paired_data = [
+                (influence, data["weights"][idx][vertex_index])
+                for idx, influence in enumerate(influences)
+                if data["weights"][idx][vertex_index] > 0.0
+            ]
+
+            cmds.skinPercent(
+                target_skin,
+                f"{target_mesh}.vtx[{vertex_index}]",
+                transformValue=paired_data,
+                zeroRemainingInfluences=True,
+            )
+            pasted += 1
+
+    finally:
+        cmds.undoInfo(closeChunk=True)
+
+    return {
+        "mesh": target_mesh,
+        "skin": target_skin,
+        "pasted": pasted,
+        "skipped": skipped,
+    }
 
 
 class SkinLerper:
@@ -694,7 +851,8 @@ def add_all_skin_joints_to_all_skins():
         for joint in all_skin_joints:
             try:
                 skin.add_influence(joint, lockWeights=True)
-            except Exception:
+            except RuntimeError:
+                # -- The joint is already an influence of this skin
                 pass
 
     # -- Now restore the lock weights
@@ -748,7 +906,8 @@ def add_all_skin_joints_to_target_meshes(meshes):
         for joint in all_skin_joints:
             try:
                 skin.add_influence(joint, lockWeights=True)
-            except Exception:
+            except RuntimeError:
+                # -- The joint is already an influence of this skin
                 pass
 
     # -- Now restore the lock weights

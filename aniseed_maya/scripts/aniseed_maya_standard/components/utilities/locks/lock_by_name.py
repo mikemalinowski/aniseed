@@ -5,9 +5,12 @@ locks every scene node whose name and node type match the given regexes,
 channels, and "Utility : Unlock By Name" unlocks the matched nodes instead.
 """
 import re
+import logging
 import mref
 import aniseed
 from maya import cmds
+
+log = logging.getLogger(__name__)
 
 
 class LockByNameComponent(aniseed.RigComponent):
@@ -41,6 +44,32 @@ class LockByNameComponent(aniseed.RigComponent):
             value=False,
             description="Match Against Long Name",
         )
+
+    def is_valid(self) -> bool:
+        """
+        Checks that the Name Regex is given and that both regexes compile. An
+        empty Name Regex would match every node in the scene.
+        """
+        name_regex = self.option("Name Regex").get()
+
+        if not name_regex:
+            log.warning(
+                f"{self.label()} : Name Regex is empty, which would match every node in the scene"
+            )
+            return False
+
+        for option_name, pattern in (
+            ("Name Regex", name_regex),
+            ("Type Regex", self.option("Type Regex").get()),
+        ):
+            try:
+                re.compile(pattern)
+
+            except re.error as exc:
+                log.warning(f"{self.label()} : {option_name} {pattern!r} is not a valid regex ({exc})")
+                return False
+
+        return True
 
     def run(self):
         """

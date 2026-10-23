@@ -6,6 +6,8 @@ most code should prefer mref.
 This module is OpenMaya based by design: its purpose is to hand out api
 objects, which mref does not expose in these forms.
 """
+import typing
+
 import maya.api.OpenMaya as om
 import mref
 
@@ -80,7 +82,7 @@ def get_mobject(name: str = "") -> om.MFnDependencyNode:
     "Get DagPath",
     user_facing=False,
 )
-def get_dagpath(name: str = "") -> om.MDagPath or None:
+def get_dagpath(name: str = "") -> typing.Optional[om.MDagPath]:
     """
     Returns the MDagPath for the node with the given name.
 

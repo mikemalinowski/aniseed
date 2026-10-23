@@ -155,8 +155,8 @@ def position_between(
     """
     Sets the translation of the given node to a position between from_this
     and to_this, using a temporary point constraint. A factor of zero puts
-    the node on top of from_this, whilst a factor of 1 puts it on top of
-    to_this.
+    the node on top of to_this, whilst a factor of 1 puts it on top of
+    from_this.
 
     Args:
         node: The node to adjust the position for

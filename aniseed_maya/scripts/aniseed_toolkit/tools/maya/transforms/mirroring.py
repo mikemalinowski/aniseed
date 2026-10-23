@@ -1,6 +1,6 @@
 import aniseed_toolkit
 import aniseed_toolkit.ui.dialogs
-import maya.cmds as mc
+from maya import cmds
 
 
 class GlobalMirrorTool(aniseed_toolkit.Tool):
@@ -30,13 +30,13 @@ class GlobalMirrorTool(aniseed_toolkit.Tool):
 
         Args:
             transforms: list of Transform or string.
-            across: plane which to mirror across (XY, YX or XZ).
+            across: plane which to mirror across (XY, YZ or XZ).
             behaviour: If true, it should mirror the rotational behaviour too
             name_replacement : a tuple of length two, where the first part should
                 be replaced with the second part
         """
         return aniseed_toolkit.ui.dialogs.global_mirror(
-            transforms=transforms or mc.ls(selection=True),
+            transforms=transforms or cmds.ls(selection=True),
             across=across,
             behaviour=behaviour,
             name_replacement=name_replacement,
@@ -60,5 +60,5 @@ def invert_translation(transforms: list[str] = None) -> None:
         None
     """
     return aniseed_toolkit.scene.mirror.invert_translation(
-        transforms=transforms or mc.ls(selection=True),
+        transforms=transforms or cmds.ls(selection=True),
     )

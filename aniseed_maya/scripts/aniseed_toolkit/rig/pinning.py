@@ -17,7 +17,6 @@ from ..core._nodes import resolve as _resolve
 from ..scene import shapes as _shapes
 
 
-
 def pin(joints: list[str] = None) -> list[str]:
     """
     This will create a pin for the given joints. Pins are used to
@@ -106,6 +105,7 @@ def pin(joints: list[str] = None) -> list[str]:
                 True,
             )
         except Exception:
+            # -- Only joints have a local axis display, other nodes are fine
             pass
 
         pin_node.select()
@@ -211,6 +211,7 @@ def remove_pins(items: list[str] = None) -> None:
                 False,
             )
         except Exception:
+            # -- Only joints have a local axis display, other nodes are fine
             pass
 
         cmds.delete(pin)

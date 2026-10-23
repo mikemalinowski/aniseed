@@ -26,7 +26,7 @@ class MouthComponent(aniseed.RigComponent):
         Declares the parent, jaw and upper/lower lip joint inputs, the naming
         and aim control options and the jaw and lip control outputs.
         """
-        super(MouthComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -116,7 +116,7 @@ class MouthComponent(aniseed.RigComponent):
         """
         Adds a "Create Joints" menu entry when no jaw joint has been set.
         """
-        menu = super(MouthComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Jaw Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
@@ -411,7 +411,7 @@ class MouthComponent(aniseed.RigComponent):
             match_to=jaw_joint,
             config=self.config,
         )
-        mref.get(lower_lip_joint).translateZ.set(aniseed_toolkit.core.units.from_cm(4))
+        mref.get(lower_lip_joint).translateZ.set(4)
 
         # -- If we have a parent, then snap the jaw to the parent position
         if parent:

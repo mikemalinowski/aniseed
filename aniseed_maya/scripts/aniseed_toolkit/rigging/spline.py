@@ -3,10 +3,10 @@ A generalised spline setup: a curve driven by a set of control transforms with
 an ik spline solved chain (stabilised by an upvector curve) which the given
 joints are constrained to.
 """
+from maya import cmds
+from maya.api import OpenMaya as om
 import mref
-import maya.cmds as mc
 
-from ..core import units as _units
 from ..scene import joints as _joints
 from ..rig import tagging as _tagging
 
@@ -169,13 +169,13 @@ class SimpleSplineSetup:
 
     def _create_upvectoring_curve(self):
         """
-        This needs to be hte same as the main curve but offset/placed at the location
+        This needs to be the same as the main curve but offset/placed at the location
         of the first upvector transform.
         """
         # -- For each control we need to create an upvectoring node, and
         # -- offsetting the position by the upvector distance
         positions = []
-        upvector_distance = mc.arclen(self.out_curve.full_name()) * 0.1
+        upvector_distance = cmds.arclen(self.out_curve.full_name()) * 0.1
         for control in self.out_controls:
             # -- Create our temporary buffer object
             buffer = mref.create("transform", name="buffer", parent=control.full_name())
@@ -186,7 +186,7 @@ class SimpleSplineSetup:
 
             # -- Read out the worldspace position
             positions.append(
-                mc.xform(
+                cmds.xform(
                     buffer.full_name(),
                     query=True,
                     translation=True,
@@ -195,11 +195,11 @@ class SimpleSplineSetup:
             )
 
             # -- Finally we can delete our temp buffer node
-            mc.delete(buffer.full_name()) # UNDO
+            cmds.delete(buffer.full_name()) # UNDO
 
         # -- From the position list we can now build our curve
         self.out_upvector_curve = mref.get(
-            mc.curve(
+            cmds.curve(
                 point=positions,
                 degree=3,
             ),
@@ -214,8 +214,8 @@ class SimpleSplineSetup:
         for idx in range(len(positions)):
 
             # -- Clusters are funny in maya, so we need to use the selection
-            mc.select(f"{self.out_upvector_curve.full_name()}.cv[{idx}]")
-            cluster_xform = mref.get(mc.cluster()[1])
+            cmds.select(f"{self.out_upvector_curve.full_name()}.cv[{idx}]")
+            cluster_xform = mref.get(cmds.cluster()[1])
 
             # -- Hide the cluster and tag it
             cluster_xform.attr("visibility").set(False)
@@ -234,7 +234,7 @@ class SimpleSplineSetup:
             # -- Now we use the motion path command to stick the transform
             # -- to the curve. Note that for the upvector node we do not actually
             # -- care about its orientation.
-            motion_path = mc.pathAnimation(
+            motion_path = cmds.pathAnimation(
                 upvector_transform.full_name(),
                 curve=self.out_upvector_curve.full_name(),
                 fractionMode=True,
@@ -245,18 +245,17 @@ class SimpleSplineSetup:
                 worldUpVector=(0, 1, 0)
             )
 
-            # - Set the u value based on the calculated increment
-            mc.cutKey(motion_path + ".uValue")
-            print(increment)
-            print(idx)
+            # -- Set the u value based on the calculated increment. uValue is
+            # -- a doubleLinear attribute, so setAttr would read the fraction in
+            # -- the scene's linear unit (and reject it in a metre scene). The
+            # -- plug takes the internal value, which is the fraction itself.
+            cmds.cutKey(motion_path + ".uValue")
+            om.MSelectionList().add(motion_path + ".uValue").getPlug(0).setDouble(increment * idx)
 
-            print(increment * idx)
-            mc.setAttr(motion_path + ".uValue", _units.from_cm(increment * idx))
-
-            # -- The pathAnimaiton command is a pain - it adds a bunch
+            # -- The pathAnimation command is a pain - it adds a bunch
             # -- of keyframes. So we clear those off
-            mc.cutKey(upvector_transform.full_name(), attribute="translate")
-            mc.cutKey(upvector_transform.full_name(), attribute="rotate")
+            cmds.cutKey(upvector_transform.full_name(), attribute="translate")
+            cmds.cutKey(upvector_transform.full_name(), attribute="rotate")
 
             # -- Finally we store the upvector so that it is accessible.
             self.out_upvectors.append(upvector_transform)
@@ -274,7 +273,7 @@ class SimpleSplineSetup:
 
         # -- From the position list we can now build our curve
         self.out_curve = mref.get(
-            mc.curve(
+            cmds.curve(
                 point=positions,
                 degree=3,
             ),
@@ -285,7 +284,7 @@ class SimpleSplineSetup:
         self.out_curve.match_to(self.out_org)
         self.out_curve.set_parent(self.out_no_xform_org)
 
-        # -- Take the curve so that it is easy to find
+        # -- Tag the curve so that it is easy to find
         _tagging.tag(self.out_curve.full_name(), "spline_curve")
 
     def create_anchors(self):
@@ -321,13 +320,13 @@ class SimpleSplineSetup:
             if idx == len(anchors) - 1 and self.option_lock_end_orientations_to_control:
                 target = self.out_controls[-1]
 
-            # -- Constrain the target to the anchor
-            mc.parentConstraint(
+            # -- Constrain the anchor to the target
+            cmds.parentConstraint(
                 target.full_name(),
                 anchor.full_name(),
                 maintainOffset=True,
             )
-            mc.scaleConstraint(
+            cmds.scaleConstraint(
                 target.full_name(),
                 anchor.full_name(),
                 maintainOffset=True,
@@ -343,12 +342,12 @@ class SimpleSplineSetup:
         # -- Cycle our anchor points
         for idx in range(len(self.out_anchor_points)):
             target = self.out_anchor_points[idx]
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 target.full_name(),
                 self.in_joints[idx],
                 maintainOffset=True,
             )
-            mc.scaleConstraint(
+            cmds.scaleConstraint(
                 target.full_name(),
                 self.in_joints[idx],
                 maintainOffset=True,
@@ -385,7 +384,7 @@ class SimpleSplineSetup:
 
         # -- Orient the joint correctly
         for joint in replicated_chain:
-            mc.joint(
+            cmds.joint(
                 joint.full_name(),
                 edit=True,
                 orientJoint="xyz",
@@ -408,7 +407,7 @@ class SimpleSplineSetup:
 
             # -- So long as we're not the last anchor, we can setup the constraint
             if idx != len(replicated_chain) - 1:
-                mc.aimConstraint(
+                cmds.aimConstraint(
                     replicated_chain[idx+1].full_name(),
                     sub_tracer.full_name(),
                     aimVector=(0, 1, 0),
@@ -418,7 +417,7 @@ class SimpleSplineSetup:
                     maintainOffset=False,
                 )
             else:
-                mc.aimConstraint(
+                cmds.aimConstraint(
                     replicated_chain[idx-1].full_name(),
                     sub_tracer.full_name(),
                     aimVector=(0, -1, 0),
@@ -440,7 +439,7 @@ class SimpleSplineSetup:
         """
         # -- Create the ik handle
         ik_items = mref.get(
-            mc.ikHandle(
+            cmds.ikHandle(
                 startJoint=self.out_trace_joints[0].full_name(),
                 endEffector=self.out_trace_joints[-1].full_name(),
                 curve=self.out_curve.full_name(),
@@ -473,7 +472,7 @@ class SimpleSplineSetup:
         decompose_matrix.attr("outputScaleX").connect(scale_divider.attr("floatB"))
 
         scale_multiplier = mref.create("floatMath")
-        scale_multiplier.attr("operation").set(2) # Multiple
+        scale_multiplier.attr("operation").set(2) # Multiply
         scale_divider.attr("outFloat").connect(scale_multiplier.attr("floatA"))
         curve_info.attr("arcLength").connect(scale_multiplier.attr("floatB"))
 
@@ -515,8 +514,8 @@ class SimpleSplineSetup:
         # -- cluster from it. Sadly maya behaves in different ways with the
         # -- cluster command depending on what you have selected, hence
         # -- the selection call.
-        mc.select(f"{self.out_curve.full_name()}.cv[{point_index}]")
-        cluster_xform = mref.get(mc.cluster()[1])
+        cmds.select(f"{self.out_curve.full_name()}.cv[{point_index}]")
+        cluster_xform = mref.get(cmds.cluster()[1])
 
         cluster_xform.attr("visibility").set(False)
         _tagging.tag(cluster_xform.full_name(), f"CurveCluster")
@@ -529,9 +528,9 @@ class SimpleSplineSetup:
         Read out the position components of the matrix.
         """
         return [
-            _units.from_cm(matrix[-4]),
-            _units.from_cm(matrix[-3]),
-            _units.from_cm(matrix[-2]),
+            matrix[-4],
+            matrix[-3],
+            matrix[-2],
         ]
 
     def hide_mechanicals(self):
@@ -557,9 +556,9 @@ class SimpleSplineSetup:
             node = mref.get(node)
             draw_style = f"{node.full_name()}.drawStyle"
             visibility = f"{node.full_name()}.visibility"
-            if mc.objExists(draw_style):
-                mc.setAttr(draw_style, 2)
+            if cmds.objExists(draw_style):
+                cmds.setAttr(draw_style, 2)
                 continue
 
-            if mc.objExists(visibility):
-                mc.setAttr(visibility, False)
+            if cmds.objExists(visibility):
+                cmds.setAttr(visibility, False)

@@ -20,11 +20,14 @@ There are two ways to declare a tool:
 import os
 import sys
 import inspect
+import logging
 import functools
 
 import factories
 
 from . import utils
+
+log = logging.getLogger(__name__)
 
 
 class Tool:
@@ -206,7 +209,7 @@ class ToolBox(factories.Factory):
     _INSTANCE = None
 
     def __init__(self):
-        super(ToolBox, self).__init__(
+        super().__init__(
             plugin_identifier="identifier",
             versioning_identifier="version",
             abstract=Tool,
@@ -242,8 +245,8 @@ class ToolBox(factories.Factory):
 
         for identifier, version in sorted(set(keys)):
             if keys.count((identifier, version)) > 1:
-                print(
-                    f"Warning: {keys.count((identifier, version))} tools share the identifier "
+                log.warning(
+                    f"{keys.count((identifier, version))} tools share the identifier "
                     f"'{identifier}' (version {version}). Tool identifiers must be unique."
                 )
 
@@ -252,7 +255,7 @@ class ToolBox(factories.Factory):
         Re-searches the tool paths. Function tools are registered again as
         the factory forgets them during the reload.
         """
-        super(ToolBox, self).reload()
+        super().reload()
         self._register_function_tools()
         self._warn_duplicate_identifiers()
         self._claim_package_attribute()

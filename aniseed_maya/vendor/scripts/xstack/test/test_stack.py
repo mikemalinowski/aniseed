@@ -317,9 +317,10 @@ class TestUnitStack(unittest.TestCase):
         )
 
         for i in range(1, 10):
-            component = stack.add_component(
+            stack.add_component(
                 label="",
                 component_type="ComponentWithOption",
+                options={"test_option": "bar"},
             )
 
         stack.build_progressed.connect(self._increment_counter)
@@ -924,18 +925,14 @@ class TestImportSubtree(unittest.TestCase):
             component_type="MinimalComponent",
         )
 
-        # -- Capture stdout to verify a warning was printed.
-        import io
-        import contextlib
-
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
+        # -- Capture the log to verify a warning was given.
+        with self.assertLogs("xstack.stack", level="WARNING") as captured:
             dest_stack.import_subtree_under(
                 parent=target_parent,
                 filepath=filepath,
             )
 
-        output = buffer.getvalue()
+        output = "\n".join(captured.output)
         self.assertIn("duplicate_label", output)
         self.assertIn("label collision", output.lower())
 
@@ -973,6 +970,211 @@ class TestImportSubtree(unittest.TestCase):
         # -- existing_component should still be in the stack with the same UUID
         self.assertIn(existing_component, dest_stack.root_components)
         self.assertEqual(existing_component.uuid(), existing_uuid)
+
+
+# ------------------------------------------------------------------------------
+class TestBuildResults(unittest.TestCase):
+    """
+    Tests for how builds report failure, disabled hierarchies and nested builds.
+    """
+
+    def _make_stack(self):
+        stack = xstack.Stack(component_paths=[COMPONENT_PATH])
+        self.finished = []
+        self.failed = []
+        self.started = []
+        stack.build_finished.connect(self.finished.append)
+        stack.build_failed.connect(lambda component, details: self.failed.append(component))
+        stack.build_started.connect(lambda: self.started.append(True))
+        return stack
+
+    def test_run_returning_false_fails_the_build(self):
+        stack = self._make_stack()
+        component = stack.add_component(label="false", component_type="ReturnsFalseComponent")
+        after = stack.add_component(label="after", component_type="MinimalComponent")
+
+        self.assertFalse(stack.build())
+        self.assertEqual(component.status(), xstack.constants.Status.Failed)
+        self.assertEqual(after.status(), xstack.constants.Status.NotExecuted)
+        self.assertTrue(component.last_error())
+        self.assertEqual(self.finished, [False])
+        self.assertEqual(self.failed, [component])
+
+    def test_exception_reports_the_traceback(self):
+        stack = self._make_stack()
+        component = stack.add_component(label="fail", component_type="FailingComponent")
+        details = []
+        stack.build_failed.connect(lambda failed, text: details.append(text))
+
+        self.assertFalse(stack.build())
+        self.assertIn("Enforced Failure", details[0])
+        self.assertEqual(self.failed, [component])
+
+    def test_invalid_component_reports_failure(self):
+        stack = self._make_stack()
+        component = stack.add_component(label="invalid", component_type="InvalidComponent")
+
+        self.assertFalse(stack.build())
+        self.assertEqual(self.finished, [False])
+        self.assertEqual(self.failed, [component])
+
+    def test_success_emits_finished(self):
+        stack = self._make_stack()
+        stack.add_component(label="ok", component_type="MinimalComponent")
+
+        self.assertTrue(stack.build())
+        self.assertEqual(self.finished, [True])
+        self.assertEqual(self.failed, [])
+
+    def test_disabled_component_skips_its_children(self):
+        stack = self._make_stack()
+        parent = stack.add_component(label="parent", component_type="MinimalComponent")
+        child = stack.add_component(label="child", component_type="MinimalComponent", parent=parent)
+        grandchild = stack.add_component(label="grandchild", component_type="MinimalComponent", parent=child)
+        parent.set_enabled(False)
+
+        self.assertTrue(stack.build())
+        self.assertEqual(child.status(), xstack.constants.Status.NotExecuted)
+        self.assertEqual(grandchild.status(), xstack.constants.Status.NotExecuted)
+
+    def test_nested_build_leaves_the_outer_build_alone(self):
+        stack = self._make_stack()
+        first = stack.add_component(label="first", component_type="MinimalComponent")
+        runner = stack.add_component(
+            label="runner",
+            component_type="NestedBuildComponent",
+            options={"Target": "block"},
+        )
+        block = stack.add_component(label="block", component_type="MinimalComponent")
+        stack.add_component(label="inner", component_type="MinimalComponent", parent=block)
+
+        self.assertTrue(stack.build(build_up_to=runner))
+
+        # -- The nested build did not reset the status of the outer components,
+        # -- or emit the build signals part way through
+        self.assertEqual(first.status(), xstack.constants.Status.Success)
+        self.assertEqual(self.started, [True])
+        self.assertEqual(self.finished, [True])
+
+    def test_nested_failure_fails_the_outer_build(self):
+        stack = self._make_stack()
+        runner = stack.add_component(
+            label="runner",
+            component_type="NestedBuildComponent",
+            options={"Target": "block"},
+        )
+        after = stack.add_component(label="after", component_type="MinimalComponent")
+        block = stack.add_component(label="block", component_type="MinimalComponent")
+        inner = stack.add_component(label="inner", component_type="ReturnsFalseComponent", parent=block)
+
+        self.assertFalse(stack.build())
+        self.assertEqual(runner.status(), xstack.constants.Status.Failed)
+        self.assertEqual(after.status(), xstack.constants.Status.NotExecuted)
+
+        # -- The component which actually failed is the one reported
+        self.assertEqual(self.failed, [inner])
+        self.assertEqual(self.finished, [False])
+
+    def test_recursive_nested_builds_are_refused(self):
+        stack = self._make_stack()
+        block_a = stack.add_component(label="a", component_type="MinimalComponent")
+        stack.add_component(label="run b", component_type="NestedBuildComponent", options={"Target": "b"}, parent=block_a)
+        block_b = stack.add_component(label="b", component_type="MinimalComponent")
+        stack.add_component(label="run a", component_type="NestedBuildComponent", options={"Target": "a"}, parent=block_b)
+
+        self.assertFalse(stack.build(build_below=block_a))
+        self.assertEqual(self.finished, [False])
+
+
+# ------------------------------------------------------------------------------
+class TestLoading(unittest.TestCase):
+    """
+    Tests for loading data with missing component types, versions and unknown keys.
+    """
+
+    def _make_stack(self):
+        return xstack.Stack(component_paths=[COMPONENT_PATH])
+
+    def test_missing_component_keeps_its_data(self):
+        stack = self._make_stack()
+        root = stack.add_component(label="root", component_type="ComponentWithOption")
+        root.option("test_option").set("kept")
+        root.set_enabled(False)
+        stack.add_component(label="child", component_type="MinimalComponent", parent=root)
+
+        data = stack.serialise()
+        data["tree"][0]["component_type"] = "Not A Real Component"
+        data["tree"][0]["additional_data"] = {"anything": [1, 2]}
+        original = json.dumps(data)
+
+        loaded = self._make_stack()
+        with self.assertLogs("xstack.stack", level="WARNING"):
+            loaded.deserialise(json.loads(original))
+
+        placeholder = loaded.root_components[0]
+        self.assertIsInstance(placeholder, xstack.MissingComponent)
+        self.assertEqual(placeholder.missing_identifier, "Not A Real Component")
+        self.assertEqual(placeholder.children[0].label(), "child")
+
+        # -- Saving it again loses nothing
+        self.assertEqual(json.dumps(loaded.serialise()), original)
+
+    def test_missing_component_does_not_build(self):
+        stack = self._make_stack()
+        stack.add_component(label="root", component_type="MinimalComponent")
+        data = stack.serialise()
+        data["tree"][0]["component_type"] = "Not A Real Component"
+
+        loaded = self._make_stack()
+        loaded.deserialise(data)
+
+        with self.assertLogs("xstack.component", level="WARNING") as captured:
+            self.assertFalse(loaded.build())
+
+        self.assertIn("Not A Real Component", "\n".join(captured.output))
+
+    def test_switching_a_missing_component_keeps_matching_values(self):
+        stack = self._make_stack()
+        stack.add_component(label="root", component_type="ComponentWithOption", options={"test_option": "kept"})
+        data = stack.serialise()
+        data["tree"][0]["component_type"] = "Not A Real Component"
+
+        loaded = self._make_stack()
+        loaded.deserialise(data)
+        replaced = loaded.replace_component(loaded.root_components[0], "ComponentWithOption")
+
+        self.assertEqual(replaced.option("test_option").get(), "kept")
+
+    def test_older_data_is_migrated(self):
+        data = dict(
+            label="stack",
+            format="galaxy",
+            tree=[
+                dict(
+                    component_type="MigratingComponent",
+                    label="migrating",
+                    uuid="abc",
+                    inputs={},
+                    options={"Old Name": "value"},
+                    children=[],
+                ),
+            ],
+        )
+
+        stack = self._make_stack()
+        stack.deserialise(data)
+
+        component = stack.root_components[0]
+        self.assertEqual(component.option("New Name").get(), "value")
+        self.assertEqual(component.serialise()["version"], 2)
+
+    def test_unknown_option_is_reported(self):
+        stack = self._make_stack()
+
+        with self.assertLogs("xstack.stack", level="WARNING") as captured:
+            stack.add_component(label="opt", component_type="ComponentWithOption", options={"unknown": 1})
+
+        self.assertIn("unknown", "\n".join(captured.output))
 
 
 if __name__ == "__main__":

@@ -77,6 +77,7 @@ During a mirror, a mirrored component can use these helpers from its hooks:
                                            the mirrored hierarchy.
 """
 import re
+import logging
 
 import mref
 import qtility
@@ -84,6 +85,8 @@ import scribble
 import aniseed_toolkit
 from maya import cmds
 from xstack import address
+
+log = logging.getLogger(__name__)
 
 
 class MirrorMixin:
@@ -556,7 +559,7 @@ class MirrorMixin:
             mirrored_items = self._items_of(mirrored_components[original])
 
             if len(mirrored_items) != len(original_items[original]):
-                print(
+                log.warning(
                     f"Mirror : {mirrored_components[original].label()} has {len(mirrored_items)} items to "
                     f"mirror but {original.label()} has {len(original_items[original])}. "
                     f"Only the first {min(len(mirrored_items), len(original_items[original]))} "
@@ -569,11 +572,11 @@ class MirrorMixin:
                     continue
 
                 if original_item == mirrored_item:
-                    print(f"Mirror : {original_item} would be mirrored onto itself, skipping")
+                    log.warning(f"Mirror : {original_item} would be mirrored onto itself, skipping")
                     continue
 
                 if not mref.objExists(original_item) or not mref.objExists(mirrored_item):
-                    print(f"Mirror : cannot pair {original_item} with {mirrored_item}, skipping")
+                    log.warning(f"Mirror : cannot pair {original_item} with {mirrored_item}, skipping")
                     continue
 
                 transforms.append(original_item)

@@ -23,7 +23,7 @@ class _Attribute:
             hidden: bool = False,
             component=None,
     ):
-        super(_Attribute, self).__init__()
+        super().__init__()
 
         self._name: str = name
         self._value: typing.Any = value
@@ -148,7 +148,7 @@ class Option(_Attribute):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
-        super(Option, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     # ----------------------------------------------------------------------------------
     def address(self):
@@ -162,7 +162,7 @@ class Input(_Attribute):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, validate, *args, **kwargs):
-        super(Input, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._validate = validate
 
@@ -195,7 +195,7 @@ class Output(_Attribute):
 
     # ----------------------------------------------------------------------------------
     def __init__(self, is_default=False, *args, **kwargs):
-        super(Output, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._is_default = is_default
 
     def is_default(self):

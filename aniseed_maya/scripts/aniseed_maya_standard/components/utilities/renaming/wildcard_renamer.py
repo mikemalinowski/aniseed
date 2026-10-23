@@ -25,6 +25,7 @@ class WildCardRenamer(aniseed.RigComponent):
         self.declare_input(
             name="Search Under",
             value="",
+            validate=False,
         )
 
         self.declare_input(
@@ -40,6 +41,7 @@ class WildCardRenamer(aniseed.RigComponent):
         self.declare_input(
             name="With This",
             value="",
+            validate=False,
         )
 
     def input_widget(self, requirement_name: str) -> "PySide6.QWidget":

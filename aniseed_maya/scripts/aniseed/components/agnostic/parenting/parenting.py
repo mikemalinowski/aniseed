@@ -3,8 +3,11 @@ Provides the "Utility : Reparent" component, which parents a scene node under
 another node, or under the world if no new parent is given. A failed reparent
 is reported but does not fail the build.
 """
+import logging
 import crosswalk
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------------------
@@ -58,7 +61,7 @@ class ReParentComponent(aniseed.RigComponent):
     def run(self):
         """
         Parents the node under the new parent (or the world if no parent is
-        given). Any exception raised by the reparent is caught and printed, so
+        given). Any exception raised by the reparent is caught and logged, so
         a failed reparent does not fail the build.
         """
 
@@ -72,7 +75,7 @@ class ReParentComponent(aniseed.RigComponent):
             )
 
         except Exception:
-            print(
-                f"[aniseed] Reparent failed: "
-                f"{node_to_reparent!r} -> {new_parent!r}"
+            log.exception(
+                f"{self.label()} : Reparent failed, so {node_to_reparent!r} has not "
+                f"been parented under {new_parent!r}"
             )

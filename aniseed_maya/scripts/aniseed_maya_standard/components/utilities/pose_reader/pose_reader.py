@@ -5,8 +5,11 @@ transform's rotation and its distance to a stored target is remapped to a
 0-to-1 float attribute on the Attribute Host, reading 1.0 when the target
 orientation is reached.
 """
+import logging
 import mref
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 class RotationAxisReader(aniseed.RigComponent):
@@ -131,6 +134,28 @@ class RotationAxisReader(aniseed.RigComponent):
                 button_name="Set Target Transform",
                 func=self.user_func_set_target,
             )
+
+    def is_valid(self) -> bool:
+        """
+        Checks that both inputs and the Prefix are given and that Axis is one
+        of X, Y or Z.
+        """
+        for input_name in ("Transform To Track", "Attribute Host"):
+            if not self.input(input_name).get():
+                log.warning(f"{self.label()} : {input_name} is not set")
+                return False
+
+        if not self.option("Prefix").get():
+            log.warning(f"{self.label()} : Prefix is empty, so the pose attribute cannot be named")
+            return False
+
+        axis = self.option("Axis").get() or ""
+
+        if axis.upper() not in self.rotate_order_enum:
+            log.warning(f"{self.label()} : Axis {axis!r} is not one of X, Y or Z")
+            return False
+
+        return True
 
     def run(self):
         """
@@ -268,8 +293,15 @@ class RotationAxisReader(aniseed.RigComponent):
         Stores the current tracker transform, relative to the org, as the Target
         Matrix. Requires the rig to have been built so the outputs are set.
         """
-        org = mref.get(self.output("Org").get())
-        tracker = mref.get(self.output("Tracker").get())
+        org_name = self.output("Org").get()
+        tracker_name = self.output("Tracker").get()
+
+        if not org_name or not tracker_name or not mref.objExists(org_name) or not mref.objExists(tracker_name):
+            log.warning(f"{self.label()} : Build the rig before setting the target transform")
+            return
+
+        org = mref.get(org_name)
+        tracker = mref.get(tracker_name)
 
         temp_node = mref.create("transform", parent=org.full_name())
         temp_node.match_to(tracker)

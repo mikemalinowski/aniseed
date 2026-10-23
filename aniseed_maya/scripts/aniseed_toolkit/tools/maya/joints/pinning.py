@@ -1,5 +1,5 @@
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class IsPinnedTool(aniseed_toolkit.Tool):
@@ -21,7 +21,7 @@ class IsPinnedTool(aniseed_toolkit.Tool):
         Returns:
             True if the joint is pinned
         """
-        return aniseed_toolkit.rig.pinning.is_pinned(joint or mc.ls(selection=True)[0])
+        return aniseed_toolkit.rig.pinning.is_pinned(joint or cmds.ls(selection=True)[0])
 
 
 @aniseed_toolkit.tool(
@@ -42,7 +42,7 @@ def create_pins(joints: list[str] = None) -> list[str]:
     Returns:
         List of created pins.
     """
-    return aniseed_toolkit.rig.pinning.pin(joints or mc.ls(selection=True))
+    return aniseed_toolkit.rig.pinning.pin(joints or cmds.ls(selection=True))
 
 
 @aniseed_toolkit.tool(
@@ -62,7 +62,7 @@ def get_joint_from_pin(item: str = "") -> str or None:
     Returns:
         The joint being pinned (or None if no joint was found)
     """
-    return aniseed_toolkit.rig.pinning.get_pinned_nodes(item or mc.ls(selection=True)[0])
+    return aniseed_toolkit.rig.pinning.get_pinned_nodes(item or cmds.ls(selection=True)[0])
 
 
 @aniseed_toolkit.tool(
@@ -82,7 +82,7 @@ def get_pin_from_node(item: str = "") -> str or None:
     Returns:
         The pin control
     """
-    return aniseed_toolkit.rig.pinning.get_pin(item or mc.ls(selection=True)[0])
+    return aniseed_toolkit.rig.pinning.get_pin(item or cmds.ls(selection=True)[0])
 
 
 @aniseed_toolkit.tool(
@@ -101,7 +101,7 @@ def pin_hierarchy(root: str = None) -> list[str]:
     Returns:
         List of created pin controls
     """
-    return aniseed_toolkit.rig.pinning.pin_hierarchy(root or mc.ls(selection=True)[0])
+    return aniseed_toolkit.rig.pinning.pin_hierarchy(root or cmds.ls(selection=True)[0])
 
 
 @aniseed_toolkit.tool(
@@ -120,4 +120,4 @@ def remove_pins(items: list[str] = None) -> None:
     Returns:
         None
     """
-    return aniseed_toolkit.rig.pinning.remove_pins(items or mc.ls(selection=True))
+    return aniseed_toolkit.rig.pinning.remove_pins(items or cmds.ls(selection=True))

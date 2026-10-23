@@ -1,6 +1,6 @@
 import aniseed
 import aniseed_toolkit
-import maya.cmds as mc
+from maya import cmds
 
 
 class GetRigTool(aniseed_toolkit.Tool):
@@ -17,7 +17,7 @@ class GetRigTool(aniseed_toolkit.Tool):
             node: The node to attempt to find the rig for
 
         Returns:
-            node name
+            The aniseed.Rig the node belongs to, or None
         """
         return aniseed_toolkit.rig.get(node)
 
@@ -30,12 +30,13 @@ class GetRigTool(aniseed_toolkit.Tool):
 )
 def get_by_location(controls: list[str] or None = None) -> list[str]:
     """
-    This will return the opposite controls for the given controls
+    This will return every rig control which shares the location (side) of
+    the first of the given controls
 
     Args:
-        controls: List of controls to get the opposites for. If none are
-            given then the selection will be used.
+        controls: List of controls, of which the first defines the location.
+            If none are given then the selection will be used.
     """
     return aniseed_toolkit.rig.controls.controls_by_location(
-        controls or mc.ls(selection=True)
+        controls or cmds.ls(selection=True)
     )

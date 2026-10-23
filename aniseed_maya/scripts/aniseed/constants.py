@@ -1,5 +1,5 @@
 # -- When in studio environments, the developers may want to keep their
-# -- own component code in a seperate location to open source code. To
+# -- own component code in a separate location to open source code. To
 # -- make this achievable we expose an environment variable which we will
 # -- always look at for paths to find components within.
 RIG_COMPONENTS_PATHS_ENVVAR = "ANISEED_RIG_COMPONENT_PATHS"
@@ -11,3 +11,6 @@ RIG_COMPONENTS_PATHS_ENVVAR = "ANISEED_RIG_COMPONENT_PATHS"
 ANISEED_PACKAGE_PATHS_ENVVAR = "ANISEED_PACKAGE_PATHS"
 
 website = "https://github.com/mikemalinowski/aniseed"
+
+# -- The version of aniseed. This is stored in every recipe.
+VERSION = "4.0.0"

@@ -57,7 +57,7 @@ class ConnectAttr(aniseed.RigComponent):
         self.declare_option(
             name="Reverse",
             value=False,
-            description="If true, an existing connection into the destination attribute is broken before the new one is made.",
+            description="If true, the connection is routed through a reverse node, so the destination receives one minus the source value.",
         )
 
     def input_widget(self, requirement_name: str):

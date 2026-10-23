@@ -5,7 +5,7 @@ class CreateAimHierarchy(aniseed_toolkit.Tool):
     identifier = "Create Aim Hierarchy"
     classification = "Rigging"
     categories = [
-        "Visibility",
+        "Rigging",
     ]
 
     def run(self, joints: list[str], constrain: bool = True) -> list[str]:

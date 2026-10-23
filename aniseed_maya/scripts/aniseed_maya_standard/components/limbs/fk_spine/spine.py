@@ -5,12 +5,15 @@ drives the hip without affecting the controls above it. It can generate a
 spine joint chain of a requested length when added to the stack.
 """
 import os
+import logging
 import mref
 import typing
 import aniseed
 import qtility
 import aniseed_toolkit
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class FKSpineComponent(aniseed.RigComponent, MirrorMixin):
@@ -31,7 +34,7 @@ class FKSpineComponent(aniseed.RigComponent, MirrorMixin):
         alignment and joint count options, and the hip and chest control
         outputs.
         """
-        super(FKSpineComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -131,18 +134,23 @@ class FKSpineComponent(aniseed.RigComponent, MirrorMixin):
     def is_valid(self):
         """
         Checks that the hip and chest joints exist and that the chain between
-        them faces along positive X (with a 20 degree tolerance).
+        them faces along positive X. The summed joint translations may stray
+        up to 20 scene units off the X axis.
         """
 
         hip = self.input("Hip").get()
         chest = self.input("Chest").get()
 
+        if not hip or not chest:
+            log.warning(f"{self.label()} : Hip and Chest must both be set")
+            return False
+
         if not mref.objExists(hip):
-            print(f"{hip} does not exist")
+            log.warning(f"{hip} does not exist")
             return False
 
         if not mref.objExists(chest):
-            print(f"{chest} does not exist")
+            log.warning(f"{chest} does not exist")
             return False
 
         facing_dir = aniseed_toolkit.scene.joints.get_chain_facing_direction(
@@ -152,7 +160,7 @@ class FKSpineComponent(aniseed.RigComponent, MirrorMixin):
         )
 
         if facing_dir != facing_dir.PositiveX:
-            print("The spine joints are expected to point along positive x")
+            log.warning("The spine joints are expected to point along positive x")
             return False
 
         return True
@@ -275,11 +283,19 @@ class FKSpineComponent(aniseed.RigComponent, MirrorMixin):
             if not joint_count:
                 return
 
-            joint_count = int(joint_count)
+            try:
+                joint_count = int(joint_count)
+            except ValueError:
+                log.warning(f"'{joint_count}' is not a whole number of joints")
+                return
+
+        if joint_count < 2:
+            log.warning("A spine needs at least two joints (the hip and the chest)")
+            return
 
         parent = aniseed_toolkit.core.selection.first_selected()
 
-        increment = aniseed_toolkit.core.units.to_cm(25) / (joint_count - 1)
+        increment = 25 / (joint_count - 1)
 
         hip_joint = self._create_joint("Hip", parent)
         self.input("Hip").set(hip_joint)

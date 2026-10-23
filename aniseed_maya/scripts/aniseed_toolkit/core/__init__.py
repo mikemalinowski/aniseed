@@ -1,6 +1,6 @@
 """
 The lowest layer of the toolkit: helpers with no rigging concepts, such as
-unit conversion, naming, maths, attribute utilities and selection queries.
+naming, maths, attribute utilities and selection queries.
 
 Modules in this layer only import from the standard library, Maya and mref.
 """
@@ -10,7 +10,6 @@ from . import direction
 from . import maths
 from . import naming
 from . import selection
-from . import units
 
 __all__ = [
     "api",
@@ -19,7 +18,6 @@ __all__ = [
     "maths",
     "naming",
     "selection",
-    "units",
 ]
 
 

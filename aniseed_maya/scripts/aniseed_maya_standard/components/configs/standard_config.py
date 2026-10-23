@@ -3,9 +3,12 @@ Provides the "Rig Configuration : Standard" naming configuration, which
 produces names in the form CLASSIFICATION_Description_##_LOCATION (for
 example CTL_LeftArm_01_LF) and extracts each token back out of such names.
 """
+import logging
 import mref
 import aniseed
 from aniseed.config import NamingConventionError
+
+log = logging.getLogger(__name__)
 
 
 class StandardConfig(aniseed.RigConfiguration):
@@ -55,7 +58,9 @@ class StandardConfig(aniseed.RigConfiguration):
         If ``location`` or ``classification`` matches the name of a
         class attribute (e.g. ``"left"`` or ``"control"``), the
         corresponding token is looked up on ``self``. The description
-        is CamelCased on underscore boundaries.
+        is CamelCased on underscore boundaries, ignoring empty parts (from
+        leading, trailing or doubled underscores). An empty description is
+        replaced with ``Unnamed`` so the name keeps all four tokens.
 
         When ``unique`` is True, the counter is incremented until the
         resulting name does not exist in the current Maya scene.
@@ -69,7 +74,14 @@ class StandardConfig(aniseed.RigConfiguration):
         formatted_description = "".join(
             part[0].upper() + part[1:]
             for part in description.split("_")
+            if part
         )
+
+        if not formatted_description:
+            log.warning(
+                f"No description given for a {classification} name, using 'Unnamed'"
+            )
+            formatted_description = "Unnamed"
 
         while True:
             formatted_counter = str(counter).rjust(2, "0")

@@ -1,5 +1,9 @@
+import logging
+
 import aniseed
 import aniseed_toolkit
+
+log = logging.getLogger(__name__)
 
 
 class DistanceBetweenTool(aniseed_toolkit.Tool):
@@ -27,16 +31,20 @@ class DistanceBetweenTool(aniseed_toolkit.Tool):
         Args:
             node_a: The object to measure from
             node_b: The object to measure to
-            print_result: If true, the result will be printed
+            print_result: If true, the result will be logged
 
         Returns:
             The distance between two objects
         """
-        return aniseed_toolkit.core.maths.distance_between(
+        distance = aniseed_toolkit.core.maths.distance_between(
             node_a=node_a,
             node_b=node_b,
-            print_result=True,
         )
+
+        if print_result:
+            log.info(f"Distance between {node_a} and {node_b} is {distance}")
+
+        return distance
 
 
 class FactorBetween(aniseed_toolkit.Tool):
@@ -61,12 +69,13 @@ class FactorBetween(aniseed_toolkit.Tool):
         Returns:
             The factor for how close the given node is between the from_this and to_this
         """
-        return aniseed_toolkit.core.maths.factor_between(
+        factor = aniseed_toolkit.core.maths.factor_between(
             node=node,
             from_this=from_this,
             to_this=to_this,
-            print_result=True,
         )
+        log.info(f"Factor of {node} between {from_this} and {to_this} is {factor}")
+        return factor
 
 
 @aniseed_toolkit.tool(
@@ -86,13 +95,17 @@ def direction_between(node_a: str = "",
     Args:
         node_a: The object to measure from
         node_b: The object to measure to
-        print_result: If true, the result will be printed
+        print_result: If true, the result will be logged
 
     Returns:
         The direction vector between the two nodes
     """
-    return aniseed_toolkit.core.maths.direction_between(
+    direction = aniseed_toolkit.core.maths.direction_between(
         node_a=node_a,
         node_b=node_b,
-        print_result=True,
     )
+
+    if print_result:
+        log.info(f"Direction between {node_a} and {node_b} is {direction}")
+
+    return direction

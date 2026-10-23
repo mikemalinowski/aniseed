@@ -7,6 +7,7 @@ joint it drives (or its children), otherwise the rig will cycle.
 """
 import os
 import re
+import logging
 import mref
 import typing
 import aniseed
@@ -15,6 +16,8 @@ import aniseed_toolkit
 from maya import cmds
 from maya import mel
 from aniseed_maya_standard.mixins import MirrorMixin
+
+log = logging.getLogger(__name__)
 
 
 class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
@@ -43,7 +46,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         naming and joint/patch creation options and the control and follicle
         outputs.
         """
-        super(StickyPatchComponent, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self.declare_input(
             name="Parent",
@@ -113,7 +116,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         """
         Exposes the joint and patch creation and editing tools
         """
-        menu = super(StickyPatchComponent, self).user_functions()
+        menu = super().user_functions()
 
         if not self.input("Joint To Drive").get():
             menu["Create Joint"] = self.user_func_create_skeleton
@@ -211,6 +214,8 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         follicle.attr("parameterV").set(v)
 
         follicle_xform.attr("inheritsTransform").set(False)
+        follicle.attr("visibility").set(False)
+
         return follicle.name()
 
     def user_func_create_skeleton(self, create_patch=False):
@@ -281,16 +286,12 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
 
         # -- Finally, we want to check if there are already components in the rig
         # -- with this label and form an identifier.
-        # -- Note: The existing labels are tested without the space between the
-        # -- label and the counter, but the label is returned with one - so the
-        # -- counter does not increment for existing labels. This is preserved
-        # -- as it is existing behaviour.
         existing_labels = {
             component.label()
             for component in self.rig.components(of_type=self.identifier)
         }
         counter = 1
-        while f"{label}{counter:02d}" in existing_labels:
+        while f"{label} {counter:02d}" in existing_labels:
             counter += 1
         return f"{label} {counter:02d}"
 
@@ -299,11 +300,17 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         Matches the patch surface to the joint, providing the patch has
         not yet been skinned.
         """
-        surface_node = mref.get(self.input("Geometry Patch").get())
+        patch = self.input("Geometry Patch").get()
+
+        if not patch or not mref.objExists(patch):
+            log.warning("No patch surface defined")
+            return
+
+        surface_node = mref.get(patch)
         surface_shape = surface_node.shape()
 
         if not surface_shape:
-            print("No shape defined")
+            log.warning("No shape defined")
             return
 
         has_skin = mref.listConnections(
@@ -313,7 +320,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         )
 
         if has_skin:
-            print("Cannot match transform when the patch has a skin")
+            log.warning("Cannot match transform when the patch has a skin")
             return
 
         surface_node.match_to(self.input("Joint To Drive").get())
@@ -335,11 +342,11 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
         surface_node = self.input("Geometry Patch").get()
 
         if not joint:
-            print("No joint defined")
+            log.warning("No joint defined")
             return
 
         if not surface_node:
-            print("No surface node defined")
+            log.warning("No surface node defined")
             return
 
         joint = mref.get(joint)
@@ -352,7 +359,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
                 break
 
         if not joint_root:
-            print("Could not find root joint")
+            log.warning("Could not find root joint")
             return
 
         joints_to_omit = [joint] + joint.children(recursive=True, node_type="joint")
@@ -462,7 +469,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
 
         degree_u, degree_v = patch_data["degree"]
         if degree_u != degree_v:
-            print(
+            log.warning(
                 f"Sticky Patch : {self.label()} patch had degree {degree_u} in u and "
                 f"{degree_v} in v, it is recreated with degree {degree_u} in both"
             )
@@ -510,7 +517,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
                 u, v = divmod(index, cv_count_v)
                 cmds.xform(f"{shape}.cv[{u}][{v}]", translation=position, objectSpace=True)
         else:
-            print(
+            log.warning(
                 f"Sticky Patch : {self.label()} stored {len(patch_data['cvs'])} cvs but the "
                 f"recreated patch has {cv_count_u * cv_count_v}, so its cvs are not restored"
             )
@@ -526,7 +533,7 @@ class StickyPatchComponent(aniseed.RigComponent, MirrorMixin):
             ]
 
             if missing:
-                print(
+                log.warning(
                     f"Sticky Patch : {self.label()} patch is not re-skinned, as these "
                     f"influences do not exist: {missing}. Use 'Skin Patch To Skeleton' "
                     f"once they do."
@@ -629,7 +636,7 @@ class AngledStickyPatchComponent(StickyPatchComponent):
         Builds the standard sticky patch and then inserts an aim based
         resolver between the follicle and the control.
         """
-        super(AngledStickyPatchComponent, self).run()
+        super().run()
 
         descriptive = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()

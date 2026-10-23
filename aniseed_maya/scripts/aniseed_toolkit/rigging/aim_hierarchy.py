@@ -2,7 +2,7 @@
 Aim hierarchies: a transform per joint where each one holds a constraint host
 which aims at the next transform, optionally driving the joints.
 """
-import maya.cmds as mc
+from maya import cmds
 
 
 def create_aim_hierarchy(joints: list[str], constrain: bool = True) -> list[str]:
@@ -23,12 +23,12 @@ def create_aim_hierarchy(joints: list[str], constrain: bool = True) -> list[str]
     controls = []
 
     for idx, joint in enumerate(joints):
-        control = mc.createNode("transform", name=f"Control{idx}")
+        control = cmds.createNode("transform", name=f"Control{idx}")
 
-        mc.xform(
+        cmds.xform(
             control,
             worldSpace=True,
-            matrix=mc.xform(
+            matrix=cmds.xform(
                 joint,
                 worldSpace=True,
                 matrix=True,
@@ -43,18 +43,18 @@ def create_aim_hierarchy(joints: list[str], constrain: bool = True) -> list[str]
 
     for idx in range(len(controls)):
 
-        constraint_host = mc.createNode(
+        constraint_host = cmds.createNode(
             "transform",
             name=f"CosntraintHost{idx}",
         )
-        mc.parent(
+        cmds.parent(
             constraint_host,
             controls[idx],
         )
-        mc.xform(
+        cmds.xform(
             constraint_host,
             worldSpace=True,
-            matrix=mc.xform(
+            matrix=cmds.xform(
                 controls[idx],
                 query=True,
                 worldSpace=True,
@@ -67,7 +67,7 @@ def create_aim_hierarchy(joints: list[str], constrain: bool = True) -> list[str]
 
         control_to_aim_at = controls[idx + 1]
 
-        mc.aimConstraint(
+        cmds.aimConstraint(
             control_to_aim_at,
             constraint_host,
             aimVector=[1, 0, 0],
@@ -77,7 +77,7 @@ def create_aim_hierarchy(joints: list[str], constrain: bool = True) -> list[str]
         )
 
         if constrain:
-            mc.parentConstraint(
+            cmds.parentConstraint(
                 constraint_host,
                 joints[idx],
                 maintainOffset=True,
