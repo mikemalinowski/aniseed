@@ -258,7 +258,18 @@ class AppWidget(QtWidgets.QWidget):
         :return:
         """
         return list()
-    
+
+    # ----------------------------------------------------------------------------------
+    def edit_menu_actions(self) -> typing.Dict[str, typing.Callable]:
+        """
+        This function may be re-implemented when subclassing to add entries to
+        the Edit menu, below Preferences.
+
+        When re-implementing you should return a dictionary of menu labels to
+        the callables they trigger
+        """
+        return dict()
+
     # ----------------------------------------------------------------------------------
     def set_active_stack(self, stack: typing.Optional["xstack.Stack"]):
         """
@@ -360,6 +371,21 @@ class AppWidget(QtWidgets.QWidget):
                 self.app_config,
             ),
         )
+
+        # -- Add any entries the application adds to the Edit menu
+        edit_actions = self.edit_menu_actions()
+
+        if edit_actions:
+            settings_menu.addSeparator()
+
+            for label, function in edit_actions.items():
+                edit_action = settings_menu.addAction(label)
+                edit_action.triggered.connect(
+                    functools.partial(
+                        function,
+                    )
+                )
+
         self.menu_bar.addMenu(settings_menu)
 
         for additional_menu in self.additional_menus():

@@ -1,0 +1,635 @@
+{
+    "label": "DevExampleRig",
+    "tree": [
+        {
+            "component_type": "Rig Configuration : Dev Example",
+            "version": 1,
+            "inputs": {},
+            "options": {},
+            "label": "Configuration",
+            "uuid": "9619c121-9753-4624-a2f2-f144429350d7",
+            "enabled": true,
+            "additional_data": {},
+            "children": []
+        },
+        {
+            "component_type": "Stack : Execution Block",
+            "version": 1,
+            "inputs": {},
+            "options": {},
+            "label": "Build Rig",
+            "uuid": "7032ce35-18c2-4fae-a212-f8c1167bf507",
+            "enabled": true,
+            "additional_data": {},
+            "children": [
+                {
+                    "component_type": "Utility : Delete Children",
+                    "version": 1,
+                    "inputs": {
+                        "Node": "md_org_skeleton_01"
+                    },
+                    "options": {
+                        "Include Self": false
+                    },
+                    "label": "Clear Skeleton",
+                    "uuid": "100081b2-9007-4e3e-b709-7573a82e6980",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": []
+                },
+                {
+                    "component_type": "Utility : Delete Children",
+                    "version": 1,
+                    "inputs": {
+                        "Node": "md_org_controls_01"
+                    },
+                    "options": {
+                        "Include Self": false
+                    },
+                    "label": "Clear Controls",
+                    "uuid": "96ec7919-cd1f-4c96-95c7-1810e1fe0dd2",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": []
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Basics",
+                    "uuid": "78c2319a-91b3-449c-9b37-85f2d6abf033",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Minimal",
+                            "version": 1,
+                            "inputs": {},
+                            "options": {},
+                            "label": "Minimal",
+                            "uuid": "a41fbc96-d027-4d67-ad60-da0a0e4194ce",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Options And Inputs",
+                            "version": 1,
+                            "inputs": {
+                                "Nodes": [
+                                    "lf_gde_chainStart_01",
+                                    "lf_gde_chainEnd_01",
+                                    "rt_gde_chainStart_01",
+                                    "rt_gde_chainEnd_01",
+                                    "md_gde_templateStart_01",
+                                    "md_gde_templateEnd_01"
+                                ]
+                            },
+                            "options": {
+                                "Attribute Name": "displayHandle",
+                                "Value": 1.0
+                            },
+                            "label": "Show Guide Handles",
+                            "uuid": "a9ec3b97-2869-49d8-a33e-9e66e4d4394b",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Validation",
+                            "version": 1,
+                            "inputs": {
+                                "Node": "md_org_guides_01"
+                            },
+                            "options": {
+                                "Fail On Purpose": "Never"
+                            },
+                            "label": "Validation",
+                            "uuid": "b5bddca4-eeb7-41a2-9938-442a15bbe401",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Lifecycle Logger",
+                            "version": 1,
+                            "inputs": {},
+                            "options": {
+                                "Message": "Hello from the lifecycle logger"
+                            },
+                            "label": "Lifecycle Logger",
+                            "uuid": "2bdce060-99ee-4761-8b8b-abfe7c18c070",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Create",
+                    "uuid": "f3cb5695-80f6-40a8-97f1-7bf1e79fa5a5",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Joint Chain (cmds)",
+                            "version": 1,
+                            "inputs": {
+                                "Parent": "md_org_skeleton_01",
+                                "Start": "lf_gde_chainStart_01",
+                                "End": "lf_gde_chainEnd_01"
+                            },
+                            "options": {
+                                "Description": "chain",
+                                "Location": "lf",
+                                "Joint Count": 4
+                            },
+                            "label": "Joint Chain (cmds)",
+                            "uuid": "6a97d1ff-a7be-4d64-9cf7-06dc526c0a29",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Joint Chain (OpenMaya)",
+                            "version": 1,
+                            "inputs": {
+                                "Parent": "md_org_skeleton_01",
+                                "Start": "rt_gde_chainStart_01",
+                                "End": "rt_gde_chainEnd_01"
+                            },
+                            "options": {
+                                "Description": "chain",
+                                "Location": "rt",
+                                "Joint Count": 4
+                            },
+                            "label": "Joint Chain (OpenMaya)",
+                            "uuid": "5f2dbf39-2c9e-4a9e-ba41-64acb37a9ee3",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Simple Control",
+                            "version": 1,
+                            "inputs": {
+                                "Parent": "md_org_controls_01",
+                                "Joint to Drive": "[Joint Chain (cmds)].[output].[Root Joint]"
+                            },
+                            "options": {
+                                "Description": "demo",
+                                "Location": "lf",
+                                "Radius": 2.0,
+                                "Align To World": false,
+                                "Drive Joint": true
+                            },
+                            "label": "Simple Control",
+                            "uuid": "94b82477-7f35-435a-8dfe-c6c6102d2640",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Utility Network",
+                            "version": 1,
+                            "inputs": {
+                                "Start": "[Simple Control].[output].[Control]",
+                                "End": "rt_gde_chainEnd_01",
+                                "Driven Node": "[Joint Chain (OpenMaya)].[output].[Root Joint]"
+                            },
+                            "options": {
+                                "Driven Attribute": "scaleX",
+                                "Description": "stretch",
+                                "Location": "rt"
+                            },
+                            "label": "Utility Network",
+                            "uuid": "578dc302-fe04-426f-95db-69335e39f005",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Modify",
+                    "uuid": "2cb08fe1-05b3-4cf1-b718-fc84eafd9b53",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Colour Nodes (cmds)",
+                            "version": 1,
+                            "inputs": {
+                                "Nodes": "[Simple Control].[output].[Control]"
+                            },
+                            "options": {
+                                "Colour": [
+                                    255,
+                                    170,
+                                    0
+                                ],
+                                "Apply To Shapes": true
+                            },
+                            "label": "Colour Nodes (cmds)",
+                            "uuid": "3e29f883-4e69-4c67-88c2-74c1edeacdc4",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Lock And Hide (OpenMaya)",
+                            "version": 1,
+                            "inputs": {
+                                "Nodes": "[Joint Chain (OpenMaya)].[output].[Joints]"
+                            },
+                            "options": {
+                                "Attributes": [
+                                    "translate",
+                                    "rotate",
+                                    "visibility"
+                                ],
+                                "Lock": true,
+                                "Hide": true
+                            },
+                            "label": "Lock And Hide (OpenMaya)",
+                            "uuid": "de3f661c-a13b-4bcf-8028-3e825e9e22a6",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Data And Extending",
+                    "uuid": "8cfc78f1-9047-4310-8349-8ee52b0e7201",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Stored Values",
+                            "version": 2,
+                            "inputs": {
+                                "Nodes": "[Simple Control].[output].[Control]"
+                            },
+                            "options": {
+                                "Attributes": [
+                                    "translateY"
+                                ],
+                                "Capture": null,
+                                "_Stored Values": {
+                                    "lf_ctl_demo_01": {
+                                        "translateY": 2.0
+                                    }
+                                }
+                            },
+                            "label": "Stored Values",
+                            "uuid": "508afd2a-9898-4a1d-b0af-0e2a8fe5050b",
+                            "enabled": true,
+                            "additional_data": {
+                                "capture_info": {}
+                            },
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Custom Widget",
+                            "version": 1,
+                            "inputs": {
+                                "Joints": "[Joint Chain (cmds)].[output].[Joints]"
+                            },
+                            "options": {
+                                "Joint Radius": 2.0,
+                                "_Slider Range": [
+                                    0.1,
+                                    10.0
+                                ]
+                            },
+                            "label": "Custom Widget",
+                            "uuid": "7854e4ee-8f8e-4cf0-8ee4-0ee5f90212ed",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Using A Mixin",
+                            "version": 1,
+                            "inputs": {
+                                "Nodes": "[Joint Chain (cmds)].[output].[Joints]"
+                            },
+                            "options": {
+                                "Tag": "dev_example"
+                            },
+                            "label": "Using A Mixin",
+                            "uuid": "a7a5d6e5-63ed-4f9a-b80e-e1a55a01bd06",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        }
+                    ]
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Composite",
+                    "uuid": "216d1160-cfd9-4f86-af8a-4b9562d8eeb2",
+                    "enabled": true,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Add Child Components",
+                            "version": 1,
+                            "inputs": {
+                                "Start Guide": "md_gde_templateStart_01",
+                                "End Guide": "md_gde_templateEnd_01",
+                                "Skeleton Parent": "md_org_skeleton_01",
+                                "Control Parent": "md_org_controls_01"
+                            },
+                            "options": {
+                                "Description": "template",
+                                "Add Children On Enter Stack": true
+                            },
+                            "label": "Template",
+                            "uuid": "bad0a01b-2ed3-413e-8976-287c6ebafc2a",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": [
+                                {
+                                    "component_type": "Dev Example : Joint Chain (cmds)",
+                                    "version": 1,
+                                    "inputs": {
+                                        "Parent": "[Template].[input].[Skeleton Parent]",
+                                        "Start": "[Template].[input].[Start Guide]",
+                                        "End": "[Template].[input].[End Guide]"
+                                    },
+                                    "options": {
+                                        "Description": "template_chain",
+                                        "Location": "md",
+                                        "Joint Count": 4
+                                    },
+                                    "label": "Template Chain",
+                                    "uuid": "51b641a6-edcf-4e84-ab55-c10b2186459e",
+                                    "enabled": true,
+                                    "additional_data": {},
+                                    "children": []
+                                },
+                                {
+                                    "component_type": "Dev Example : Simple Control",
+                                    "version": 1,
+                                    "inputs": {
+                                        "Parent": "[Template].[input].[Control Parent]",
+                                        "Joint to Drive": "[Template Chain].[output].[Root Joint]"
+                                    },
+                                    "options": {
+                                        "Description": "template",
+                                        "Location": "md",
+                                        "Radius": 2.0,
+                                        "Align To World": false,
+                                        "Drive Joint": true
+                                    },
+                                    "label": "Template Control",
+                                    "uuid": "6cd29621-9bec-4adb-a722-75a63ed6550e",
+                                    "enabled": true,
+                                    "additional_data": {},
+                                    "children": []
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "component_type": "Stack : Organiser",
+                    "version": 1,
+                    "inputs": {},
+                    "options": {},
+                    "label": "Publish (enable to try)",
+                    "uuid": "6bb11bf5-2d76-4908-99dd-9a38ab4723bd",
+                    "enabled": false,
+                    "additional_data": {},
+                    "children": [
+                        {
+                            "component_type": "Dev Example : Save Scene Version",
+                            "version": 1,
+                            "inputs": {},
+                            "options": {
+                                "Output Folder": "",
+                                "Base Name": "",
+                                "File Type": "mayaAscii"
+                            },
+                            "label": "Save Scene Version",
+                            "uuid": "6a33fba0-3657-498d-98aa-ccf6bf7c7b0c",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        },
+                        {
+                            "component_type": "Dev Example : Publish Rig",
+                            "version": 1,
+                            "inputs": {
+                                "FBX Roots": [
+                                    "md_org_skeleton_01"
+                                ],
+                                "Nodes To Delete": [
+                                    "md_org_controls_01"
+                                ]
+                            },
+                            "options": {
+                                "Publish Root": "",
+                                "Asset Name": "",
+                                "Save Work Scene": true,
+                                "Export Recipe": true,
+                                "Export FBX": true,
+                                "Clean Before Export": true,
+                                "Fail On Pre-Flight Issues": false,
+                                "Publish When": "After Successful Build"
+                            },
+                            "label": "Publish Rig",
+                            "uuid": "7fc72483-9f94-4c2c-8f17-a41e8e11c58e",
+                            "enabled": true,
+                            "additional_data": {},
+                            "children": []
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "format": "galaxy",
+    "versions": {
+        "aniseed": "4.0.0",
+        "packages": {
+            "aniseed_maya_dev_examples": "1.0.0",
+            "aniseed_maya_standard": "1.0.0"
+        }
+    },
+    "additional_data": {
+        "hierarchy": {
+            "lf_gde_chainStart_01": {
+                "name": "lf_gde_chainStart_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": 2.0,
+                    "translateY": 10.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "lf_gde_chainEnd_01": {
+                "name": "lf_gde_chainEnd_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": 12.0,
+                    "translateY": 12.0,
+                    "translateZ": 1.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "rt_gde_chainStart_01": {
+                "name": "rt_gde_chainStart_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": -2.0,
+                    "translateY": 10.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "rt_gde_chainEnd_01": {
+                "name": "rt_gde_chainEnd_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": -12.0,
+                    "translateY": 12.0,
+                    "translateZ": 1.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "md_gde_templateStart_01": {
+                "name": "md_gde_templateStart_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": 0.0,
+                    "translateY": 2.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "md_gde_templateEnd_01": {
+                "name": "md_gde_templateEnd_01",
+                "parent": "md_org_guides_01",
+                "attributes": {
+                    "translateX": 0.0,
+                    "translateY": 2.0,
+                    "translateZ": 10.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "md_org_guides_01": {
+                "name": "md_org_guides_01",
+                "parent": null,
+                "attributes": {
+                    "translateX": 0.0,
+                    "translateY": 0.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "md_org_skeleton_01": {
+                "name": "md_org_skeleton_01",
+                "parent": null,
+                "attributes": {
+                    "translateX": 0.0,
+                    "translateY": 0.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            },
+            "md_org_controls_01": {
+                "name": "md_org_controls_01",
+                "parent": null,
+                "attributes": {
+                    "translateX": 0.0,
+                    "translateY": 0.0,
+                    "translateZ": 0.0,
+                    "rotateX": 0.0,
+                    "rotateY": 0.0,
+                    "rotateZ": 0.0,
+                    "scaleX": 1.0,
+                    "scaleY": 1.0,
+                    "scaleZ": 1.0
+                },
+                "type": "transform",
+                "root_transform_data": {}
+            }
+        }
+    }
+}

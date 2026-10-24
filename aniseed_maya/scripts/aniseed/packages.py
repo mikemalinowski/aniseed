@@ -15,6 +15,12 @@ optional folders:
 Packages are searched for in each path of the ANISEED_PACKAGE_PATHS
 environment variable, and then alongside the aniseed module itself. Each
 of those paths may either be a package, or a folder of packages.
+
+Packages can be turned on and off (through Edit > Packages in the app, or
+set_enabled). A package is enabled unless its marker file sets
+"enabled_by_default" to false, or the user has turned it off. Packages which
+provide a host are always enabled, and a package is only active if every
+package it requires is too.
 """
 import os
 import re
@@ -23,12 +29,22 @@ import json
 import typing
 import logging
 
+import scribble
+
 from . import constants
 
 log = logging.getLogger(__name__)
 
 
 MARKER = "aniseed_package.json"
+
+# -- The scribble identifier the user's choice of enabled packages is saved
+# -- under, as {package name: True/False}
+SETTINGS_ID = "aniseed_packages"
+
+# -- Choices which only last for this session, made with
+# -- set_enabled(persist=False). These take priority over the saved choices.
+_SESSION_CHOICES: typing.Dict[str, bool] = dict()
 
 
 # --------------------------------------------------------------------------------------
@@ -46,6 +62,9 @@ class AniseedPackage:
         version: the version of the package
 
         description: a short description of the package
+
+        enabled_by_default: whether the package is enabled until the user
+            chooses otherwise. Defaults to true.
     """
 
     # ----------------------------------------------------------------------------------
@@ -107,6 +126,25 @@ class AniseedPackage:
     @property
     def requires(self) -> typing.List[str]:
         return self.metadata.get("requires", list())
+
+    # ----------------------------------------------------------------------------------
+    @property
+    def description(self) -> str:
+        return self.metadata.get("description", "")
+
+    # ----------------------------------------------------------------------------------
+    @property
+    def enabled_by_default(self) -> bool:
+        return bool(self.metadata.get("enabled_by_default", True))
+
+    # ----------------------------------------------------------------------------------
+    def can_disable(self) -> bool:
+        """
+        Returns False for packages which provide a host. Turning one off would
+        remove aniseed's menu, window and undo support from that application,
+        so they are always enabled.
+        """
+        return self.hosts is None
 
     # ----------------------------------------------------------------------------------
     def supports_host(self, host_name: str) -> bool:
@@ -240,9 +278,10 @@ def get(name: str, packages: typing.Optional[typing.List[AniseedPackage]] = None
 
 
 # --------------------------------------------------------------------------------------
-def active() -> typing.List[AniseedPackage]:
+def available() -> typing.List[AniseedPackage]:
     """
-    Returns the packages which should be used within the current host
+    Returns the packages written for the current host, whether or not they
+    are enabled
     """
     # -- Imported here to break the import cycle, as host imports this module
     from . import host
@@ -254,6 +293,189 @@ def active() -> typing.List[AniseedPackage]:
         for package in discover()
         if package.supports_host(host_name)
     ]
+
+
+# --------------------------------------------------------------------------------------
+def active() -> typing.List[AniseedPackage]:
+    """
+    Returns the packages which should be used within the current host: those
+    which are written for it and are enabled (see is_enabled)
+    """
+    packages = available()
+    choices = _choices()
+
+    return [
+        package
+        for package in packages
+        if _is_enabled(package, packages, choices)
+    ]
+
+
+# --------------------------------------------------------------------------------------
+def is_chosen(package: AniseedPackage) -> bool:
+    """
+    Returns whether the package is turned on, by the user's choice or (if
+    they have not made one) its enabled_by_default. Requirements are not
+    taken into account: use is_enabled for that.
+    """
+    return _is_chosen(package, _choices())
+
+
+# --------------------------------------------------------------------------------------
+def is_enabled(package: AniseedPackage) -> bool:
+    """
+    Returns whether the package is active: it is turned on, and so is every
+    package it requires (as far as those packages are available)
+    """
+    return _is_enabled(package, available(), _choices())
+
+
+# --------------------------------------------------------------------------------------
+def blocking_requirements(package: AniseedPackage) -> typing.List[str]:
+    """
+    Returns the names of the packages this package requires which are
+    available but not enabled, and so stop it from being active
+    """
+    packages = available()
+    choices = _choices()
+
+    return [
+        required.name
+        for required in packages
+        if required.name in package.requires
+        and not _is_enabled(required, packages, choices)
+    ]
+
+
+# --------------------------------------------------------------------------------------
+def set_enabled(name: str, enabled: bool, persist: bool = True) -> None:
+    """
+    Turns a package on or off. Turning a package on also turns on the
+    packages it requires.
+
+    Changing this does not affect rigs which already exist. Clear the
+    component library and the rigs (as the Packages window does) for the
+    change to take effect.
+
+    Args:
+        name: The name of the package.
+        enabled: True to turn it on, False to turn it off.
+        persist: If True, the choice is saved for this user. If False, it
+            only lasts for this session, which suits scripts and tests.
+
+    Raises:
+        ValueError: If there is no package with the name, or it provides a
+            host and so cannot be turned off.
+    """
+    package = get(name)
+
+    if package is None:
+        raise ValueError(f"There is no aniseed package called {name!r}")
+
+    if not enabled and not package.can_disable():
+        raise ValueError(f"{name} provides a host, so it cannot be turned off")
+
+    names = [name]
+
+    if enabled:
+        # -- Only record requirements which are not already on (which also
+        # -- skips host packages, as they are always on), so turning one
+        # -- package on never pins the choice for others needlessly
+        choices = _choices()
+        names.extend(
+            required
+            for required in _requirements(package)
+            if not _is_chosen(get(required), choices)
+        )
+
+    if persist:
+        settings = scribble.get(SETTINGS_ID)
+        for each in names:
+            settings[each] = bool(enabled)
+            _SESSION_CHOICES.pop(each, None)
+        settings.save()
+
+    else:
+        for each in names:
+            _SESSION_CHOICES[each] = bool(enabled)
+
+
+# --------------------------------------------------------------------------------------
+def reset(name: typing.Optional[str] = None) -> None:
+    """
+    Forgets the saved and session choices for the named package, or for
+    every package if no name is given, so each goes back to its
+    enabled_by_default.
+    """
+    settings = scribble.get(SETTINGS_ID)
+
+    for each in [name] if name else list(settings.keys()) + list(_SESSION_CHOICES):
+        settings.pop(each, None)
+        _SESSION_CHOICES.pop(each, None)
+
+    settings.save()
+
+
+# --------------------------------------------------------------------------------------
+def _choices() -> typing.Dict[str, bool]:
+    """
+    Returns the user's choices, with this session's choices on top
+    """
+    choices = dict(scribble.get(SETTINGS_ID))
+    choices.update(_SESSION_CHOICES)
+    return choices
+
+
+# --------------------------------------------------------------------------------------
+def _is_chosen(package: AniseedPackage, choices: typing.Dict[str, bool]) -> bool:
+    if not package.can_disable():
+        return True
+
+    return bool(choices.get(package.name, package.enabled_by_default))
+
+
+# --------------------------------------------------------------------------------------
+def _is_enabled(
+        package: AniseedPackage,
+        packages: typing.List[AniseedPackage],
+        choices: typing.Dict[str, bool],
+        visiting: typing.Optional[set] = None,
+) -> bool:
+    """
+    Returns True if the package is chosen, and so (recursively) is every
+    package it requires. A requirement which is not available is ignored here,
+    as discover already warns about it.
+    """
+    if not _is_chosen(package, choices):
+        return False
+
+    # -- Guard against packages which (wrongly) require each other
+    visiting = (visiting or set()) | {package.name}
+
+    for required in packages:
+        if required.name in package.requires and required.name not in visiting:
+            if not _is_enabled(required, packages, choices, visiting):
+                return False
+
+    return True
+
+
+# --------------------------------------------------------------------------------------
+def _requirements(package: AniseedPackage, found: typing.Optional[set] = None) -> typing.List[str]:
+    """
+    Returns the names of every package the given package requires, directly
+    or through other packages, which can be found
+    """
+    found = found if found is not None else set()
+
+    for name in package.requires:
+        required = get(name)
+
+        if required is not None and name not in found:
+            found.add(name)
+            _requirements(required, found)
+
+    return sorted(found)
 
 
 # --------------------------------------------------------------------------------------

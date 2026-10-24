@@ -1,0 +1,7 @@
+{
+    "version": "1.0.0",
+    "description": "Documented example components for developers learning to write aniseed components",
+    "hosts": ["maya"],
+    "requires": ["aniseed_maya_standard"],
+    "enabled_by_default": false
+}

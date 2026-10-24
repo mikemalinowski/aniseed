@@ -296,6 +296,25 @@ class AppWidget(xstack.app.AppWidget):
         return menus
 
     # ----------------------------------------------------------------------------------
+    def edit_menu_actions(self) -> typing.Dict[str, typing.Callable]:
+        """
+        Adds the Packages window to the Edit menu
+        """
+        return {
+            "Packages...": self.show_package_manager,
+        }
+
+    # ----------------------------------------------------------------------------------
+    def show_package_manager(self):
+        """
+        Shows the window for turning aniseed packages on and off
+        """
+        # -- Imported here, as it is only needed when the window is opened
+        from . import package_manager
+
+        package_manager.show(app_widget=self, parent=self)
+
+    # ----------------------------------------------------------------------------------
     def all_rigs(self):
         """
         This will return the hosts of all the rigs in the scene
