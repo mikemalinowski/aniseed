@@ -19,6 +19,9 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
     """
     is_updated = QtCore.Signal()
 
+    # -- The context menu class. Subclasses can replace it to tailor the menu
+    menu_class = menu.TreeMenu
+
     # ----------------------------------------------------------------------------------
     def __init__(self, stack: "xstack.Stack", app_config, app: QtWidgets.QWidget = None):
         super().__init__(parent=app)
@@ -30,10 +33,16 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.allow_interaction = True
 
         # -- Declare the settings to allow us to correctly handle drag and
-        # -- drop events
-        self.setAcceptDrops(True)
-        self.setDragEnabled(True)
-        self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
+        # -- drop events. A read only structure cannot be re-ordered.
+        if self.app_config.read_only_structure:
+            self.setAcceptDrops(False)
+            self.setDragEnabled(False)
+            self.setDragDropMode(QtWidgets.QAbstractItemView.NoDragDrop)
+
+        else:
+            self.setAcceptDrops(True)
+            self.setDragEnabled(True)
+            self.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
 
         # -- Ensure we dont sort, as the order of the items is specifically
         # -- important
@@ -91,7 +100,7 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.app.build_started.connect(self.disable_interaction)
         self.app.build_complete.connect(self.enable_interaction)
         self.stack.build_progressed.connect(self.on_build_updated)
-        self.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.itemDoubleClicked.connect(self.on_item_double_clicked)
 
     # ----------------------------------------------------------------------------------
     def describe(self):
@@ -276,8 +285,10 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         Triggered on a drop event, this is where we check if we want to accept it and
         allow the item to be reparented.
         """
-        # -- We only want to allow events from within ourselves
-        if not isinstance(event.source(), self.__class__):
+        # -- We only want to allow events from within ourselves, and never
+        # -- when the structure is read only
+        if not isinstance(event.source(), self.__class__) or self.app_config.read_only_structure:
+            event.ignore()
             return
 
         # -- Get the item that is dropped, and the item its being dropped on to
@@ -320,12 +331,18 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
 
         selected_item = self.itemAt(event.pos())
 
-        context_menu = menu.TreeMenu(
+        context_menu = self.menu_class(
             item=selected_item,
             app_config=self.app_config,
             app=self.app,
             parent=self,
         )
+
+        # -- An app may leave nothing to offer, such as on empty space when
+        # -- the structure is read only
+        if context_menu.isEmpty():
+            return
+
         if hasattr(context_menu, "exec_"):
             context_menu.exec_(QtGui.QCursor().pos())
         else:
@@ -518,14 +535,19 @@ class BuildTreeWidget(QtWidgets.QTreeWidget):
         self.add_component_window.show()
 
     # ----------------------------------------------------------------------------------
-    def _on_item_double_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int):
+    def on_item_double_clicked(self, item: QtWidgets.QTreeWidgetItem, column: int):
         """
-        Double clicking a component item starts the rename flow
+        Double clicking a component item starts the rename flow, unless the
+        structure is read only. Subclasses can re-implement this to give double
+        clicking another meaning.
         """
         if not self.allow_interaction:
             return
 
         if not getattr(item, "component", None):
+            return
+
+        if self.app_config.read_only_structure:
             return
 
         self.rename_component(item)

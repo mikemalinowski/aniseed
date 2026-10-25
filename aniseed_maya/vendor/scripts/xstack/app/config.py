@@ -78,8 +78,24 @@ class AppConfig:
     item_size = 40
     component_paths = []
 
+    # -- These let an application restrict what the user can do with the
+    # -- stack. When the structure is read only, components cannot be
+    # -- dragged, added, removed, duplicated, renamed, switched or edited
+    # -- through the Actions menu, but items can still be expanded and
+    # -- collapsed. The build actions are the entries offered in a
+    # -- component's execute and validate menus ("section", "up_to" and
+    # -- "only"), and the stack build actions are the "execute/validate the
+    # -- whole stack" entries.
+    read_only_structure = False
+    component_build_actions = ("section", "up_to", "only")
+    show_stack_build_actions = True
+
     # -- This lets you specify a custom application widget class
     app_widget = None
+
+    # -- This lets you specify a custom tree widget class. It should inherit
+    # -- from xstack.app.tree.BuildTreeWidget
+    tree_widget = None
 
     # -- This allows you to specify a unique settings id to store settings specific
     # -- to your deployment

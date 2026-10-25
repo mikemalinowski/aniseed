@@ -28,7 +28,7 @@ def host() -> str:
     """
     Returns the host name
     """
-    for test_string, func_ in HOST_MAPPING.items():
+    for test_string, func_ in HOST_MAPPING:
         if test_string in sys.executable:
             return test_string.split(".")[0]
 
@@ -41,7 +41,7 @@ def application() -> QtWidgets.QWidget:
     Returns:
         Main window as a QWidget
     """
-    for test_string, func_ in HOST_MAPPING.items():
+    for test_string, func_ in HOST_MAPPING:
         if test_string in sys.executable:
             return func_()
 
@@ -86,6 +86,14 @@ def _houdini():
     import hou
     return hou.qt.mainWindow()
 
+# ------------------------------------------------------------------------------
+# noinspection PyPep8Naming
+def _blender():
+    try:
+        import qshake
+    except ImportError:
+        return None
+    return qshake.main_window()
 
 # ------------------------------------------------------------------------------
 # noinspection PyPep8Naming
@@ -95,17 +103,19 @@ def _mobu():
 
 # -- We support out the box native python but also a series
 # -- of applications which run python embedded within them.
-HOST_MAPPING = {
-    "maya.exe": _maya,
-    "mayapy.exe": _maya,
-    "motionbuilder.exe": _mobu,
-    "3dsmax.exe": _3dsmax,
-    "houdini.exe": _houdini,
-    "houdinifx.exe": _houdini,
-    "houdinicore.exe": _houdini,
-    "python.exe": _python,
-    "pythonw.exe": _python,
-}
+HOST_MAPPING = [
+    ["maya.exe", _maya],
+    ["mayapy.exe", _maya],
+    ["motionbuilder.exe", _mobu],
+    ["3dsmax.exe", _3dsmax],
+    ["houdini.exe", _houdini],
+    ["houdinifx.exe", _houdini],
+    ["houdinicore.exe", _houdini],
+    ["Blender", _blender],
+    ["blender", _blender],
+    ["python.exe", _python],
+    ["pythonw.exe", _python],
+]
 
 
 # ------------------------------------------------------------------------------

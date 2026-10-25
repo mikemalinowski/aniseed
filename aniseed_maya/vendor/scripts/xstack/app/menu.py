@@ -39,19 +39,23 @@ class TreeMenu(QtWidgets.QMenu):
             self.populate_unfocused_menu()
 
     def populate_component_menu(self):
+        read_only = self.app_config.read_only_structure
+
         # -- Start by adding our build and validation menus
         self.add_build_menu()
         self.add_validate_menu()
 
         # -- Add the items which allow a user to edit/alter a component
-        self.add_component_interaction_items()
+        if not read_only:
+            self.add_component_interaction_items()
 
         # -- Add any actions the component provides
         self.add_component_component_actions()
 
         # -- Add the menu which exposes the lesser used
         # -- items
-        self.add_additional_actions()
+        if not read_only:
+            self.add_additional_actions()
 
         # -- Offer to show the component's part of the latest build's log
         self.add_show_in_log_action()
@@ -228,6 +232,59 @@ class TreeMenu(QtWidgets.QMenu):
         )
         self.addAction(switch_action)
 
+    def _add_build_actions(self, menu, label, validate_only=False):
+        """
+        Adds the build actions the app config allows for the component to the
+        given menu. Returns how many were added.
+        """
+        allowed = self.app_config.component_build_actions
+        added = 0
+
+        # -- Build Below (default)
+        if "section" in allowed:
+            action = QtWidgets.QAction(f"{label} Section", self._parent)
+            action.triggered.connect(
+                functools.partial(
+                    self.app.build,
+                    build_below=self.component,
+                    validate_only=validate_only,
+                ),
+            )
+            menu.addAction(action)
+            added += 1
+
+        # -- All other build actions are less used, so lets add a separator
+        if added and ("up_to" in allowed or "only" in allowed):
+            menu.addSeparator()
+
+        # -- Build Up To
+        if "up_to" in allowed:
+            action = QtWidgets.QAction(f"{label} Up To This", self._parent)
+            action.triggered.connect(
+                functools.partial(
+                    self.app.build,
+                    build_up_to=self.component,
+                    validate_only=validate_only,
+                ),
+            )
+            menu.addAction(action)
+            added += 1
+
+        # -- Build Only.
+        if "only" in allowed:
+            action = QtWidgets.QAction(f"{label} Just This", self._parent)
+            action.triggered.connect(
+                functools.partial(
+                    self.app.build,
+                    build_only=self.component,
+                    validate_only=validate_only,
+                ),
+            )
+            menu.addAction(action)
+            added += 1
+
+        return added
+
     def add_build_menu(self):
         """
         Creates the menu for building the given component
@@ -235,41 +292,9 @@ class TreeMenu(QtWidgets.QMenu):
         # -- Build menu
         build_menu = QtWidgets.QMenu(self.execute_label, self)
 
-        # -- Build Below (default)
-        build_section = QtWidgets.QAction(f"{self.execute_label} Section", self._parent)
-        build_section.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_below=self.component,
-            ),
-        )
-        build_menu.addAction(build_section)
-
-        # -- All other build actions are less used, so lets add a separator
-        build_menu.addSeparator()
-
-        # -- Build Up To
-        build_up_to = QtWidgets.QAction(f"{self.execute_label} Up To This", self._parent)
-        build_up_to.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_up_to=self.component,
-            ),
-        )
-        build_menu.addAction(build_up_to)
-
-        # -- Build Only.
-        build_just_this = QtWidgets.QAction(f"{self.execute_label} Just This", self._parent)
-        build_just_this.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_only=self.component,
-            ),
-        )
-        build_menu.addAction(build_just_this)
-        
-        # -- Add the build menu
-        self.addMenu(build_menu)
+        # -- Add the build menu, if it offers anything
+        if self._add_build_actions(build_menu, self.execute_label):
+            self.addMenu(build_menu)
 
     def add_validate_menu(self):
         """
@@ -278,67 +303,38 @@ class TreeMenu(QtWidgets.QMenu):
         # -- validate menu
         validate_menu = QtWidgets.QMenu(self.validate_label, self)
 
-        # -- validate Below (default)
-        validate_section = QtWidgets.QAction(f"{self.validate_label} Section", self._parent)
-        validate_section.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_below=self.component,
-                validate_only=True,
-            ),
-        )
-        validate_menu.addAction(validate_section)
-
-        # -- All other validate actions are less used, so lets add a separator
-        validate_menu.addSeparator()
-
-        # -- validate Up To
-        validate_up_to = QtWidgets.QAction(f"{self.validate_label} Up To This", self._parent)
-        validate_up_to.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_up_to=self.component,
-                validate_only=True,
-            ),
-        )
-        validate_menu.addAction(validate_up_to)
-
-        # -- validate Only.
-        validate_just_this = QtWidgets.QAction(f"{self.validate_label} Just This", self._parent)
-        validate_just_this.triggered.connect(
-            functools.partial(
-                self.app.build,
-                build_only=self.component,
-                validate_only=True,
-            ),
-        )
-        validate_menu.addAction(validate_just_this)
-
-        # -- Add the validate menu
-        self.addMenu(validate_menu)
+        # -- Add the validate menu, if it offers anything
+        if self._add_build_actions(validate_menu, self.validate_label, validate_only=True):
+            self.addMenu(validate_menu)
 
     def populate_unfocused_menu(self):
 
-        # -- Item to instigate an execution of the stag
-        label = f"{self.execute_label} {self.app_config.label}"
-        build_action = QtWidgets.QAction(self.execute_icon, label, self._parent)
-        build_action.triggered.connect(functools.partial(self.app.build))
-        self.addAction(build_action)
+        if self.app_config.show_stack_build_actions:
+            # -- Item to instigate an execution of the stag
+            label = f"{self.execute_label} {self.app_config.label}"
+            build_action = QtWidgets.QAction(self.execute_icon, label, self._parent)
+            build_action.triggered.connect(functools.partial(self.app.build))
+            self.addAction(build_action)
 
-        # -- This item will allow a user to validate the stack
-        label = f"{self.validate_label} {self.app_config.label}"
-        validate_action = QtWidgets.QAction(self.validate_icon, label, self._parent)
-        validate_action.triggered.connect(
-            functools.partial(
-                self.app.build,
-                validate_only=True,
-            ),
-        )
-        self.addAction(validate_action)
+            # -- This item will allow a user to validate the stack
+            label = f"{self.validate_label} {self.app_config.label}"
+            validate_action = QtWidgets.QAction(self.validate_icon, label, self._parent)
+            validate_action.triggered.connect(
+                functools.partial(
+                    self.app.build,
+                    validate_only=True,
+                ),
+            )
+            self.addAction(validate_action)
 
-        # -- Add a separator to visually distinguish the execution
-        # -- items
-        self.addSeparator()
+            # -- Add a separator to visually distinguish the execution
+            # -- items
+            self.addSeparator()
+
+        # -- Nothing below changes or describes the structure, which a read
+        # -- only structure does not offer
+        if self.app_config.read_only_structure:
+            return
 
         # -- Now add the functionality to add a component
         label = f"Add {self.component_label}"

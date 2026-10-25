@@ -415,12 +415,16 @@ class AppWidget(QtWidgets.QWidget):
         self.splitter = QtWidgets.QSplitter()
         self.flexible_layout.addWidget(self.splitter)
 
-        self.tree_widget = tree.BuildTreeWidget(self.stack, self.app_config, app=self)
+        tree_class = self.app_config.tree_widget or tree.BuildTreeWidget
+        self.tree_widget = tree_class(self.stack, self.app_config, app=self)
         self.splitter.addWidget(self.tree_widget)
         self.tree_widget.is_updated.connect(self.propagate_component_selection)
         self.tree_widget.currentItemChanged.connect(self.propagate_component_selection)
 
-        self.editor_widget = options.ComponentEditor(parent=self)
+        self.editor_widget = options.ComponentEditor(
+            read_only_name=self.app_config.read_only_structure,
+            parent=self,
+        )
         self.splitter.addWidget(self.editor_widget)
 
         # -- The tree draws labels directly from the components, so a repaint is

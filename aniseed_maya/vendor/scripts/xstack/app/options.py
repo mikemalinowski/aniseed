@@ -23,7 +23,7 @@ class ComponentEditor(QtWidgets.QWidget):
     label_changed = QtCore.Signal()
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, parent=None):
+    def __init__(self, read_only_name=False, parent=None):
         super().__init__(parent=parent)
 
         self.setLayout(
@@ -33,10 +33,12 @@ class ComponentEditor(QtWidgets.QWidget):
         )
         self.component = None
 
-        # -- The name field lets the user see and change the component label
+        # -- The name field lets the user see and change the component label,
+        # -- unless it is read only, where it only shows it
         self.name_edit = QtWidgets.QLineEdit()
         self.name_edit.setAlignment(QtCore.Qt.AlignCenter)
         self.name_edit.setEnabled(False)
+        self.name_edit.setReadOnly(read_only_name)
         self.name_edit.editingFinished.connect(self._on_name_edited)
         self.layout().addWidget(self.name_edit)
 
