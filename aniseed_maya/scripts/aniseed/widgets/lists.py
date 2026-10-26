@@ -160,6 +160,9 @@ class ObjectList(QtWidgets.QWidget):
     # ----------------------------------------------------------------------------------
     def set_value(self, v):
 
+        # -- Setting replaces the items, rather than adding to them
+        self.list_widget.clear()
+
         for item in v or list():
             self.list_widget.addItem(item)
 

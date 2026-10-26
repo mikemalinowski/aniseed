@@ -30,6 +30,7 @@ from . import constants
 from . import resources
 from . import environment
 from . import dialogs
+from . import toolkits
 
 __version__ = constants.VERSION
 

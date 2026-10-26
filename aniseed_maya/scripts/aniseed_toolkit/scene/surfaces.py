@@ -7,7 +7,6 @@ mref does not expose.
 """
 import maya.api.OpenMaya as om
 
-from ..registry import tool
 
 
 def _get_surface_fn(node_name):
@@ -39,11 +38,6 @@ def _local_matrix(node_name):
     return om.MFnTransform(sel.getDagPath(0)).transformation().asMatrix()
 
 
-@tool(
-    "Serialise Nurbs Surface",
-    classification="Rigging",
-    categories=["Surfaces"],
-)
 def serialise(surface, relative_to=None):
     """
     Returns a json friendly description of a nurbs surface, which construct
@@ -111,11 +105,6 @@ def serialise(surface, relative_to=None):
     }
 
 
-@tool(
-    "Construct Nurbs Surface",
-    classification="Rigging",
-    categories=["Surfaces"],
-)
 def construct(data, name="reconstructedSurface", parent_transform=None):
     """
     Creates a nurbs surface from data returned by serialise. The surface is

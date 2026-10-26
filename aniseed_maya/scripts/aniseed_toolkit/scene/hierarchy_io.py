@@ -13,7 +13,6 @@ import typing
 
 from maya import cmds
 
-from ..registry import tool
 from . import mirror as _mirror
 
 log = logging.getLogger(__name__)
@@ -27,11 +26,6 @@ SUPPORTED_TYPES = [
 ]
 
 
-@tool(
-    "Get Joint Writer Supported Types",
-    classification="Rigging",
-    categories=["Joints"],
-)
 def get_supported_io_types() -> list[str]:
     """
     This will return a list of supported node types which are supported in
@@ -67,12 +61,6 @@ def hierarchy_to_dict(nodes: list[str]) -> dict:
     return _create_dataset_from_nodes(nodes)
 
 
-@tool(
-    "Deserialise Nodes From Dict",
-    classification="Rigging",
-    categories=["Joints"],
-    user_facing=False,
-)
 def dict_to_hierarchy(
         root_parent: str = "",
         dataset: typing.Dict = None,

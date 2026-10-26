@@ -12,7 +12,6 @@ import time
 from maya.api import OpenMaya as om
 import mref
 
-from ..registry import tool
 
 log = logging.getLogger(__name__)
 
@@ -285,11 +284,6 @@ def calculate_four_point_spline_positions(
     return positions
 
 
-@tool(
-    "Interpolate Vectors",
-    categories=["Transforms"],
-    user_facing=False,
-)
 def interpolate_vector(
     vector_a: list[float],
     vector_b: list[float],

@@ -46,6 +46,9 @@ def contents(resource_path: str) -> list[str]:
 
 
 def register_resource_path(resource_path: str):
+    """
+    Adds a folder to search for resources (such as a shapes folder of extra
+    control shapes), after the toolkit's own _resources folder.
+    """
     if resource_path not in resource_root_paths:
         resource_root_paths.append(resource_path)
-        print("registered resource path!")

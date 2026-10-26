@@ -10,7 +10,7 @@ optional folders:
     hosts/      : added to the embedded host factory paths
     mixins/     : importable as <package_name>.mixins
     widgets/    : importable as <package_name>.widgets
-    tools/      : searched by aniseed_toolkit for aniseed_toolkit.Tool's
+    tools/      : searched by the toolkits for aniseed.toolkits.Tool's
 
 Packages are searched for in each path of the ANISEED_PACKAGE_PATHS
 environment variable, and then alongside the aniseed module itself. Each
@@ -65,6 +65,9 @@ class AniseedPackage:
 
         enabled_by_default: whether the package is enabled until the user
             chooses otherwise. Defaults to true.
+
+        toolkit: the name of the toolkit this package provides (such as
+            "Rigging"), if it is a toolkit. See aniseed.toolkits.
     """
 
     # ----------------------------------------------------------------------------------
@@ -493,8 +496,8 @@ def component_paths() -> typing.List[str]:
 # --------------------------------------------------------------------------------------
 def tool_paths() -> typing.List[str]:
     """
-    Returns the tool folders of all the packages valid for the current host.
-    aniseed does not use these itself - they are searched by aniseed_toolkit.
+    Returns the tool folders of all the packages valid for the current host,
+    which the toolkits (see aniseed.toolkits) find their tools in.
     """
     return [
         package.tools

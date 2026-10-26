@@ -12,7 +12,6 @@ use cmds rather than mref.
 from maya import cmds
 import mref
 
-from ..registry import tool
 from ..core._nodes import resolve as _resolve
 from ..scene import shapes as _shapes
 
@@ -187,18 +186,28 @@ def remove_pins(items: list[str] = None) -> None:
 
     Args:
         items: List of pins, pin offsets or pinned joints to remove the pins
-            for. This must be given (None raises an error).
+            for. Items which are not pinned are skipped. This must be given
+            (None raises an error).
 
     Returns:
         None
     """
     for pin_or_joint in items:
 
-        joint = get_pinned_nodes(pin_or_joint)
+        # -- Resolve the pin first, as only a pin (or its offset) can give
+        # -- the joint it pins
         pin = get_pin(pin_or_joint)
 
-        # -- cmds is used deliberately here: if no joint/pin is found the
-        # -- name is None, and cmds then acts on the selection.
+        if not pin:
+            continue
+
+        joint = get_pinned_nodes(pin)
+
+        # -- A pin whose joint has gone has nothing to restore
+        if not joint:
+            cmds.delete(pin)
+            continue
+
         pre_xform = cmds.xform(
             joint,
             matrix=True,
@@ -222,11 +231,6 @@ def remove_pins(items: list[str] = None) -> None:
         )
 
 
-@tool(
-    "Remove All Pins",
-    classification="Rigging",
-    categories=["Pinning"],
-)
 def remove_all_pins():
     """
     This will remove all pins in the entire scene
@@ -256,7 +260,7 @@ def pin_hierarchy(root: str = None) -> list[str]:
             root,
             allDescendents=True,
             type="joint",
-        ),
+        ) or list(),
     )
 
     return pin(nodes)

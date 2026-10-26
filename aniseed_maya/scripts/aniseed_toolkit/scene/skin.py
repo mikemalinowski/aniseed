@@ -23,7 +23,6 @@ from maya.api import OpenMaya as om
 from maya.api import OpenMayaAnim as om_anim
 import mref
 
-from ..registry import tool
 from ..core import api as _api
 
 log = logging.getLogger(__name__)
@@ -677,11 +676,6 @@ def save(mesh: str = "", filepath: str = ""):
         )
 
 
-@tool(
-    "Apply Skin Data",
-    classification="Rigging",
-    categories=["Skinning"],
-)
 def dict_to_skin(mesh, weight_data) -> str:
     """
     Skins the given mesh (or nurbs surface) with the given skin data, as

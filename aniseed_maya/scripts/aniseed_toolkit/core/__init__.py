@@ -19,16 +19,3 @@ __all__ = [
     "naming",
     "selection",
 ]
-
-
-def __getattr__(name):
-    # -- aniseed_toolkit.core used to be the module holding the tool registry,
-    # -- so those names are still served from here
-    from .. import registry
-    from .. import utils
-
-    if name == "utils":
-        return utils
-    if hasattr(registry, name) and name in ("Tool", "ToolBox", "run", "register", "tool"):
-        return getattr(registry, name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,7 +1,7 @@
 """
 Queries across the controls of aniseed rigs: finding all controls, the rig a
-node belongs to, opposing controls, controls by location, and mirroring
-control shapes by name.
+node belongs to, opposing controls, controls by location, zeroing controls,
+and mirroring control shapes by name.
 
 Note: node names are returned exactly as maya reports them (short names, or
 partial paths where a short name is not unique), so the maya queries which
@@ -10,16 +10,10 @@ return node names use cmds rather than mref.
 from maya import cmds
 import mref
 
-from ..registry import tool
 from . import control as _control
 from ..scene import shapes as _shapes
 
 
-@tool(
-    "Get Controls",
-    classification="Animation",
-    user_facing=False,
-)
 def all_controls(namespace: str = "") -> list[str]:
     """
     Returns every controller tagged node in the scene which belongs to an
@@ -45,11 +39,151 @@ def all_controls(namespace: str = "") -> list[str]:
     return controls
 
 
-@tool(
-    "Resolve Rig Node",
-    classification="Animation",
-    user_facing=False,
-)
+def rig_path(node: str) -> str:
+    """
+    Returns the full DAG path of the aniseed rig node the given node belongs
+    to (the closest node in its hierarchy with an aniseed_rig attribute), or an
+    empty string if it is not part of an aniseed rig. Full paths are used so
+    rigs without a namespace, whose top nodes may share a name, stay distinct.
+
+    Args:
+        node: Any node within a rig.
+
+    Returns:
+        The rig node's full DAG path, or an empty string.
+    """
+    parts = cmds.ls(node, long=True)[0].split("|")
+
+    for idx in range(len(parts) - 1, 0, -1):
+        path = "|".join(parts[:idx + 1])
+        if cmds.objExists(f"{path}.aniseed_rig"):
+            return path
+    return ""
+
+
+def rig_controls(namespace: str = "") -> list[str] or None:
+    """
+    Returns the controls of the rig to work on:
+
+      * the rig in the given namespace, if one is given
+      * otherwise the rig the first selected node belongs to
+      * otherwise every aniseed rig in the scene
+
+    Rigs with or without a namespace are both supported.
+
+    Args:
+        namespace: Optional namespace of the rig, used instead of the
+            selection when given.
+
+    Returns:
+        The control names, or None if the selection is not part of an
+        aniseed rig.
+    """
+    controls = all_controls()
+
+    # -- An explicit namespace wins. Match on the whole namespace (with its
+    # -- colon), so RIG_1 does not also pick up RIG_10
+    if namespace:
+        prefix = namespace.rstrip(":") + ":"
+        return [
+            control
+            for control in controls
+            if control.split("|")[-1].startswith(prefix)
+        ]
+
+    # -- Otherwise use the rig the selection belongs to, found through the
+    # -- DAG rather than the name, so rigs without a namespace work too
+    selection = cmds.ls(selection=True)
+    if selection:
+        path = rig_path(selection[0])
+        if not path:
+            return None
+
+        return [
+            control
+            for control in controls
+            if cmds.ls(control, long=True)[0].startswith(f"{path}|")
+        ]
+
+    return controls
+
+
+def zero(node: str) -> None:
+    """
+    Zeros out the animatable channels of the given node: translation and
+    rotation are set to zero, scale to one, and keyable user defined
+    attributes to their default values. Locked or connected channels are left
+    as they are.
+
+    Args:
+        node: The node to zero out (reset)
+    """
+    for attribute_name in cmds.listAttr(node, k=True) or list():
+
+        if "scale" in attribute_name:
+            value = 1.0
+
+        elif "translate" in attribute_name or "rotate" in attribute_name:
+            value = 0.0
+
+        else:
+            continue
+
+        # -- Locked or connected channels cannot be reset, and are
+        # -- left as they are
+        try:
+            cmds.setAttr(
+                f"{node}.{attribute_name}",
+                value,
+            )
+
+        except RuntimeError:
+            pass
+
+    for attribute_name in cmds.listAttr(node, k=True, ud=True) or list():
+        default_value = cmds.attributeQuery(
+            attribute_name,
+            node=node,
+            listDefault=True,
+        )
+
+        if not default_value:
+            continue
+
+        # -- Locked or connected attributes cannot be reset, and are
+        # -- left as they are
+        try:
+            cmds.setAttr(
+                f"{node}.{attribute_name}",
+                *default_value,
+            )
+
+        except RuntimeError:
+            continue
+
+
+def selected_rigs() -> list:
+    """
+    Returns the aniseed Rigs which the selected nodes belong to. This
+    requires aniseed to be importable.
+
+    Returns:
+        List of aniseed.Rig
+    """
+    import aniseed
+
+    rig_nodes = {
+        get_rig_node(node)
+        for node in cmds.ls(selection=True)
+    }
+
+    return [
+        aniseed.Rig.for_host(rig_node)
+        for rig_node in sorted(rig_nodes)
+        if rig_node
+    ]
+
+
 def get_rig_node(node: str = "") -> str:
     """
     Returns the aniseed rig node which the given node sits beneath - the
@@ -94,12 +228,6 @@ def get(node):
     return aniseed.Rig.for_host(rig_node)
 
 
-@tool(
-    "Get Opposites",
-    classification="Animation",
-    categories=["Selection", "Controls"],
-    user_facing=False,
-)
 def opposing_controls(controls: list[str] or None = None) -> list[str]:
     """
     This will return the names of the opposite controls for the given

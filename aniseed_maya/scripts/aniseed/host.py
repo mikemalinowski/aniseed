@@ -65,6 +65,34 @@ class EmbeddedHost:
         """
         yield
 
+    @contextlib.contextmanager
+    def tool_context(self, label: str):
+        """
+        Context manager that every toolkit tool runs within (see
+        aniseed.toolkits). Re-implement it to make running a tool one undo
+        step, or to give the tool the context it needs. By default it does
+        nothing.
+
+        Args:
+            label: A name for what is being run, such as
+                "Rigging Toolkit : Apply Shape", suitable for an undo step.
+        """
+        yield
+
+    def launch_toolkit(self, config):
+        """
+        Shows the window of the toolkit the given config (an
+        aniseed.toolkits.app.ToolkitConfig) describes, reusing it if it is
+        already open. Re-implement it to show the window the way the host
+        prefers, such as docked. By default it is a floating window parented
+        to the application's main window.
+
+        Returns:
+            The toolkit's window.
+        """
+        from .toolkits import app
+        return app.launch_window(config)
+
     def control_shapes(self) -> list:
         """
         Returns the names of the control shapes available in this host, as

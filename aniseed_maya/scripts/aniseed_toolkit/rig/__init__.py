@@ -21,6 +21,10 @@ from .controls import get
 from .controls import get_rig_node
 from .controls import mirror_control_shapes
 from .controls import opposing_controls
+from .controls import rig_controls
+from .controls import rig_path
+from .controls import selected_rigs
+from .controls import zero
 
 __all__ = [
     "component_outputs",
@@ -37,4 +41,8 @@ __all__ = [
     "get_rig_node",
     "mirror_control_shapes",
     "opposing_controls",
+    "rig_controls",
+    "rig_path",
+    "selected_rigs",
+    "zero",
 ]

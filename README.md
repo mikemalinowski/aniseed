@@ -2,6 +2,29 @@
 
 Aniseed is an application embedded (Maya) rigging tool. 
 
+## What's New: the Rigging and Animation Toolkits (aniseed_toolkit 5)
+
+The single Aniseed Toolkit window is replaced by two xstack based windows, the
+**Rigging Toolkit** and the **Animation Toolkit** (see
+[The Rigging and Animation Toolkits](#the-rigging-and-animation-toolkits)). Rigs are
+unaffected, but any of your own code which ran or wrote toolkit tools needs updating.
+
+* `aniseed_toolkit` is now purely a library. `aniseed_toolkit.run`, `aniseed_toolkit.Tool`,
+  `@aniseed_toolkit.tool`, `aniseed_toolkit.register`, `aniseed_toolkit.launch` and the
+  `ANISEED_TOOLKIT_PATHS` environment variable have been removed. Call the library
+  function a tool used instead, for example:
+    * `"Create Control"` is `aniseed_toolkit.rig.control.create`
+    * `"Create Guide"` is `aniseed_toolkit.rig.guide.create`
+    * `"Create Joint"` is `aniseed_toolkit.scene.joints.create`
+    * `"Tag Node"` is `aniseed_toolkit.rig.tagging.tag`
+    * `"Get Controls"` is `aniseed_toolkit.rig.all_controls`
+    * `"Zero Control"` is `aniseed_toolkit.rig.zero`
+    * `"Get Shape List"` is `aniseed_toolkit.scene.shapes.library` (which returns names)
+    * `"Get MObject"` / `"MObject Name"` are `aniseed_toolkit.core.api.get_mobject` / `get_name`
+* Tools are now `aniseed.toolkits.Tool` subclasses (xstack components with options) in
+  the `tools` folder of an aniseed package. Run one from code with
+  `aniseed.toolkits.run("<tool name>", options={...})`.
+
 ## What's New in Version 4
 
 Version 4 restructures the Aniseed Toolkit (the library of rigging functions which
@@ -16,7 +39,7 @@ your own code which imports from the toolkit will need updating.
 * The old module locations (such as `aniseed_toolkit.joints` or `aniseed_toolkit.lib.*`)
   have been removed. For example, `aniseed_toolkit.joints` is now `aniseed_toolkit.scene.joints`
   and `aniseed_toolkit.control` is now `aniseed_toolkit.rig.control`.
-* Tools are still run by name, exactly as before, using `aniseed_toolkit.run("<tool name>")`.
+* Tools were still run by name in version 4 (this was removed in aniseed_toolkit 5, see above).
 * Duplicating a component through the UI now lets you rename it and apply a search and
   replace to its values as part of the duplication.
 
@@ -631,65 +654,85 @@ and to keep your custom components seperate from the aniseed deployment.
 
 ## Aniseed Toolkit Code
 
-When using tools within code (i.e, in components or your own tools), you can simply
-use this syntax to instigate it:
+In code (in components, or your own scripts and tools), call the `aniseed_toolkit`
+library directly:
 
 ```python
 import aniseed_toolkit
 
-distance = aniseed_toolkit.run("Get Distance Between", node_a, node_b)
+distance = aniseed_toolkit.core.maths.distance_between(node_a, node_b)
+control = aniseed_toolkit.rig.control.create(description="arm", location="l", parent=org, shape="core_circle", config=config)
 ```
-This will run the `Get Distance Between` tool with `node_a` and `node_b` being
-passed as arguments. 
 
-You can find a list of tools here:
-[asd](asd)
+## The Rigging and Animation Toolkits
 
-To write a tool, you simply inherit from the `aniseed_toolkit.Tool` class and 
-implement the run function with whatever arguments you require. Its highly recommended
-that you use keyword arguments (due to the blind nature of tools), and make them typed.
+The tools riggers and animators use day to day are in two toolkit windows, opened from
+the Aniseed menu (or the app's Tools menu):
+
+* **Rigging Toolkit** (`aniseed_maya_rigging_toolkit`): shape, joint, pinning, skinning,
+  transform and other rigging tools
+* **Animation Toolkit** (`aniseed_maya_animation_toolkit`): selecting, zeroing, keying
+  and posing controls, and ik/fk matching
+
+Each tool is an [xstack](https://github.com/mikemalinowski/xstack) component with
+options only. Double click a tool (or press Run) to run it on the current selection, as
+one undo step. Right click a tool to add it to the Favourites. Options and favourites
+are remembered between sessions.
+
+They can also be opened, and their tools run, from code (such as a shelf button or a
+hotkey):
 
 ```python
-import aniseed_toolkit
-import maya.cmds as mc
+from aniseed import toolkits
 
-class MyExampleTool(aniseed_toolkit.Tool):
-    
-    identifier = "Move By 5"
-    
-    def run(self, node: str = "", axis: str = "x") -> float:
-        """
-        Simple example to show how a tool can be constructed. This tool will take
-        the given node and move it on a specific axis 5 units. 
-        
-        Args:
-            node: The node to move
-            axis: the axis in which to move it (x, y, z)
-        
-        Returns:
-            The final value of the attribute
-        """
-        attribute = f"{node}.translate{axis.upper()}"
-        mc.setAttr(
-            attribute,
-            mc.getAttr(attribute) + 5,
-        )
-        return mc.getAttr(attribute)
+toolkits.launch("Rigging")
+toolkits.run("Zero Selection", options={"Key On Reset": True})
 ```
 
-It is worth noting that it is recommended to use google style docstrings for the tool
-if you plan to use the auto generation of documentation, as this specifically expects
-that style for parsing.
-
-We can then call this tool in the same way as the example above shown. For example:
+To write a tool, inherit from `aniseed.toolkits.Tool`, declare its options, and do the
+work in `run` (calling the `aniseed_toolkit` library). Put it in the `tools` folder of
+any aniseed package and it shows in the toolkit it names:
 
 ```python
-import aniseed_toolkit
-import maya.cmds as mc
+import logging
 
-my_node = mc.createNode("transform")
-distance = aniseed_toolkit.run("Move By 5", node=my_node, axis="y")
+from maya import cmds
+
+from aniseed import toolkits
+
+log = logging.getLogger(__name__)
+
+
+class MoveBy(toolkits.Tool):
+    """
+    Moves the selected nodes along Axis by Amount.
+    """
+
+    identifier = "Move By"
+    toolkit = "Rigging"
+    categories = ["Transforms"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.declare_option(name="Axis", value="x", description="The axis to move along")
+        self.declare_option(name="Amount", value=5.0, description="How far to move")
+
+    def is_valid(self) -> bool:
+        if not cmds.ls(selection=True):
+            log.warning("Select the nodes to move")
+            return False
+        return True
+
+    def run(self) -> None:
+        attribute = f"translate{self.option('Axis').get().upper()}"
+
+        for node in cmds.ls(selection=True):
+            cmds.setAttr(f"{node}.{attribute}", cmds.getAttr(f"{node}.{attribute}") + self.option("Amount").get())
 ```
+
+The class docstring is the tool's help in the toolkit window. `toolkits.document("Rigging")`
+writes a markdown page of a toolkit's tools and options.
 # Vendoring
 
 Vendoring is a practice of embedding or packaging up dependencies 

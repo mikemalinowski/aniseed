@@ -20,7 +20,6 @@ from maya import cmds
 import maya.api.OpenMaya as om
 import mref
 
-from ..registry import tool
 from .. import resources
 
 log = logging.getLogger(__name__)
@@ -429,12 +428,6 @@ def mirror_across(from_nodes: list[str] = "", to_nodes: list[str] = "", axis: st
             target_nurbs_fn.updateCurve()
 
 
-@tool(
-    "Read Shape From Node",
-    classification="Rigging",
-    categories=["Shapes"],
-    user_facing=False,
-)
 def shape_to_dict(node: str = "") -> typing.Dict:
     """
     Reads the nurbsCurve shapes under the given node (or the given curve shape
@@ -487,6 +480,33 @@ def shape_to_dict(node: str = "") -> typing.Dict:
         data["curves"].append(node_data)
 
     return data
+
+
+def library() -> typing.List[str]:
+    """
+    Returns the names of the shapes in the shape library: the json files in
+    the shapes folder of every resource path (see
+    aniseed_toolkit.resources.register_resource_path). These are the names
+    load_shape and shape_data_from_file accept.
+
+    Returns:
+        The shape names, sorted
+    """
+    names = set()
+
+    for resource_root in resources.resource_root_paths:
+        folder = os.path.join(resource_root, "shapes")
+
+        if not os.path.isdir(folder):
+            continue
+
+        names.update(
+            os.path.splitext(filename)[0]
+            for filename in os.listdir(folder)
+            if filename.endswith(".json")
+        )
+
+    return sorted(names)
 
 
 @functools.lru_cache(maxsize=None)

@@ -11,15 +11,8 @@ import typing
 import maya.api.OpenMaya as om
 import mref
 
-from ..registry import tool
 
 
-@tool(
-    "MObject Name",
-    classification="Rigging",
-    categories=["Misc"],
-    user_facing=False,
-)
 def get_name(mobject: om.MObject = None):
     """
     Returns the name of the node the given MObject points to. If a string
@@ -45,11 +38,6 @@ def get_name(mobject: om.MObject = None):
         raise ValueError(f"Could not get dependency node for {mobject}")
 
 
-@tool(
-    "Get MObject",
-    categories=["Misc"],
-    user_facing=False,
-)
 def get_mobject(name: str = "") -> om.MFnDependencyNode:
     """
     Returns the MObject for the node with the given name. An MObject keeps
@@ -78,10 +66,6 @@ def get_mobject(name: str = "") -> om.MFnDependencyNode:
         raise RuntimeError(f"Could not find node {name}")
 
 
-@tool(
-    "Get DagPath",
-    user_facing=False,
-)
 def get_dagpath(name: str = "") -> typing.Optional[om.MDagPath]:
     """
     Returns the MDagPath for the node with the given name.

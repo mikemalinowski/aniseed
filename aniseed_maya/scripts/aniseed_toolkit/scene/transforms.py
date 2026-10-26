@@ -11,7 +11,6 @@ import typing
 from maya import cmds
 import mref
 
-from ..registry import tool
 from ..core import direction as _direction
 from ..core import _nodes
 
@@ -19,11 +18,6 @@ if typing.TYPE_CHECKING:
     import aniseed
 
 
-@tool(
-    "Create Basic Transform",
-    classification="Creation",
-    user_facing=False,
-)
 def create(
         classification: str,
         description: str,
@@ -142,10 +136,6 @@ def drive_from_local_matrix(driver, driven) -> mref.ReferencedItem:
     return decompose_node
 
 
-@tool(
-    "Position Between",
-    categories=["Transforms"],
-)
 def position_between(
     node: str = "",
     from_this: str = "",
@@ -199,11 +189,6 @@ def position_between(
     )
 
 
-@tool(
-    "Get Relative Matrix",
-    categories=["Transforms"],
-    user_facing=False,
-)
 def get_relative_matrix(node: str = "", relative_to: str = "") -> list[float]:
     """
     Returns the matrix of node relative to relative_to, i.e. the local
@@ -239,11 +224,6 @@ def get_relative_matrix(node: str = "", relative_to: str = "") -> list[float]:
     return relative_matrix
 
 
-@tool(
-    "Apply Relative Matrix",
-    categories=["Transforms"],
-    user_facing=False,
-)
 def apply_relative_matrix(node: str, matrix: list[float], relative_to: str = ""):
     """
     Applies the matrix to the node as if the node were a child of the

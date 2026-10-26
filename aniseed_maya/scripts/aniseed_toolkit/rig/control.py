@@ -10,7 +10,6 @@ import typing
 from maya import cmds
 import mref
 
-from ..registry import tool
 from ..core._nodes import resolve as _resolve
 from ..scene import shapes as _shapes
 
@@ -320,11 +319,6 @@ def create(
     )
 
 
-@tool(
-    "Get Control",
-    classification="Rigging",
-    user_facing=False,
-)
 def get(node: str) -> Control:
     """
     This will instance a Control class for the given node
@@ -339,10 +333,6 @@ def get(node: str) -> Control:
     return Control.get(node)
 
 
-@tool(
-    "Set As Zero Transform",
-    classification="Rigging",
-)
 def set_as_zero_transform(node: str) -> None:
     """
     Makes the current world transform of the control the rest transform of

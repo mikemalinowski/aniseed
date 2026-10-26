@@ -10,7 +10,6 @@ import logging
 from maya import cmds
 import mref
 
-from ..registry import tool
 from ..core._nodes import resolve as _resolve
 
 
@@ -19,11 +18,6 @@ _TAG_ATTRIBUTE_ = "aniseed_tagging"
 log = logging.getLogger(__name__)
 
 
-@tool(
-    "Tag Node",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def tag(node: str = "", tag: str = "") -> None:
     """
     Adds the given tag to the node, creating the tagging attribute if
@@ -85,11 +79,6 @@ def _descendants_by_depth(node: str, include_self: bool) -> list[str]:
     return [long_name.split("|")[-1] for long_name in long_names]
 
 
-@tool(
-    "Find First Child With Tag",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
     """
     Returns the shallowest descendant of the node which has the given tag.
@@ -109,11 +98,6 @@ def get_first_child(node: str = "", tag: str = "", include_self=False) -> None:
             return local_name
 
 
-@tool(
-    "Find All Children With Tag",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def all_children(node: str = "", tag: str = "", include_self=False) -> list:
     """
     Returns all the descendants of the node which have the given tag,
@@ -135,11 +119,6 @@ def all_children(node: str = "", tag: str = "", include_self=False) -> list:
     ]
 
 
-@tool(
-    "Find All With Tag",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def find_all(tag: str = "", include_self=False) -> None:
     """
     Returns every node in the scene which has the given tag.
@@ -158,11 +137,6 @@ def find_all(tag: str = "", include_self=False) -> None:
     ]
 
 
-@tool(
-    "Has Tag",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def has_tag(node: str = "", tag: str = "") -> bool:
     """
     Returns True if the node has the given tag.
@@ -178,11 +152,6 @@ def has_tag(node: str = "", tag: str = "") -> bool:
     return False
 
 
-@tool(
-    "Get Tag Data",
-    classification="Rigging",
-    categories=["Tagging"],
-)
 def get_tags(node: str = "") -> list[str]:
     """
     Returns the tags of the node.

@@ -1,0 +1,7 @@
+{
+    "version": "1.0.0",
+    "description": "The Aniseed Rigging Toolkit: tools for building rigs in Maya, such as shape, joint, skinning and transform tools",
+    "hosts": ["maya"],
+    "requires": ["aniseed_maya_standard"],
+    "toolkit": "Rigging"
+}

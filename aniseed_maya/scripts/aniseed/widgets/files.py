@@ -12,16 +12,30 @@ from .. import resources
 class FilepathSelector(QtWidgets.QWidget):
     """
     This is a selector field that exposes buttons to make it easier
-    to fill the field based on the selection
+    to fill the field based on the selection.
+
+    The browse button asks for a file to save, with the given filter, unless
+    save is False (when it asks for an existing file).
     """
     changed = QtCore.Signal()
 
     # ----------------------------------------------------------------------------------
-    def __init__(self, default_value="", button_size=30, parent=None):
+    def __init__(
+            self,
+            default_value="",
+            button_size=30,
+            parent=None,
+            filter_="*.fbx (*.fbx)",
+            save=True,
+            title="Set Export Path",
+    ):
         super().__init__(parent=parent)
 
         # -- Store our input values
         self._button_size = button_size
+        self._filter = filter_
+        self._save = save
+        self._title = title
 
         # -- Define our base layout
         self.setLayout(
@@ -70,9 +84,9 @@ class FilepathSelector(QtWidgets.QWidget):
     def set_filepath(self):
 
         filepath = qtility.request.filepath(
-            title="Set Export Path",
-            filter_="*.fbx (*.fbx)",
-            save=True,
+            title=self._title,
+            filter_=self._filter,
+            save=self._save,
         )
 
         if not filepath:
