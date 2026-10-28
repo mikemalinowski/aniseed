@@ -1,0 +1,6 @@
+{
+    "version": "1.0.0",
+    "description": "Contains components and functionality for building cartoon style components within aniseed",
+    "hosts": ["maya"],
+    "requires": ["aniseed_standard", "aniseed_utilities"]
+}

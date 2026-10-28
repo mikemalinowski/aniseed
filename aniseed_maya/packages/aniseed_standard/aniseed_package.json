@@ -1,0 +1,6 @@
+{
+    "version": "1.0.0",
+    "description": "The standard Maya components for aniseed (limbs and mechanisms), and the rig building blocks they use",
+    "hosts": ["maya"],
+    "requires": ["aniseed_utilities"]
+}

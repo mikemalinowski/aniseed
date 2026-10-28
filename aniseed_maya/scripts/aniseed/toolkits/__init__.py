@@ -40,17 +40,42 @@ from .. import packages as _packages
 
 log = logging.getLogger(__name__)
 
+# -- The toolkit names already warned about as being declared by more than one
+# -- package, so the warning is only given once per session
+_WARNED_DUPLICATES = set()
+
 
 # --------------------------------------------------------------------------------------
 def packages() -> typing.List[_packages.AniseedPackage]:
     """
     Returns the active aniseed packages which are toolkits (their
     aniseed_package.json has a "toolkit" entry), sorted by toolkit name.
+
+    Only one package may declare a given toolkit. If more than one does, a
+    warning is logged and only the first (in discovery order) is returned
+    (launch still tries each of them, until one has a launch function).
     """
-    return sorted(
-        (package for package in _packages.active() if package.metadata.get("toolkit")),
-        key=lambda package: package.metadata["toolkit"],
-    )
+    declared = dict()
+
+    for package in _packages.active():
+        toolkit = package.metadata.get("toolkit")
+        if not toolkit:
+            continue
+
+        if toolkit in declared:
+            if toolkit not in _WARNED_DUPLICATES:
+                _WARNED_DUPLICATES.add(toolkit)
+                log.warning(
+                    f"Aniseed packages {declared[toolkit].name} and {package.name} both declare "
+                    f"the {toolkit!r} toolkit. Only the "
+                    f"package which provides the toolkit window should have a \"toolkit\" entry in "
+                    f"its aniseed_package.json - tools choose their toolkit with their toolkit attribute."
+                )
+            continue
+
+        declared[toolkit] = package
+
+    return sorted(declared.values(), key=lambda package: package.metadata["toolkit"])
 
 
 # --------------------------------------------------------------------------------------
@@ -74,13 +99,25 @@ def launch(toolkit: str):
         The toolkit's window.
 
     Raises:
-        ValueError: If no active package declares the toolkit.
+        ValueError: If no active package declares the toolkit (with a
+            launch function).
     """
-    for package in packages():
-        if package.metadata["toolkit"] == toolkit:
-            return importlib.import_module(package.name).launch()
+    # -- Gathered through packages() so any duplicate declarations are warned
+    # -- about, but every declaring package is tried, in discovery order, as
+    # -- the first may not be the one which provides the window
+    names_ = names()
 
-    raise ValueError(f"There is no active toolkit called {toolkit!r}. Active toolkits: {names()}")
+    for package in _packages.active():
+        if package.metadata.get("toolkit") != toolkit:
+            continue
+
+        module = importlib.import_module(package.name)
+        if callable(getattr(module, "launch", None)):
+            return module.launch()
+
+        log.warning(f"Aniseed package {package.name} declares the {toolkit!r} toolkit, but has no launch() function")
+
+    raise ValueError(f"There is no active toolkit called {toolkit!r} with a launch() function. Active toolkits: {names_}")
 
 
 # --------------------------------------------------------------------------------------

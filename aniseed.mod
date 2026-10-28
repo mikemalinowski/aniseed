@@ -5,3 +5,4 @@ MAYA_SCRIPT_PATH+:=scripts
 MAYA_SCRIPT_PATH+:=vendor
 scripts: scripts
 PYTHONPATH+:=vendor
+PYTHONPATH+:=packages

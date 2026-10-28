@@ -2,6 +2,34 @@
 
 Aniseed is an application embedded (Maya) rigging tool. 
 
+## What's New: aniseed_utilities replaces aniseed_toolkit
+
+The `aniseed_toolkit` library has been removed. Its code now lives in aniseed packages,
+and the packages have dropped `maya` from their names (everything in `aniseed_maya` is
+Maya specific). Rigs are unaffected, as components keep their identifiers, but any of
+your own code which imports the toolkit needs updating.
+
+* `aniseed_toolkit.{core,scene,rig,ui,utils,resources}` is now
+  `aniseed_utilities.{core,scene,rig,ui,utils,resources}`, imported as
+  `import aniseed_utilities as au` (so `aniseed_toolkit.rig.control.create` is
+  `au.rig.control.create`).
+* `aniseed_toolkit.rigging` is now `aniseed_standard.rigging`
+  (`from aniseed_standard import rigging`).
+* `aniseed_maya_standard.mixins.MirrorMixin` is now `au.mixins.MirrorMixin`.
+* The control shape library moved from `aniseed_toolkit/_resources/shapes` to
+  `aniseed_utilities/_res/shapes`.
+* `aniseed_utilities` also holds the Maya host and the general purpose components
+  (utilities, the global control root, space switching, control insertion and the
+  singulars), so it is always on.
+* Package renames:
+    * `aniseed_maya_standard` is now `aniseed_standard`
+    * `aniseed_maya_cartoon` is now `aniseed_cartoon`
+    * `aniseed_maya_rigging_toolkit` is now `aniseed_rigging_toolkit`
+    * `aniseed_maya_animation_toolkit` is now `aniseed_animation_toolkit`
+    * `aniseed_maya_dev_examples` is now `aniseed_dev_examples`
+
+  Saved on/off choices for the renamed packages are reset to their defaults.
+
 ## What's New: the Rigging and Animation Toolkits (aniseed_toolkit 5)
 
 The single Aniseed Toolkit window is replaced by two xstack based windows, the
@@ -330,8 +358,9 @@ ADD VIDEO LINK
 # Coding With Aniseed
 
 The core of aniseed is application agnostic. All application specific code - components,
-mixins, widgets and hosts - lives in aniseed packages. The standard Maya components are
-in the `aniseed_maya_standard` package, which sits alongside the aniseed module.
+mixins, widgets and hosts - lives in aniseed packages, which sit alongside the aniseed
+module. `aniseed_utilities` holds the utility library, the general purpose components and
+the Maya host, and the standard Maya limbs and mechanisms are in `aniseed_standard`.
 
 If you want to add your own rigging components you can either:
 
@@ -342,7 +371,7 @@ where the folder name is the package name. Aniseed looks within it for `componen
 or declare its path (or the path of a folder of packages) in an environment variable
 called ANISEED_PACKAGE_PATHS. This is the best option for sets of components which belong
 together, such as a muscle setup, and keeps studio code separate from open source code.
-See `aniseed_maya_standard/README.md` for details.
+See `aniseed_utilities/README.md` for details.
 
 
 * Place your components in a folder and declare that folder path in an environment
@@ -652,16 +681,25 @@ Alternatively you can add your component path to the following environment varia
 For studio deployments it is strongly recommended to use the environment variable approach 
 and to keep your custom components seperate from the aniseed deployment.
 
-## Aniseed Toolkit Code
+## Aniseed Utilities Code
 
-In code (in components, or your own scripts and tools), call the `aniseed_toolkit`
-library directly:
+In code (in components, or your own scripts and tools), call the `aniseed_utilities`
+library directly, imported as `au`:
 
 ```python
-import aniseed_toolkit
+import aniseed_utilities as au
 
-distance = aniseed_toolkit.core.maths.distance_between(node_a, node_b)
-control = aniseed_toolkit.rig.control.create(description="arm", location="l", parent=org, shape="core_circle", config=config)
+distance = au.core.maths.distance_between(node_a, node_b)
+control = au.rig.control.create(description="arm", location="l", parent=org, shape="core_circle", config=config)
+```
+
+Rig building blocks (ik / ikfk setups, soft ik, foot roll, twist, spline and ribbon
+setups) are in `aniseed_standard.rigging`:
+
+```python
+from aniseed_standard import rigging
+
+twist_setup = rigging.twist.create_twist_setup(...)
 ```
 
 ## The Rigging and Animation Toolkits
@@ -669,9 +707,9 @@ control = aniseed_toolkit.rig.control.create(description="arm", location="l", pa
 The tools riggers and animators use day to day are in two toolkit windows, opened from
 the Aniseed menu (or the app's Tools menu):
 
-* **Rigging Toolkit** (`aniseed_maya_rigging_toolkit`): shape, joint, pinning, skinning,
+* **Rigging Toolkit** (`aniseed_rigging_toolkit`): shape, joint, pinning, skinning,
   transform and other rigging tools
-* **Animation Toolkit** (`aniseed_maya_animation_toolkit`): selecting, zeroing, keying
+* **Animation Toolkit** (`aniseed_animation_toolkit`): selecting, zeroing, keying
   and posing controls, and ik/fk matching
 
 Each tool is an [xstack](https://github.com/mikemalinowski/xstack) component with
@@ -690,7 +728,7 @@ toolkits.run("Zero Selection", options={"Key On Reset": True})
 ```
 
 To write a tool, inherit from `aniseed.toolkits.Tool`, declare its options, and do the
-work in `run` (calling the `aniseed_toolkit` library). Put it in the `tools` folder of
+work in `run` (calling the `aniseed_utilities` library). Put it in the `tools` folder of
 any aniseed package and it shows in the toolkit it names:
 
 ```python

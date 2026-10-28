@@ -714,7 +714,7 @@ class Rig(xstack.Stack):
         disk.
 
         Rigs which already exist keep the component classes they were created
-        with, and the modules components import (such as aniseed_toolkit or a
+        with, and the modules components import (such as a package's library modules or a
         package's mixins) are not reloaded. Use the Reload menu, which also
         drops those modules and the existing rigs, to pick up those changes.
         """

@@ -6,7 +6,7 @@ aniseed itself is imported.
 
 The components in this folder are part of the aniseed core, so they must be
 application agnostic. Application specific components (such as the Maya
-components in `aniseed_maya_standard`) belong in an aniseed package, which
+components in `aniseed_standard`) belong in an aniseed package, which
 is any folder containing an `aniseed_package.json` file. See
 `aniseed/packages.py`.
 

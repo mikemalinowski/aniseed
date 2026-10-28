@@ -59,8 +59,8 @@ class AppConfig(xstack.app.AppConfig):
     log_logger_names = [
         "xstack",
         "aniseed",
-        "aniseed_toolkit",
-        "aniseed_maya_standard",
+        "aniseed_utilities",
+        "aniseed_standard",
     ]
 
     # -- Add in settings specific to rigging.

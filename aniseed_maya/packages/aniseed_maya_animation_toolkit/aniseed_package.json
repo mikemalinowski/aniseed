@@ -1,7 +1,0 @@
-{
-    "version": "1.0.0",
-    "description": "The Aniseed Animation Toolkit: tools for animating aniseed rigs in Maya, such as selecting, zeroing, keying and posing controls",
-    "hosts": ["maya"],
-    "requires": ["aniseed_maya_standard"],
-    "toolkit": "Animation"
-}

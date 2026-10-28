@@ -1,0 +1,6 @@
+{
+    "version": "1.0.0",
+    "description": "The aniseed utility library (core, scene and rig helpers, mixins, control shapes), the general utility components and the Maya host",
+    "hosts": ["maya"],
+    "requires": []
+}

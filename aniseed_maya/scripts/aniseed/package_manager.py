@@ -80,7 +80,7 @@ class PackageManager(QtWidgets.QDialog):
             "Turning a package off removes its components from the component library. Rigs "
             "which already use them keep all their data, but those components cannot be built "
             "until the package is turned on again. Packages which provide a host are always on. "
-            "Tools from aniseed_toolkit update after a Reload. Double click a package to open its "
+            "Changes to package code update after a Reload. Double click a package to open its "
             "folder."
         )
         note.setWordWrap(True)
