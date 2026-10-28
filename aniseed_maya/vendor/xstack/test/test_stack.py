@@ -1177,5 +1177,138 @@ class TestLoading(unittest.TestCase):
         self.assertIn("unknown", "\n".join(captured.output))
 
 
+class TestDeprecatedNames(unittest.TestCase):
+    """
+    A component's deprecated_names resolve to the component, which always
+    shows and saves with its current identifier.
+    """
+
+    def _make_stack(self):
+        return xstack.Stack(component_paths=[COMPONENT_PATH])
+
+    def _data(self, component_type, options=None, version=None):
+        component_data = dict(
+            component_type=component_type,
+            label="renamed",
+            uuid="abc",
+            inputs={},
+            options=options or {},
+            children=[],
+        )
+        if version is not None:
+            component_data["version"] = version
+        return dict(label="stack", format="galaxy", tree=[component_data])
+
+    def test_resolve_component_type(self):
+        stack = self._make_stack()
+
+        self.assertEqual(stack.resolve_component_type("Old Renamed Component"), "RenamedComponent")
+        self.assertEqual(stack.resolve_component_type("Older Renamed Component"), "RenamedComponent")
+        self.assertEqual(stack.resolve_component_type("RenamedComponent"), "RenamedComponent")
+        self.assertEqual(stack.resolve_component_type("Not A Real Component"), "Not A Real Component")
+        self.assertIsNone(stack.resolve_component_type(None))
+
+    def test_live_identifier_wins_over_deprecated_name(self):
+        stack = self._make_stack()
+
+        self.assertEqual(stack.resolve_component_type("MinimalComponent"), "MinimalComponent")
+        component = stack.add_component(label="minimal", component_type="MinimalComponent")
+        self.assertEqual(component.identifier, "MinimalComponent")
+
+    def test_bare_string_deprecated_names_are_ignored(self):
+        stack = self._make_stack()
+
+        self.assertEqual(stack.resolve_component_type("Bare Old Name"), "Bare Old Name")
+        self.assertEqual(stack.resolve_component_type("B"), "B")
+
+    def test_add_component_by_deprecated_name(self):
+        stack = self._make_stack()
+
+        component = stack.add_component(
+            label="renamed",
+            component_type="Old Renamed Component",
+            options={"test_option": "value"},
+        )
+
+        self.assertEqual(type(component).__name__, "RenamedComponent")
+        self.assertEqual(component.identifier, "RenamedComponent")
+        self.assertEqual(component.option("test_option").get(), "value")
+
+    def test_deprecated_name_is_logged_once(self):
+        stack = self._make_stack()
+        xstack.stack._LOGGED_DEPRECATED_NAMES.discard("Older Renamed Component")
+
+        with self.assertLogs("xstack.stack", level="INFO") as captured:
+            stack.resolve_component_type("Older Renamed Component")
+            stack.resolve_component_type("Older Renamed Component")
+
+        messages = [line for line in captured.output if "Older Renamed Component" in line]
+        self.assertEqual(len(messages), 1)
+        self.assertIn("RenamedComponent", messages[0])
+
+    def test_loading_a_deprecated_name_saves_the_new_name(self):
+        stack = self._make_stack()
+        stack.deserialise(self._data("Old Renamed Component", options={"test_option": "kept"}))
+
+        component = stack.root_components[0]
+        self.assertNotIsInstance(component, xstack.MissingComponent)
+        self.assertEqual(component.identifier, "RenamedComponent")
+        self.assertEqual(component.option("test_option").get(), "kept")
+        self.assertEqual(stack.serialise()["tree"][0]["component_type"], "RenamedComponent")
+
+    def test_deprecated_name_is_resolved_before_migrate(self):
+        stack = self._make_stack()
+
+        # -- The factory loads the components module itself, so the class is
+        # -- taken from the factory rather than imported
+        component_class = stack.component_library.request("RenamedMigratingComponent")
+        component_class.migrated_component_types.clear()
+
+        stack.deserialise(self._data("Old Migrating Name", options={"Old Option": "value"}, version=1))
+
+        component = stack.root_components[0]
+        self.assertEqual(component.identifier, "RenamedMigratingComponent")
+        self.assertEqual(component.option("New Option").get(), "value")
+        self.assertEqual(component.serialise()["version"], 2)
+        self.assertEqual(component_class.migrated_component_types, ["RenamedMigratingComponent"])
+
+    def test_of_type_lookups_resolve_deprecated_names(self):
+        stack = self._make_stack()
+        component = stack.add_component(label="renamed", component_type="RenamedComponent")
+        stack.add_component(label="minimal", component_type="MinimalComponent")
+
+        self.assertEqual(stack.components(of_type="Old Renamed Component"), [component])
+        self.assertIs(stack.get_component_by_type("Old Renamed Component"), component)
+        self.assertIs(stack.get_component_by_label("renamed", of_type="Old Renamed Component"), component)
+        self.assertIsNone(stack.get_component_by_label("minimal", of_type="Old Renamed Component"))
+
+    def test_unclaimed_name_is_still_a_placeholder(self):
+        stack = self._make_stack()
+
+        with self.assertLogs("xstack.stack", level="WARNING"):
+            stack.deserialise(self._data("Not A Real Component"))
+
+        placeholder = stack.root_components[0]
+        self.assertIsInstance(placeholder, xstack.MissingComponent)
+        self.assertEqual(placeholder.missing_identifier, "Not A Real Component")
+        self.assertEqual(stack.serialise()["tree"][0]["component_type"], "Not A Real Component")
+
+    def test_deprecated_names_are_not_listed(self):
+        stack = self._make_stack()
+        identifiers = stack.component_library.identifiers()
+
+        self.assertIn("RenamedComponent", identifiers)
+        self.assertNotIn("Old Renamed Component", identifiers)
+        self.assertNotIn("Old Migrating Name", identifiers)
+
+    def test_replace_component_with_deprecated_name(self):
+        stack = self._make_stack()
+        original = stack.add_component(label="thing", component_type="MinimalComponent")
+
+        replaced = stack.replace_component(original, "Old Renamed Component")
+
+        self.assertEqual(replaced.identifier, "RenamedComponent")
+
+
 if __name__ == "__main__":
     unittest.main()

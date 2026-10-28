@@ -705,6 +705,38 @@ class Rig(xstack.Stack):
                     f"'{identifier}'. Component identifiers must be unique."
                 )
 
+        # -- Deprecated names (a component's previous identifiers) must not be
+        # -- live identifiers, nor be claimed by more than one component
+        claimed = dict()
+
+        for plugin in unique_plugins.values():
+            identifier = library._get_identifier(plugin)
+            deprecated_names = getattr(plugin, "deprecated_names", None) or []
+
+            if not isinstance(deprecated_names, (list, tuple)):
+                log.warning(
+                    f"The deprecated_names of '{identifier}' must be a list of strings, "
+                    f"so they are ignored."
+                )
+                continue
+
+            for name in deprecated_names:
+                if name in identifiers:
+                    log.warning(
+                        f"'{identifier}' lists '{name}' as a deprecated name, but it is the "
+                        f"identifier of a component, which always takes priority."
+                    )
+                    continue
+
+                if name in claimed and claimed[name] != identifier:
+                    log.warning(
+                        f"'{claimed[name]}' and '{identifier}' both list '{name}' as a "
+                        f"deprecated name. Only one of them will be used."
+                    )
+                    continue
+
+                claimed[name] = identifier
+
     # ----------------------------------------------------------------------------------
     @classmethod
     def clear_factory_cache(cls):

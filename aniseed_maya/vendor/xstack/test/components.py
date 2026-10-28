@@ -297,3 +297,64 @@ class FailingAdditionalDataComponent(xstack.Component):
 
     def run(self):
         return True
+
+
+class RenamedComponent(xstack.Component):
+    """
+    Was previously called "Old Renamed Component" (and before that "Older
+    Renamed Component"). It also lists MinimalComponent, which is a live
+    identifier, so must never be resolved to this component.
+    """
+    identifier = "RenamedComponent"
+    deprecated_names = ["Old Renamed Component", "Older Renamed Component", "MinimalComponent"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.declare_option(name="test_option", value="")
+
+    def run(self):
+        return True
+
+
+class RenamedMigratingComponent(xstack.Component):
+    """
+    Was previously called "Old Migrating Name", and version 2 renamed its
+    "Old Option" option to "New Option". It records the component type
+    migrate was given.
+    """
+    identifier = "RenamedMigratingComponent"
+    deprecated_names = ["Old Migrating Name"]
+    version = 2
+
+    migrated_component_types = []
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.declare_option(name="New Option", value="")
+
+    @classmethod
+    def migrate(cls, data, from_version):
+        cls.migrated_component_types.append(data["component_type"])
+        options = data.get("options", dict())
+
+        if from_version < 2 and "Old Option" in options:
+            options["New Option"] = options.pop("Old Option")
+
+        return data
+
+    def run(self):
+        return True
+
+
+class BareStringDeprecatedNameComponent(xstack.Component):
+    """
+    Wrongly gives deprecated_names as a string rather than a list, so it must
+    not be searched character by character.
+    """
+    identifier = "BareStringDeprecatedNameComponent"
+    deprecated_names = "Bare Old Name"
+
+    def run(self):
+        return True

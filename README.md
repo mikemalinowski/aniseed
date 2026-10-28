@@ -681,6 +681,27 @@ Alternatively you can add your component path to the following environment varia
 For studio deployments it is strongly recommended to use the environment variable approach 
 and to keep your custom components seperate from the aniseed deployment.
 
+### Renaming a Component
+
+Rigs store each component by its identifier, so to rename a component, change its
+identifier and add the old one to its `deprecated_names` list:
+
+```python
+class MyCustomComponent(aniseed.RigComponent):
+
+    identifier = "Custom : My Component"
+    deprecated_names = ["my_custom_component_example"]
+```
+
+Rigs saved with an old name (and any code which adds or looks up a component by an old
+name) then resolve to the component, which always shows and saves with its new
+identifier. A rig is rewritten with the new identifier the next time it is saved. A
+deprecated name may not be the identifier of another component (that component always
+takes priority), nor be listed by more than one component. Aniseed warns about either.
+
+If the rename also changes the component's data, increase its `version` and implement
+`migrate` as usual. `migrate` always sees the new identifier.
+
 ## Aniseed Utilities Code
 
 In code (in components, or your own scripts and tools), call the `aniseed_utilities`

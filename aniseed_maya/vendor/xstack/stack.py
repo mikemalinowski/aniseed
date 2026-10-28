@@ -18,6 +18,10 @@ from .component import MissingComponent
 
 log = logging.getLogger(__name__)
 
+# -- The deprecated component names already reported as resolved, so each is
+# -- only logged once per session
+_LOGGED_DEPRECATED_NAMES = set()
+
 
 # --------------------------------------------------------------------------------------
 class Stack:
@@ -162,6 +166,40 @@ class Stack:
 
         return lib
 
+    def resolve_component_type(self, component_type: str) -> str:
+        """
+        Returns the current identifier for the given component type. This is
+        the component type itself if a component has that identifier, otherwise
+        the identifier of the component which lists it in its deprecated_names.
+
+        If nothing matches, the component type is returned unchanged, so callers
+        report it as missing just as they would without this.
+        """
+        library = self.component_library
+
+        # -- A current identifier always wins, and is by far the most common
+        # -- case, so renamed components cost nothing until an old name is used
+        if not component_type or component_type in library.identifiers(include_disabled=True):
+            return component_type
+
+        for plugin in library.plugins(include_disabled=True):
+            deprecated_names = getattr(plugin, "deprecated_names", None)
+
+            # -- A bare string would otherwise be searched character by character
+            if not isinstance(deprecated_names, (list, tuple)):
+                continue
+
+            if component_type in deprecated_names:
+                if component_type not in _LOGGED_DEPRECATED_NAMES:
+                    _LOGGED_DEPRECATED_NAMES.add(component_type)
+                    log.info(
+                        f"'{component_type}' is a deprecated name for '{plugin.identifier}', "
+                        f"and will be saved as '{plugin.identifier}'"
+                    )
+                return plugin.identifier
+
+        return component_type
+
     def add_component(
             self,
             component_type: str,
@@ -191,7 +229,12 @@ class Stack:
 
         None is returned if the component type is not available or fails to
         initialise.
+
+        The component type may be one of a component's deprecated_names, in
+        which case that component is added (with its current identifier).
         """
+        component_type = self.resolve_component_type(component_type)
+
         # -- Check we can access this component type
         if component_type not in self.component_library.identifiers():
             log.warning(f"{component_type} is not recognised")
@@ -393,8 +436,15 @@ class Stack:
         component type is not available (or fails to initialise) a placeholder of
         missing_component_class is added instead, which keeps the data so that
         nothing is lost when the stack is next serialised.
+
+        Data saved under one of a component's deprecated_names is given that
+        component's current identifier before anything else (including
+        migrate) sees it.
         """
-        component_type = data["component_type"]
+        component_type = self.resolve_component_type(data["component_type"])
+        if component_type != data["component_type"]:
+            data = dict(data, component_type=component_type)
+
         force_uuid = None if regenerate_uuids else data.get("uuid")
 
         component_class = None
@@ -648,6 +698,7 @@ class Stack:
             process_children(component)
 
         if of_type:
+            of_type = self.resolve_component_type(of_type)
             all_components = [
                 component
                 for component in all_components
@@ -672,6 +723,8 @@ class Stack:
         This will cycle the hierarchy and search it for a component
         with the given uuid.
         """
+        of_type = self.resolve_component_type(of_type)
+
         for component in self.components():
 
             # -- If we're specifically looking for a particular
@@ -690,6 +743,8 @@ class Stack:
         This will cycle the hierarchy and search it for a component
         with the given uuid.
         """
+        of_type = self.resolve_component_type(of_type)
+
         for component in self.components():
 
             # -- If we're specifically looking for a particular

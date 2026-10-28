@@ -11,6 +11,14 @@ class RigComponent(xstack.Component):
     difference between a RigComponent and a xstack Component is that the rig
     is always accessible via .rig and the configuration component is always
     accessible from the .config property.
+
+    To rename a component, change its identifier and add the old identifier
+    to its deprecated_names list. Rigs saved with (and code asking for) the
+    old name then resolve to the component, which always shows and saves with
+    its new identifier:
+
+        identifier = "Limb : Arm"
+        deprecated_names = ["Limb : Two Bone Arm"]
     """
     help_url = ""
 

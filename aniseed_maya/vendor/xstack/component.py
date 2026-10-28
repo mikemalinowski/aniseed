@@ -53,6 +53,13 @@ class Component:
     # -- a new component which can be added.
     deprecated = False
 
+    # -- Previous identifiers of this component. Data saved with (and code asking
+    # -- for) any of these names resolves to this component, which always shows
+    # -- and saves with its current identifier. Add the old identifier here
+    # -- whenever you rename a component. This is unrelated to the deprecated
+    # -- flag above, which hides the component from the ui's.
+    deprecated_names: typing.List[str] = []
+
     # -- The version of this component's serialised data. Increase it whenever
     # -- a change to the component's inputs, options or additional data means
     # -- older data needs converting, and implement migrate to convert it.
