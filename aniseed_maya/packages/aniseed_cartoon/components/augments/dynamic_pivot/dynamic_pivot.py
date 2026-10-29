@@ -1,7 +1,8 @@
 """
 Provides the "Augment : Dynamic Pivot" component, which builds a control
 whose pivot slides along a guide curve to the point its rotation tips towards
-(see aniseed_cartoon.rigging.dynamic_pivot).
+(see aniseed_cartoon.rigging.dynamic_pivot), and the "Augment : Dynamic Foot
+Pivot" component, which extends it with a heel roll and toe to drive a foot.
 """
 import mref
 import logging
@@ -143,6 +144,12 @@ class DynamicPivotComponent(aniseed.RigComponent):
             log.warning(f"{self.label()}: The Driven Joint ({driven_joint}) does not exist")
             return False
 
+        return self._guide_is_valid()
+
+    def _guide_is_valid(self) -> bool:
+        """
+        Checks the guide curve is set and is a nurbs curve
+        """
         guide = self.input("Guide Curve").get()
 
         if not guide or not mref.objExists(guide):
@@ -175,4 +182,128 @@ class DynamicPivotComponent(aniseed.RigComponent):
 
         self.output("Pivot").set(setup.control.ctl)
         self.output("Result").set(setup.anchor)
+        return True
+
+
+class DynamicFootPivotComponent(DynamicPivotComponent):
+    """
+    A Dynamic Pivot which drives a foot and toe joint. Rotating the pivot
+    control forward in x first lifts the heel, rolling the foot around the
+    toe, until it reaches the control's heelRollLimit, after which the rest
+    rocks the pivot as normal. Heel and Toe controls give direct control of
+    each (see aniseed_cartoon.rigging.dynamic_pivot.DynamicFootPivot).
+
+    The Result output is the node the foot joint follows.
+    """
+
+    identifier = "Augment : Dynamic Foot Pivot"
+
+    def __init__(self, *args, **kwargs):
+        """
+        Replaces the Driven Joint with the Foot Joint and Toe Joint inputs and
+        adds the "Heel" and "Toe" outputs
+        """
+        super().__init__(*args, **kwargs)
+
+        self.inputs().remove(self.input("Driven Joint"))
+
+        self.declare_input(
+            name="Foot Joint",
+            description="The foot joint, which is constrained to the Result",
+            validate=True,
+            group="Required Joints",
+        )
+
+        self.declare_input(
+            name="Toe Joint",
+            description="The toe joint, which the heel rolls around and the Toe control drives",
+            validate=True,
+            group="Required Joints",
+        )
+
+        self.declare_output(
+            name="Heel",
+            description="The heel control",
+        )
+
+        self.declare_output(
+            name="Toe",
+            description="The toe control",
+        )
+
+    def on_enter_stack(self):
+        """
+        Hooks the Parent input to the parent component's default output and
+        hides the Create Joint option. If it is enabled, a foot joint is
+        created under (and matched to) the selection, with a toe joint under
+        it, and they are set as the Foot Joint and Toe Joint.
+        """
+        self.option("Create Joint").set_hidden(True)
+        self.input("Parent").hook_to_parent()
+
+        if not self.option("Create Joint").get():
+            return
+
+        prefix = self.option("Descriptive Prefix").get()
+        location = self.option("Location").get()
+        selected = au.core.selection.first_selected()
+
+        foot = au.scene.joints.create(
+            description=f"{prefix}Foot",
+            location=location,
+            parent=selected,
+            config=self.config,
+            match_to=selected,
+        )
+
+        toe = au.scene.joints.create(
+            description=f"{prefix}Toe",
+            location=location,
+            parent=foot,
+            config=self.config,
+            match_to=foot,
+        )
+
+        self.input("Foot Joint").set(foot)
+        self.input("Toe Joint").set(toe)
+
+    def is_valid(self) -> bool:
+        """
+        Checks the foot and toe joints exist and the guide curve is valid
+        """
+        for name in ["Foot Joint", "Toe Joint"]:
+            joint = self.input(name).get()
+
+            if not joint or not mref.objExists(joint):
+                log.warning(f"{self.label()}: The {name} must be set to an existing joint")
+                return False
+
+        return self._guide_is_valid()
+
+    def run(self) -> bool:
+        """
+        Builds the dynamic foot pivot, constrains the foot joint to its
+        result and the toe joint to its toe control, and sets the outputs
+        """
+        foot_joint = self.input("Foot Joint").get()
+        toe_joint = self.input("Toe Joint").get()
+
+        setup = dynamic_pivot.DynamicFootPivot(
+            guide_curve=self.input("Guide Curve").get(),
+            config=self.config,
+            prefix=self.option("Descriptive Prefix").get(),
+            location=self.option("Location").get(),
+            foot=foot_joint,
+            toe=toe_joint,
+            debug=self.option("Debug").get(),
+            parent=self.input("Parent").get(),
+        ).build()
+
+        au.scene.constraints.parent_and_scale(setup.foot_anchor, foot_joint, maintain_offset=True)
+        au.scene.constraints.parent_and_scale(setup.toe_control.ctl, toe_joint, maintain_offset=True)
+
+        self.output("Pivot").set(setup.control.ctl)
+        self.output("Heel").set(setup.heel_control.ctl)
+        self.output("Toe").set(setup.toe_control.ctl)
+        self.output("Result").set(setup.foot_anchor)
         return True

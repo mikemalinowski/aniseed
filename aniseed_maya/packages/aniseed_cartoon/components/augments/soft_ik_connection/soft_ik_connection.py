@@ -3,12 +3,8 @@ Provides the "Augment : Soft IK Connection" component, which applies soft ik
 (with stretch) to an existing two bone ik chain (see
 aniseed_cartoon.rigging.soft_ik_connection).
 """
-import mref
-import logging
 import aniseed
 from aniseed_cartoon.rigging import soft_ik_connection
-
-log = logging.getLogger(__name__)
 
 
 class SoftIkConnectionComponent(aniseed.RigComponent):
@@ -81,25 +77,6 @@ class SoftIkConnectionComponent(aniseed.RigComponent):
         Every input is a single node
         """
         return aniseed.widgets.ObjectSelector(component=self)
-
-    def is_valid(self) -> bool:
-        """
-        Checks every node given exists.
-        """
-        for input_name in ["Root", "Target", "Second Joint", "Third Joint", "Attribute Host"]:
-            node = self.input(input_name).get()
-
-            if not node:
-                if input_name == "Attribute Host":
-                    continue
-                log.warning(f"{self.label()}: The {input_name} input is not set")
-                return False
-
-            if not mref.objExists(node):
-                log.warning(f"{self.label()}: The {input_name} ({node}) does not exist")
-                return False
-
-        return True
 
     def run(self) -> bool:
         """

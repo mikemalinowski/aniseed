@@ -102,6 +102,13 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             group="Twist Configuration",
         )
 
+        self.declare_input(
+            name="IK Target Guide",
+            description="Optional transform to place the IK Target control at. The ik still solves to the tip joint.",
+            validate=False,
+            group="Optional Nodes",
+        )
+
         self.declare_option(
             name="Descriptive Prefix",
             description="Prefix used when naming the controls and mechanical nodes",
@@ -198,7 +205,7 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         """
         This allows us to provide dedicate widgets for specific inputs
         """
-        if requirement_name in ["Parent", "Root Joint", "Tip Joint"]:
+        if requirement_name in ["Parent", "Root Joint", "Tip Joint", "IK Target Guide"]:
             return aniseed.widgets.ObjectSelector(component=self)
 
         if requirement_name in ["Upper Twist Joints", "Lower Twist Joints"]:
@@ -284,10 +291,16 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     def is_valid(self) -> bool:
         """
         Checks the root and tip joints give a chain of exactly three joints,
-        and that every twist joint exists.
+        that every twist joint exists and that the ik target guide exists if
+        it is given.
         """
         root_joint = self.input("Root Joint").get()
         tip_joint = self.input("Tip Joint").get()
+        ik_target_guide = self.input("IK Target Guide").get()
+
+        if ik_target_guide and not mref.objExists(ik_target_guide):
+            log.warning(f"{self.label()}: The IK Target Guide ({ik_target_guide}) does not exist")
+            return False
 
         for input_name, joint in [("Root Joint", root_joint), ("Tip Joint", tip_joint)]:
             if not joint or not mref.objExists(joint):
@@ -344,6 +357,7 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             world_space_ik_controls=self.option("World Space IK Controls").get(),
             upper_twist_joints=self.input("Upper Twist Joints").get() or [],
             lower_twist_joints=self.input("Lower Twist Joints").get() or [],
+            ik_target_guide=self.input("IK Target Guide").get() or None,
         ).build()
 
         for output_name, control in [

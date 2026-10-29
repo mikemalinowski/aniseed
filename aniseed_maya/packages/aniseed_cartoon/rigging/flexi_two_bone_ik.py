@@ -18,8 +18,9 @@ The structure built is:
                     TwoBoneIk 03 (joint)
                         BottomFk (control)
                             BottomBoneIk (ik handle)
-        IKTarget (control)
-            TwoBoneIk (ik handle, pole vector constrained to IkUpVector)
+        IKTarget (control, at the ik target guide if one is given)
+            IKTargetRest (transform at the wrist)
+                TwoBoneIk (ik handle, pole vector constrained to IkUpVector)
         IkUpVector (control)
 
 The MidFk and BottomFk zero nodes are driven through their offsetParentMatrix
@@ -85,6 +86,11 @@ class FlexiTwoBoneIk:
             controls are aligned to the world. If False the IkRoot matches
             the upper joint, the IKTarget matches the wrist joint and the
             IkUpVector is aligned to the plane of the chain.
+        ik_target_guide: Optional transform to place the IKTarget control at
+            (matching its position and rotation, regardless of
+            world_space_ik_controls). The ik handle and soft ik still work
+            from the wrist, through the IKTargetRest transform under the
+            control.
 
     Usage:
         setup = FlexiTwoBoneIk(upper, lower, wrist, config, "arm", config.left)
@@ -107,6 +113,7 @@ class FlexiTwoBoneIk:
             world_space_ik_controls: bool = True,
             upper_twist_joints: typing.List[str] = None,
             lower_twist_joints: typing.List[str] = None,
+            ik_target_guide: str = None,
     ):
         self.upper_joint = mref.get(upper_joint)
         self.lower_joint = mref.get(lower_joint)
@@ -120,6 +127,7 @@ class FlexiTwoBoneIk:
         self.lower_twist_joints = lower_twist_joints or []
         self.soft_ik = soft_ik
         self.world_space_ik_controls = world_space_ik_controls
+        self.ik_target_guide = ik_target_guide
 
         # -- "leg" becomes "Leg" so it reads as part of a camel cased description
         self.prefix = prefix[:1].upper() + prefix[1:]
@@ -134,6 +142,7 @@ class FlexiTwoBoneIk:
         self.org: str = ""
         self.ik_root_control: au.rig.control.Control = None
         self.ik_target_control: au.rig.control.Control = None
+        self.ik_target_rest: str = ""
         self.upvector_control: au.rig.control.Control = None
         self.top_fk_control: au.rig.control.Control = None
         self.mid_fk_control: au.rig.control.Control = None
@@ -332,7 +341,12 @@ class FlexiTwoBoneIk:
         """
         Creates the IkRoot, IKTarget and IkUpVector controls along with the
         two bone ik chain which they drive. The controls are either aligned
-        to the world or to the chain, depending on world_space_ik_controls.
+        to the world or to the chain, depending on world_space_ik_controls,
+        except the IKTarget which matches the ik target guide if given.
+
+        The ik handle lives under the IKTargetRest transform, which sits at
+        the wrist (aligned as the IKTarget would be without a guide), so the
+        IKTarget control can be placed anywhere.
         """
         self.ik_root_control = self._create_control(
             label="IkRoot",
@@ -346,11 +360,23 @@ class FlexiTwoBoneIk:
         self.ik_target_control = self._create_control(
             label="IKTarget",
             parent=self.org,
-            match_to=self.wrist_joint.full_name(),
+            match_to=self.ik_target_guide or self.wrist_joint.full_name(),
             shape="core_stumpy_cross",
             shape_scale=self.shape_scale * 2.0,
-            align_to_world=self.world_space_ik_controls,
+            align_to_world=self.world_space_ik_controls and not self.ik_target_guide,
         )
+
+        self.ik_target_rest = au.scene.transforms.create(
+            classification=self.config.mechanical,
+            description=self._description("IKTargetRest"),
+            location=self.location,
+            config=self.config,
+            parent=self.ik_target_control.ctl,
+            match_to=self.wrist_joint.full_name(),
+        )
+
+        if self.world_space_ik_controls:
+            mref.get(self.ik_target_rest).set_rotation([0, 0, 0], space="world")
 
         self.upvector_control = self._create_control(
             label="IkUpVector",
@@ -392,7 +418,7 @@ class FlexiTwoBoneIk:
             label="TwoBoneIk",
             start_joint=self.two_bone_joints[0],
             end_joint=self.two_bone_joints[-1],
-            parent=self.ik_target_control.ctl,
+            parent=self.ik_target_rest,
             pole_vector=self.upvector_control.ctl,
         )
 
@@ -404,15 +430,16 @@ class FlexiTwoBoneIk:
     def _create_soft_ik(self):
         """
         If soft ik is enabled, drives the lengths of the two bone ik chain
-        from the distance between the IkRoot and IKTarget controls. The fk
-        controls (and so everything riding on them) follow the chain.
+        from the distance between the IkRoot control and the IKTargetRest
+        transform. The fk controls (and so everything riding on them) follow
+        the chain.
         """
         if not self.soft_ik:
             return
 
         self.soft_ik_connection = soft_ik_connection.SoftIkConnection(
             root=self.ik_root_control.ctl,
-            target=self.ik_target_control.ctl,
+            target=self.ik_target_rest,
             second_joint=self.two_bone_joints[1],
             third_joint=self.two_bone_joints[2],
             host=self.ik_target_control.ctl,

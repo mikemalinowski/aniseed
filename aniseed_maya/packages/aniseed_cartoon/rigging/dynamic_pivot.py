@@ -28,6 +28,9 @@ The structure built is:
         DynamicPivot (takes the control's rotation around the pivot point)
             DynamicPivotResult (the anchor to drive things from)
         DynamicMarker (debug only, a sphere at the pivot point)
+
+DynamicFootPivot extends it with a toe and a heel roll, which takes the
+first part of the control's forward x rotation.
 """
 import math
 import typing
@@ -91,6 +94,11 @@ class DynamicPivot:
         self.anchor: str = ""
         self.debug_marker: str = ""
         self.point_on_track: mref.ReferencedItem = None
+        self.radius: float = 0.0
+
+        # -- The x rotation the pivot rocks by, the control's rotateX unless
+        # -- a subclass routes it elsewhere
+        self.rotate_x: mref.ReferencedItem = None
 
     def build(self) -> "DynamicPivot":
         """
@@ -136,12 +144,13 @@ class DynamicPivot:
         """
         return mref.create(node_type, name=self._name(self.config.mechanical, label))
 
-    def _create_transform(self, classification: str, label: str, parent: str = None) -> str:
+    def _create_transform(self, classification: str, label: str, parent: str = None, at: str = None) -> str:
         """
-        Creates a transform matched to the org (or at the guide curve's
-        translation if there is no org yet)
+        Creates a world aligned transform at the given node's translation,
+        or the guide curve's if no node is given
         """
-        translation = cmds.xform(self.guide_curve.full_name(), query=True, translation=True, worldSpace=True)
+        at = at or self.guide_curve.full_name()
+        translation = cmds.xform(at, query=True, translation=True, worldSpace=True)
 
         return au.scene.transforms.create(
             classification=classification,
@@ -205,7 +214,7 @@ class DynamicPivot:
         Rotating in y would not tip towards any point, so it is locked.
         """
         cvs = om.MFnNurbsCurve(om.MSelectionList().add(self._track_shape()).getDagPath(0)).cvPositions()
-        radius = max(om.MVector(cv).length() for cv in cvs)
+        self.radius = max(om.MVector(cv).length() for cv in cvs)
 
         self.control = au.rig.control.create(
             description=self._description("Pivot"),
@@ -215,12 +224,14 @@ class DynamicPivot:
             config=self.config,
             match_to=self.org,
             # -- The circle shape has a radius of 0.5
-            shape_scale=radius * 2,
+            shape_scale=self.radius * 2,
         )
 
         ctl = mref.get(self.control.ctl)
         ctl.attr("rotateOrder").set(3)  # -- xzy
         ctl.attr("rotateY").set(lock=True, keyable=False)
+
+        self.rotate_x = ctl.attr("rotateX")
 
     def _create_rocker(self):
         """
@@ -234,7 +245,7 @@ class DynamicPivot:
         ctl = mref.get(self.control.ctl)
 
         amount = self._create_node("length", "RotationAmount")
-        ctl.attr("rotateX").connect(amount.attr("inputX"))
+        self.rotate_x.connect(amount.attr("inputX"))
         ctl.attr("rotateZ").connect(amount.attr("inputZ"))
 
         # -- Catches a zero length vector, which has no direction
@@ -242,7 +253,7 @@ class DynamicPivot:
         rotated.attr("operation").set(2)  # -- Greater than
         amount.attr("output").connect(rotated.attr("firstTerm"))
         rotated.attr("secondTerm").set(0)
-        ctl.attr("rotateX").connect(rotated.attr("colorIfTrueR"))
+        self.rotate_x.connect(rotated.attr("colorIfTrueR"))
         ctl.attr("rotateZ").connect(rotated.attr("colorIfTrueB"))
         rotated.attr("colorIfFalse").set(1, 0, 0)
 
@@ -279,7 +290,10 @@ class DynamicPivot:
 
         self.pivot = mref.get(self._create_transform(self.config.mechanical, "DynamicPivot", self.org)).full_name()
         pivot = mref.get(self.pivot)
-        mref.get(self.control.ctl).attr("rotate").connect(pivot.attr("rotate"))
+        ctl = mref.get(self.control.ctl)
+        self.rotate_x.connect(pivot.attr("rotateX"))
+        ctl.attr("rotateY").connect(pivot.attr("rotateY"))
+        ctl.attr("rotateZ").connect(pivot.attr("rotateZ"))
         # -- cmds rather than mref, as mref fails to connect to the rotatePivot
         cmds.connectAttr(f"{self.point_on_track.full_name()}.position", f"{self.pivot}.rotatePivot")
 
@@ -297,6 +311,142 @@ class DynamicPivot:
         marker = mref.get(cmds.parent(marker, self.org, relative=True)[0])
         self.point_on_track.attr("position").connect(marker.attr("translate"))
         self.debug_marker = marker.full_name()
+
+
+class DynamicFootPivot(DynamicPivot):
+    """
+    A DynamicPivot which drives a foot and a toe. The control's x rotation
+    is split by its animatable heelRollLimit attribute (in degrees). Forward
+    (positive) rotation up to the limit lifts the heel, rolling the foot
+    around the toe, and only the rest rocks the pivot:
+
+        heel = clamp(rx, 0, heelRollLimit)
+        pivot = rx - heel
+
+    Added under the DynamicPivotResult:
+
+        DynamicPivotResult
+            Toe (control, at the toe, to drive the toe from)
+            HeelRoll (at the toe, takes the heel share of the x rotation)
+                Heel (control)
+                    FootResult (matched to the foot, to drive the foot from)
+
+    Args:
+        foot: The node the FootResult is matched to (such as the foot joint)
+        toe: The node whose translation the toe and heel roll sit at (such
+            as the toe joint)
+
+        The remaining arguments are as DynamicPivot.
+
+    Usage:
+        setup = DynamicFootPivot(guide, config, "", config.left, foot_jnt, toe_jnt).build()
+        mref.parentConstraint(setup.foot_anchor, foot_jnt, maintainOffset=True)
+    """
+
+    def __init__(
+            self,
+            guide_curve: str,
+            config: "aniseed.RigConfiguration",
+            prefix: str,
+            location: str,
+            foot: str,
+            toe: str,
+            debug: bool = False,
+            parent: str = None,
+    ):
+        super().__init__(guide_curve, config, prefix, location, debug=debug, parent=parent)
+        self.foot = foot
+        self.toe = toe
+
+        # -- Populated by build
+        self.heel_rotation: mref.ReferencedItem = None
+        self.heel_roll: str = ""
+        self.toe_control: au.rig.control.Control = None
+        self.heel_control: au.rig.control.Control = None
+        self.foot_anchor: str = ""
+
+    def build(self) -> "DynamicFootPivot":
+        """
+        Creates the dynamic pivot, then the toe and heel on its result.
+
+        Returns:
+            This instance, so the created nodes can be read from it
+        """
+        super().build()
+        self._create_toe_and_heel()
+        return self
+
+    def _create_control(self):
+        """
+        Creates the control, then splits its x rotation between the heel
+        roll and the pivot
+        """
+        super()._create_control()
+        ctl = mref.get(self.control.ctl)
+
+        limit = ctl.add_attribute(
+            "heelRollLimit",
+            value=40,
+            attribute_type="double",
+            keyable=True,
+            min=0,
+            defaultValue=40,
+        )
+
+        heel = self._create_node("clamp", "HeelRollAmount")
+        ctl.attr("rotateX").connect(heel.attr("inputR"))
+        limit.connect(heel.attr("maxR"))
+
+        pivot_x = self._create_node("floatMath", "PivotRotateX")
+        pivot_x.attr("operation").set(1)  # -- Subtract
+        ctl.attr("rotateX").connect(pivot_x.attr("floatA"))
+        heel.attr("outputR").connect(pivot_x.attr("floatB"))
+
+        self.heel_rotation = heel.attr("outputR")
+        self.rotate_x = pivot_x.attr("outFloat")
+
+    def _create_toe_and_heel(self):
+        """
+        Creates the heel roll at the toe with the heel control under it,
+        the toe control beside it and the foot result under the heel
+        control
+        """
+        self.heel_roll = mref.get(
+            self._create_transform(self.config.mechanical, "HeelRoll", self.anchor, at=self.toe),
+        ).full_name()
+        self.heel_rotation.connect(mref.get(self.heel_roll).attr("rotateX"))
+
+        # -- The circle shape has a radius of 0.5
+        self.toe_control = au.rig.control.create(
+            description=self._description("Toe"),
+            location=self.location,
+            parent=self.anchor,
+            shape="core_circle",
+            config=self.config,
+            match_to=self.heel_roll,
+            shape_scale=self.radius * 0.5,
+        )
+
+        self.heel_control = au.rig.control.create(
+            description=self._description("Heel"),
+            location=self.location,
+            parent=self.heel_roll,
+            shape="core_circle",
+            config=self.config,
+            match_to=self.heel_roll,
+            shape_scale=self.radius * 0.75,
+        )
+
+        self.foot_anchor = mref.get(
+            au.scene.transforms.create(
+                classification=self.config.mechanical,
+                description=self._description("FootResult"),
+                location=self.location,
+                config=self.config,
+                parent=self.heel_control.ctl,
+                match_to=self.foot,
+            ),
+        ).full_name()
 
 
 def _normalized_circle(curve_shape: str) -> str:

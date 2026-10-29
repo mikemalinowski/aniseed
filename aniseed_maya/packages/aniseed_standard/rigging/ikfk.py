@@ -7,12 +7,19 @@ import mref
 import aniseed_utilities as au
 
 
-def create_ikfk_visibility(attribute, ik_controls: list[str], fk_controls: list[str]):
+def create_ikfk_visibility(
+        attribute,
+        ik_controls: list[str],
+        fk_controls: list[str],
+        ik_threshold: float = 0.9,
+        fk_threshold: float = 0.1,
+):
     """
     Drives the visibility of the ik and fk controls from an ikfk blend
     attribute (where 0 is ik and 1 is fk). The ik controls are visible
-    whilst the blend is below 0.9 and the fk controls are visible whilst
-    the blend is above 0.1, so both are visible mid-blend.
+    whilst the blend is below the ik threshold and the fk controls are
+    visible whilst the blend is above the fk threshold, so both are visible
+    mid-blend.
 
     The visibility is driven on the offset node of each control.
 
@@ -20,6 +27,8 @@ def create_ikfk_visibility(attribute, ik_controls: list[str], fk_controls: list[
         attribute: The ikfk blend attribute
         ik_controls: The controls to show when in ik
         fk_controls: The controls to show when in fk
+        ik_threshold: The ik controls are visible below this value
+        fk_threshold: The fk controls are visible above this value
     """
     attribute = mref.get(attribute)
 
@@ -29,8 +38,8 @@ def create_ikfk_visibility(attribute, ik_controls: list[str], fk_controls: list[
     attribute.connect(ik_condition.input1)
     attribute.connect(fk_condition.input1)
 
-    ik_condition.input2.set(0.9)
-    fk_condition.input2.set(0.1)
+    ik_condition.input2.set(ik_threshold)
+    fk_condition.input2.set(fk_threshold)
 
     for condition, controls in ((ik_condition, ik_controls), (fk_condition, fk_controls)):
         for control in controls:
