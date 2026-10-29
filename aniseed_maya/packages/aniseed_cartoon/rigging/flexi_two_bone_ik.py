@@ -73,6 +73,12 @@ class FlexiTwoBoneIk:
             twist joints is built between the upper and lower joints
         lower_twist_count: If given, a BendyTwisters setup with this many
             twist joints is built between the lower and wrist joints
+        upper_twist_joints: Optional existing joints for the upper
+            BendyTwisters to drive, instead of creating upper_twist_count
+            joints
+        lower_twist_joints: Optional existing joints for the lower
+            BendyTwisters to drive, instead of creating lower_twist_count
+            joints
         soft_ik: If True, soft ik (with stretch) is applied to the two bone
             ik chain, with its attributes on the IKTarget control
         world_space_ik_controls: If True the IkRoot, IKTarget and IkUpVector
@@ -99,6 +105,8 @@ class FlexiTwoBoneIk:
             lower_twist_count: int = None,
             soft_ik: bool = False,
             world_space_ik_controls: bool = True,
+            upper_twist_joints: typing.List[str] = None,
+            lower_twist_joints: typing.List[str] = None,
     ):
         self.upper_joint = mref.get(upper_joint)
         self.lower_joint = mref.get(lower_joint)
@@ -108,6 +116,8 @@ class FlexiTwoBoneIk:
         self.parent = parent
         self.upper_twist_count = upper_twist_count
         self.lower_twist_count = lower_twist_count
+        self.upper_twist_joints = upper_twist_joints or []
+        self.lower_twist_joints = lower_twist_joints or []
         self.soft_ik = soft_ik
         self.world_space_ik_controls = world_space_ik_controls
 
@@ -351,6 +361,9 @@ class FlexiTwoBoneIk:
             align_to_world=True,
         )
 
+        for control in [self.ik_root_control, self.ik_target_control, self.upvector_control]:
+            au.scene.shapes.scale(control.ctl, scale_by=2)
+
         upvector_org = mref.get(self.upvector_control.org)
         upvector_org.set_position(
             au.core.maths.calculate_upvector_position(
@@ -457,6 +470,9 @@ class FlexiTwoBoneIk:
             )
 
         self.top_fk_control, self.mid_fk_control, self.bottom_fk_control = fk_controls
+
+        for control in fk_controls:
+            au.scene.shapes.scale(control.ctl, scale_by=2)
 
     def _create_one_bone_iks(self):
         """
@@ -633,24 +649,34 @@ class FlexiTwoBoneIk:
         rather than the upper bone, so as the pole vector rolls the chain the
         twist spreads along the upper bone.
         """
-        if self.upper_twist_count:
+        if self.upper_twist_count or self.upper_twist_joints:
             self.upper_twisters = self._create_bendy_twisters(
                 label="Upper",
                 start_joint=self.upper_joint,
                 end_joint=self.lower_joint,
                 count=self.upper_twist_count,
                 start_twist_node=self.ik_root_control.ctl,
+                twist_joints=self.upper_twist_joints,
             )
 
-        if self.lower_twist_count:
+        if self.lower_twist_count or self.lower_twist_joints:
             self.lower_twisters = self._create_bendy_twisters(
                 label="Lower",
                 start_joint=self.lower_joint,
                 end_joint=self.wrist_joint,
                 count=self.lower_twist_count,
+                twist_joints=self.lower_twist_joints,
             )
 
-    def _create_bendy_twisters(self, label: str, start_joint, end_joint, count: int, start_twist_node: str = None):
+    def _create_bendy_twisters(
+            self,
+            label: str,
+            start_joint,
+            end_joint,
+            count: int,
+            start_twist_node: str = None,
+            twist_joints: typing.List[str] = None,
+    ):
         """
         Builds a BendyTwisters setup between the two joints, under the org
         """
@@ -660,8 +686,9 @@ class FlexiTwoBoneIk:
             config=self.config,
             prefix=self._description(label),
             location=self.location,
-            count=count,
+            count=count or 0,
             parent=self.org,
             shape_scale=self.shape_scale,
             start_twist_node=start_twist_node,
+            twist_joints=twist_joints,
         ).build()

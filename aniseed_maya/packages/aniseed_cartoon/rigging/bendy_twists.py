@@ -40,6 +40,16 @@ The structure built is:
 
     start joint (or the given joint parent)
         BendyTwist 01 -> ## (joints, placed through their offsetParentMatrix)
+
+Rather than creating the twist joints, existing joints (such as twist joints
+in the skeleton, which create_twist_joints can generate) can be given. A
+driver transform rides the curve in place of each one, at the joint's own
+percentage along the bone, and the joint is constrained to it keeping its
+offset. A build therefore leaves the joints where they are, and they return
+to their rest transforms once the setup is deleted.
+
+    BendyNoTransform
+        BendyTwistDriver 01 -> ## (only when existing joints are given)
 """
 import typing
 
@@ -75,6 +85,9 @@ class BendyTwisters:
             holds. If not given the start joint's roll is used.
         end_twist_node: Optional node whose roll the end of the curve
             reaches. If not given the end joint is used.
+        twist_joints: Optional existing joints to drive, ordered from the
+            start joint to the end joint. If given, no twist joints are
+            created, count is taken from them and joint_parent is ignored.
 
     Usage:
         setup = BendyTwisters(upper, lower, config, "upperArm", config.left, 5)
@@ -102,7 +115,12 @@ class BendyTwisters:
             shape_scale: float = None,
             start_twist_node: str = None,
             end_twist_node: str = None,
+            twist_joints: typing.List[str] = None,
     ):
+        self.existing_twist_joints = [mref.get(joint).full_name() for joint in twist_joints or []]
+        if self.existing_twist_joints:
+            count = len(self.existing_twist_joints)
+
         if count < 1:
             raise ValueError("BendyTwisters needs at least one twist joint")
 
@@ -160,9 +178,18 @@ class BendyTwisters:
     @property
     def percentages(self) -> list[float]:
         """
-        The percentage along the curve of each twist joint. A single joint
-        sits in the middle of the curve.
+        The percentage along the curve of each twist joint. Given twist joints
+        keep how far along the bone they already are. Otherwise the joints
+        are spread evenly, and a single joint sits in the middle of the curve.
         """
+        if self.existing_twist_joints:
+            start = om.MVector(self.start_joint.get_position(space="world"))
+            bone = om.MVector(self.end_joint.get_position(space="world")) - start
+            return [
+                min(max(((om.MVector(mref.get(joint).get_position(space="world")) - start) * bone) / (bone * bone), 0.0), 1.0)
+                for joint in self.existing_twist_joints
+            ]
+
         if self.count == 1:
             return [0.5]
         return [idx / (self.count - 1.0) for idx in range(self.count)]
@@ -350,6 +377,10 @@ class BendyTwisters:
         mref.get(f"{self.org}.worldMatrix[0]").connect(org_scale.attr("inputMatrix"))
 
         for idx, percentage in enumerate(self.percentages):
+            if self.existing_twist_joints:
+                self._drive_existing_joint(idx, percentage, start_twist, end_twist, org_scale, stretch_ratio)
+                continue
+
             joint = au.scene.joints.create(
                 description=self._description("BendyTwist"),
                 location=self.location,
@@ -363,9 +394,47 @@ class BendyTwisters:
             for attribute in ["translate", "rotate", "jointOrient"]:
                 joint.attr(attribute).set(0, 0, 0)
 
-            self._attach_to_curve(joint, percentage, start_twist, end_twist, org_scale)
+            self._attach_to_curve(joint, self.joint_parent, percentage, start_twist, end_twist, org_scale)
             self._apply_squash(joint, percentage, stretch_ratio)
             self.twist_joints.append(joint.full_name())
+
+    def _drive_existing_joint(self, idx: int, percentage: float, start_twist, end_twist, org_scale, stretch_ratio):
+        """
+        Drives one of the given twist joints. A driver transform in the
+        setup's no transform org rides the curve (and squashes) in place of
+        the joint, and the joint is constrained to it. The joint's own values
+        are left alone, so once the setup is deleted (such as when the rig is
+        made editable) the joint goes back to its rest transform.
+        """
+        joint = mref.get(self.existing_twist_joints[idx])
+
+        driver = mref.get(
+            au.scene.transforms.create(
+                classification=self.config.mechanical,
+                description=self._description("BendyTwistDriver"),
+                location=self.location,
+                config=self.config,
+                parent=self.no_transform_org,
+            ),
+        )
+
+        # -- The no transform org only has an identity world matrix when the
+        # -- setup is at the origin, so the driver does not inherit transforms
+        # -- either. Its own transform is cleared (it is created keeping its
+        # -- world position, so it holds an offset), leaving its world matrix
+        # -- as the curve's matrix it is given.
+        driver.attr("inheritsTransform").set(False)
+        cmds.xform(driver.full_name(), matrix=list(om.MMatrix()), objectSpace=True)
+        self._attach_to_curve(driver, None, percentage, start_twist, end_twist, org_scale)
+        self._apply_squash(driver, percentage, stretch_ratio)
+
+        # -- The offset is kept, so a joint which sits off the bone, or is
+        # -- oriented differently to the curve, is not moved by the build
+        joint.attr("segmentScaleCompensate").set(False)
+        mref.parentConstraint(driver.full_name(), joint.full_name(), maintainOffset=True)
+        mref.scaleConstraint(driver.full_name(), joint.full_name(), maintainOffset=True)
+
+        self.twist_joints.append(joint.full_name())
 
     def _twist_frame(self) -> om.MMatrix:
         """
@@ -471,6 +540,7 @@ class BendyTwisters:
     def _attach_to_curve(
             self,
             joint: mref.ReferencedItem,
+            joint_parent: typing.Optional[str],
             percentage: float,
             start_twist: typing.Optional[str],
             end_twist: str,
@@ -532,11 +602,16 @@ class BendyTwisters:
         motion_path.attr("rotateOrder").connect(compose.attr("inputRotateOrder"))
         org_scale.attr("outputScale").connect(compose.attr("inputScale"))
 
+        # -- A joint at the scene root takes the world matrix as it is
+        if not joint_parent:
+            compose.attr("outputMatrix").connect(joint.attr("offsetParentMatrix"))
+            return
+
         # -- The joint's own parentInverseMatrix is not used, as reading it
         # -- back into its offsetParentMatrix does not evaluate reliably
         local = self._create_node("multMatrix", "BendyTwistLocal")
         compose.attr("outputMatrix").connect(local.attr("matrixIn[0]"))
-        mref.get(f"{self.joint_parent}.worldInverseMatrix[0]").connect(local.attr("matrixIn[1]"))
+        mref.get(f"{joint_parent}.worldInverseMatrix[0]").connect(local.attr("matrixIn[1]"))
         local.attr("matrixSum").connect(joint.attr("offsetParentMatrix"))
 
     def _apply_squash(self, joint: mref.ReferencedItem, percentage: float, stretch_ratio: str):
@@ -566,3 +641,51 @@ class BendyTwisters:
 
         for axis in ["Y", "Z"]:
             scale.attr("outFloat").connect(joint.attr(f"scale{axis}"))
+
+
+def create_twist_joints(
+        start_joint: str,
+        end_joint: str,
+        count: int,
+        config: "aniseed.RigConfiguration",
+        prefix: str,
+        location: str,
+) -> typing.List[str]:
+    """
+    Creates twist joints under the start joint, spread between the two
+    joints at the same percentages BendyTwisters places them, and oriented
+    to the start joint. These can be given to BendyTwisters as its
+    twist_joints, so the joints live in the skeleton (and can be skinned)
+    rather than being created by each build.
+
+    Args:
+        start_joint: The joint to create the twist joints under
+        end_joint: The joint the twist joints run towards
+        count: How many twist joints to create
+        config: The aniseed rig configuration used to name the joints
+        prefix: Placed in front of the description of the joint names
+        location: The location token (config.left, config.middle etc)
+
+    Returns:
+        The created joints, ordered from the start joint to the end joint
+    """
+    start = om.MVector(mref.get(start_joint).get_position(space="world"))
+    end = om.MVector(mref.get(end_joint).get_position(space="world"))
+
+    percentages = [0.5] if count == 1 else [idx / (count - 1.0) for idx in range(count)]
+
+    joints = []
+    for percentage in percentages:
+        joint = au.scene.joints.create(
+            description=f"{prefix[:1].upper()}{prefix[1:]}BendyTwist",
+            location=location,
+            parent=start_joint,
+            config=config,
+            match_to=start_joint,
+        )
+        mref.get(joint).set_position(list(start + (end - start) * percentage), space="world")
+        joints.append(joint)
+
+    au.scene.joints.move_rotations_to_orients(joints)
+    cmds.select(clear=True)
+    return joints

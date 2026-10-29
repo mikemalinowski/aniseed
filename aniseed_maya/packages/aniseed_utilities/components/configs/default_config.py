@@ -26,7 +26,8 @@ class StandardConfig(aniseed.RigConfiguration):
     always has the description in a single underscore-separated slot.
     """
 
-    identifier = "Rig Configuration : Standard"
+    identifier = "Rig Configuration : Aniseed Default"
+    deprecated_names = ["Rig Configuration : Standard"]
 
     # -- Locations
     left = "LF"
