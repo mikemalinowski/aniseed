@@ -3,7 +3,11 @@ Provides the DynamicPivot class, which builds a rocking pivot: as a control
 is rotated in x and z, the pivot it rotates around slides along a guide curve
 to the point the rotation tips towards (such as the edge of a foot).
 
-The guide curve is assumed to lie flat in the xz plane with z forward. It is
+The guide curve is assumed to lie flat in the xz plane with z forward. By
+default that is the world's xz plane, and the setup is world aligned. With
+align_to_guide it is the guide curve's own (local) xz plane, and the setup
+takes the guide curve's orientation, so a pivot can lie at any angle (such as
+across the palm of a hand). It is
 duplicated into the pivot track and a normalized curve is made from it: a
 unit circle with the same cvs, degree and knots as the track, its cvs spread
 around the circle in proportion to the distances between the track's cvs.
@@ -60,6 +64,13 @@ class DynamicPivot:
         debug: If True a sphere is created which sits at the pivot point
         parent: Optional node to parent the setup's org under. The org keeps
             its world placement at the guide curve's translation.
+        rotation_multiplier: The control's rotation is multiplied by this
+            before it drives anything
+        rotation_limit: The control's x and z rotation is limited to plus
+            and minus this value (before the multiplier is applied)
+        align_to_guide: If True the setup takes the guide curve's world
+            orientation (ignoring its scale) rather than being world
+            aligned, so the guide curve's local xz plane is the pivot plane
 
     Usage:
         setup = DynamicPivot(guide, config, "foot", config.left).build()
@@ -74,12 +85,18 @@ class DynamicPivot:
             location: str,
             debug: bool = False,
             parent: str = None,
+            rotation_multiplier: float = 2.0,
+            rotation_limit: float = 45.0,
+            align_to_guide: bool = False,
     ):
         self.guide_curve = mref.get(guide_curve)
         self.config = config
         self.location = location
         self.debug = debug
         self.parent = parent
+        self.rotation_multiplier = rotation_multiplier
+        self.rotation_limit = rotation_limit
+        self.align_to_guide = align_to_guide
 
         # -- "foot" becomes "Foot" so it reads as part of a camel cased description
         self.prefix = prefix[:1].upper() + prefix[1:]
@@ -96,9 +113,11 @@ class DynamicPivot:
         self.point_on_track: mref.ReferencedItem = None
         self.radius: float = 0.0
 
-        # -- The x rotation the pivot rocks by, the control's rotateX unless
-        # -- a subclass routes it elsewhere
+        # -- The rotation the pivot rocks by, the control's multiplied
+        # -- rotation unless a subclass routes it elsewhere
         self.rotate_x: mref.ReferencedItem = None
+        self.rotate_y: mref.ReferencedItem = None
+        self.rotate_z: mref.ReferencedItem = None
 
     def build(self) -> "DynamicPivot":
         """
@@ -146,8 +165,9 @@ class DynamicPivot:
 
     def _create_transform(self, classification: str, label: str, parent: str = None, at: str = None) -> str:
         """
-        Creates a world aligned transform at the given node's translation,
-        or the guide curve's if no node is given
+        Creates a transform at the given node's translation, or the guide
+        curve's if no node is given. It is world aligned, or takes the guide
+        curve's orientation if align_to_guide is set.
         """
         at = at or self.guide_curve.full_name()
         translation = cmds.xform(at, query=True, translation=True, worldSpace=True)
@@ -158,8 +178,20 @@ class DynamicPivot:
             location=self.location,
             config=self.config,
             parent=parent,
-            match_to=list(om.MMatrix())[:12] + translation + [1],
+            match_to=self._orientation()[:12] + translation + [1],
         )
+
+    def _orientation(self) -> typing.List[float]:
+        """
+        Returns the matrix (as 16 floats) the setup is oriented by: the
+        identity, or the guide curve's world rotation (without its scale or
+        translation) if align_to_guide is set
+        """
+        if not self.align_to_guide:
+            return list(om.MMatrix())
+
+        world = om.MMatrix(cmds.xform(self.guide_curve.full_name(), query=True, matrix=True, worldSpace=True))
+        return list(om.MTransformationMatrix(world).rotation(asQuaternion=True).asMatrix())
 
     def _create_org(self):
         """
@@ -231,7 +263,21 @@ class DynamicPivot:
         ctl.attr("rotateOrder").set(3)  # -- xzy
         ctl.attr("rotateY").set(lock=True, keyable=False)
 
-        self.rotate_x = ctl.attr("rotateX")
+        cmds.transformLimits(
+            ctl.full_name(),
+            rotationX=(-self.rotation_limit, self.rotation_limit),
+            rotationZ=(-self.rotation_limit, self.rotation_limit),
+            enableRotationX=(True, True),
+            enableRotationZ=(True, True),
+        )
+
+        multiplier = self._create_node("multiplyDivide", "RotationMultiplier")
+        ctl.attr("rotate").connect(multiplier.attr("input1"))
+        multiplier.attr("input2").set(*[self.rotation_multiplier] * 3)
+
+        self.rotate_x = multiplier.attr("outputX")
+        self.rotate_y = multiplier.attr("outputY")
+        self.rotate_z = multiplier.attr("outputZ")
 
     def _create_rocker(self):
         """
@@ -242,11 +288,9 @@ class DynamicPivot:
 
         With no rotation the direction falls back to z forward.
         """
-        ctl = mref.get(self.control.ctl)
-
         amount = self._create_node("length", "RotationAmount")
         self.rotate_x.connect(amount.attr("inputX"))
-        ctl.attr("rotateZ").connect(amount.attr("inputZ"))
+        self.rotate_z.connect(amount.attr("inputZ"))
 
         # -- Catches a zero length vector, which has no direction
         rotated = self._create_node("condition", "IsRotated")
@@ -254,7 +298,7 @@ class DynamicPivot:
         amount.attr("output").connect(rotated.attr("firstTerm"))
         rotated.attr("secondTerm").set(0)
         self.rotate_x.connect(rotated.attr("colorIfTrueR"))
-        ctl.attr("rotateZ").connect(rotated.attr("colorIfTrueB"))
+        self.rotate_z.connect(rotated.attr("colorIfTrueB"))
         rotated.attr("colorIfFalse").set(1, 0, 0)
 
         invert = self._create_node("floatMath", "InvertRotateZ")
@@ -290,10 +334,9 @@ class DynamicPivot:
 
         self.pivot = mref.get(self._create_transform(self.config.mechanical, "DynamicPivot", self.org)).full_name()
         pivot = mref.get(self.pivot)
-        ctl = mref.get(self.control.ctl)
         self.rotate_x.connect(pivot.attr("rotateX"))
-        ctl.attr("rotateY").connect(pivot.attr("rotateY"))
-        ctl.attr("rotateZ").connect(pivot.attr("rotateZ"))
+        self.rotate_y.connect(pivot.attr("rotateY"))
+        self.rotate_z.connect(pivot.attr("rotateZ"))
         # -- cmds rather than mref, as mref fails to connect to the rotatePivot
         cmds.connectAttr(f"{self.point_on_track.full_name()}.position", f"{self.pivot}.rotatePivot")
 
@@ -353,8 +396,19 @@ class DynamicFootPivot(DynamicPivot):
             toe: str,
             debug: bool = False,
             parent: str = None,
+            rotation_multiplier: float = 2.0,
+            rotation_limit: float = 45.0,
     ):
-        super().__init__(guide_curve, config, prefix, location, debug=debug, parent=parent)
+        super().__init__(
+            guide_curve,
+            config,
+            prefix,
+            location,
+            debug=debug,
+            parent=parent,
+            rotation_multiplier=rotation_multiplier,
+            rotation_limit=rotation_limit,
+        )
         self.foot = foot
         self.toe = toe
 
@@ -394,12 +448,12 @@ class DynamicFootPivot(DynamicPivot):
         )
 
         heel = self._create_node("clamp", "HeelRollAmount")
-        ctl.attr("rotateX").connect(heel.attr("inputR"))
+        self.rotate_x.connect(heel.attr("inputR"))
         limit.connect(heel.attr("maxR"))
 
         pivot_x = self._create_node("floatMath", "PivotRotateX")
         pivot_x.attr("operation").set(1)  # -- Subtract
-        ctl.attr("rotateX").connect(pivot_x.attr("floatA"))
+        self.rotate_x.connect(pivot_x.attr("floatA"))
         heel.attr("outputR").connect(pivot_x.attr("floatB"))
 
         self.heel_rotation = heel.attr("outputR")

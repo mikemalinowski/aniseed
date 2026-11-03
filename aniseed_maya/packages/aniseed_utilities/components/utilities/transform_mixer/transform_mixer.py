@@ -5,6 +5,11 @@ to the nodes they are mapped to. Option buttons allow poses and deformers
 to be added and removed on the built mixer and the result stored back.
 Also provides the ConstraintMappingWidget used to edit the deformer to node
 mappings.
+
+Other components can attach a mixer beneath themselves with add_to, mapping
+deformers to their own outputs (addresses), as the nodes only exist once
+they have built. A mapped deformer which is not in the stored data is created
+when the mixer builds, matched to the node it drives.
 """
 import logging
 import mref
@@ -55,6 +60,39 @@ class TransformMixer(aniseed.RigComponent):
             value=[],
         )
 
+        self.declare_option(
+            name="Descriptive Prefix",
+            description=(
+                "If given, every node of the mixer is named with the rig configuration, with this in front "
+                "of its description. If not, the nodes keep the mixer's own names (transformMixer etc)."
+            ),
+            value="",
+            group="Naming",
+        )
+
+        self.declare_option(
+            name="Location",
+            description="Location token (e.g. md/lf/rt) applied to the node names, when a Descriptive Prefix is given",
+            value=self.config.middle,
+            group="Naming",
+        )
+
+        self.declare_option(
+            name="Proxy Hosts",
+            description="Nodes (or addresses) which are given a proxy of every pose attribute when the mixer builds",
+            value=[],
+        )
+
+        self.declare_option(
+            name="Match Deformers To Mapping",
+            description=(
+                "If True, every mapped deformer's space is matched to the node it drives when the mixer "
+                "builds, rather than taken from the stored data. This only changes where the targets are "
+                "shown, not what the poses do."
+            ),
+            value=False,
+        )
+
         self.declare_option(name="Add Pose", value=None)
         self.declare_option(name="Remove Pose", value=None)
         self.declare_option(name="Add Deformer", value=None)
@@ -77,6 +115,12 @@ class TransformMixer(aniseed.RigComponent):
         if requirement_name == "Constraint Mapping":
             return ConstraintMappingWidget(component=self)
 
+        if requirement_name == "Proxy Hosts":
+            return aniseed.widgets.ObjectList()
+
+        if requirement_name == "Location":
+            return aniseed.widgets.LocationSelector(self.config, self.option(requirement_name).get())
+
         if requirement_name == "Add Pose":
             return aniseed.widgets.ButtonWidget(button_name="Add Pose", func=self.add_pose)
 
@@ -97,27 +141,13 @@ class TransformMixer(aniseed.RigComponent):
 
     def is_valid(self) -> bool:
         """
-        Checks that every deformer in the Constraint Mapping is in the stored
-        Data. A deformer added since the last Store Setup is not, and would
-        not be rebuilt.
+        Checks that every deformer in the Constraint Mapping is mapped to a
+        node. A mapped deformer which has not been stored is created when the
+        mixer builds, so it does not need to be in the stored Data.
         """
-        stored_deformers = [
-            deformer_data["name"]
-            for deformer_data in (self.option("Data").get() or dict()).get("deformers", list())
-        ]
-
         for constraint_data in self.option("Constraint Mapping").get() or list():
-            deformer_name = constraint_data[0]
-
-            if deformer_name not in stored_deformers:
-                log.warning(
-                    f"{self.label()} : The deformer {deformer_name!r} is mapped but has not "
-                    f"been stored. Press Store Setup, or remove the mapping."
-                )
-                return False
-
             if not constraint_data[-1]:
-                log.warning(f"{self.label()} : The deformer {deformer_name!r} is not mapped to a node")
+                log.warning(f"{self.label()} : The deformer {constraint_data[0]!r} is not mapped to a node")
                 return False
 
         return True
@@ -125,23 +155,150 @@ class TransformMixer(aniseed.RigComponent):
     def run(self) -> bool:
         """
         Rebuilds the mixer from the stored Data, parents it under the Parent
-        input, records its node name and connects the translate, rotate and
-        scale of each mapped deformer to the node it drives.
+        input and records its node name. Each mapped deformer which was not
+        stored is created, matched to the node it drives (as is every mapped
+        deformer if Match Deformers To Mapping is set), and its translate,
+        rotate and scale are connected to that node. Finally every pose
+        attribute is proxied onto each of the Proxy Hosts.
         """
         mixer = au.rig.pose_mixer.TransformMixer.deserialise(
-            self.option("Data").get(),
+            self.option("Data").get() or dict(),
+            namer=self._namer(),
         )
         mixer.node.set_parent(self.input("Parent").get())
 
         self.option("Node").set(mixer.node.name())
 
-        for constraint_data in self.option("Constraint Mapping").get():
+        match_all = self.option("Match Deformers To Mapping").get()
+
+        for constraint_data in self.option("Constraint Mapping").get() or list():
             deformer_name = constraint_data[0]
-            node_to_drive = mref.get(constraint_data[-1])
+            node_name = self._resolve(constraint_data[-1])
+
+            if not node_name or not mref.objExists(node_name):
+                log.warning(f"{self.label()} : The deformer {deformer_name!r} is mapped to {node_name!r}, which does not exist")
+                continue
+
+            node_to_drive = mref.get(node_name)
             deformer_node = mixer.get_deformer(deformer_name=deformer_name)
+
+            if not deformer_node:
+                deformer_node = mixer.add_deformer(name=deformer_name)
+                deformer_node.parent().match_to(node_to_drive)
+
+            elif match_all:
+                deformer_node.parent().match_to(node_to_drive)
 
             for attribute_name in ["translate", "rotate", "scale"]:
                 deformer_node.attr(attribute_name).connect(node_to_drive.attr(attribute_name))
+
+        pose_names = [pose.attr("pose_name").get() for pose in mixer.poses()]
+
+        for host in self.option("Proxy Hosts").get() or list():
+            host_name = self._resolve(host)
+
+            if not host_name or not mref.objExists(host_name):
+                log.warning(f"{self.label()} : The proxy host {host_name!r} does not exist")
+                continue
+
+            m_host = mref.get(host_name)
+            for pose_name in pose_names:
+                if m_host.has_attribute(pose_name):
+                    log.warning(f"{self.label()} : {host_name} already has a {pose_name!r} attribute, so it is not proxied")
+                    continue
+
+                m_host.add_proxy(pose_name, mixer.node.attr(pose_name))
+
+        return True
+
+    def _namer(self):
+        """
+        Returns the callable which names the mixer's nodes with the rig
+        configuration (mechanical, the Descriptive Prefix and Location), or
+        None if there is no Descriptive Prefix
+        """
+        prefix = self.option("Descriptive Prefix").get()
+        if not prefix:
+            return None
+
+        location = self.option("Location").get()
+        return lambda label: self.config.generate_name(
+            classification=self.config.mechanical,
+            description=f"{prefix}{label}",
+            location=location,
+        )
+
+    def _resolve(self, value):
+        """
+        Returns the value of the attribute the given value addresses, or the
+        value itself if it is not an address.
+        """
+        if not value:
+            return value
+
+        attribute = self.rig.resolve_attribute(value)
+        return attribute.get() if attribute else value
+
+    @classmethod
+    def add_to(
+            cls,
+            component,
+            label: str,
+            parent: str,
+            mapping: list,
+            proxy_hosts: list = None,
+            match_deformers_to_mapping: bool = True,
+            prefix: str = "",
+            location: str = None,
+    ):
+        """
+        Adds a Transform Mixer component to the stack as a child of the given
+        component, with no poses. Its deformers are created when it first
+        builds, matched to the nodes they are mapped to.
+
+        Other components can reach this without importing this module, via
+        ``self.rig.component_library.request("Utility : Transform Mixer").add_to(...)``.
+
+        Args:
+            component: The component to add the mixer beneath
+            label: The label for the mixer component
+            parent: The node (or address) to parent the mixer under
+            mapping: List of (deformer name, node or address) pairs, the node
+                being what the deformer drives (typically a control's offset)
+            proxy_hosts: Optional nodes (or addresses) to proxy every pose
+                attribute onto
+            match_deformers_to_mapping: Sets the Match Deformers To Mapping
+                option, so the deformers follow the nodes they drive if the
+                rig changes (or is mirrored)
+            prefix: Sets the Descriptive Prefix option, which names the
+                mixer's nodes with the rig configuration
+            location: Sets the Location option. If not given, the given
+                component's Location is used (if it has one).
+
+        Returns:
+            The transform mixer component
+        """
+        options = {
+            "Constraint Mapping": [[deformer_name, node] for deformer_name, node in mapping],
+            "Proxy Hosts": list(proxy_hosts or []),
+            "Match Deformers To Mapping": match_deformers_to_mapping,
+            "Descriptive Prefix": prefix,
+        }
+
+        if location is None and component.option("Location") is not None:
+            location = component.option("Location").get()
+        if location is not None:
+            options["Location"] = location
+
+        return component.stack.add_component(
+            component_type=cls.identifier,
+            label=label,
+            parent=component,
+            inputs={
+                "Parent": parent,
+            },
+            options=options,
+        )
 
     def add_deformers(self):
         """
@@ -310,7 +467,7 @@ class TransformMixer(aniseed.RigComponent):
                 parent=None,
             )
             return None
-        return au.rig.pose_mixer.TransformMixer(mixer_node)
+        return au.rig.pose_mixer.TransformMixer(mixer_node, namer=self._namer())
 
 
 class ConstraintMappingWidget(QtWidgets.QWidget):

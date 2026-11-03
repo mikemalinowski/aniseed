@@ -1,11 +1,13 @@
 """
-Rig concepts: controls, guides, tagging, pinning, spaces and the pose mixer.
+Rig concepts: controls, guides, tagging, pinning, spaces, blend rotators and
+the pose mixer.
 
 Modules in this layer may import from the core and scene layers.
 
 For compatibility, the functions which used to live in the old single rig
 module (all_controls, get, ...) are also available here.
 """
+from . import blend_rotator
 from . import component_outputs
 from . import control
 from . import controls
@@ -27,6 +29,7 @@ from .controls import selected_rigs
 from .controls import zero
 
 __all__ = [
+    "blend_rotator",
     "component_outputs",
     "control",
     "controls",

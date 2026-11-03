@@ -634,10 +634,7 @@ def load_shape(
             knot=curve_data["knots"],
         )
 
-        # -- Maya gives a new curve shape a unique name, so its short
-        # -- name is the name cmds would report for it.
         curve = transform.children(node_type="nurbsCurve")[0]
-        curve_name = curve.name()
 
         scale(curve, scale_by)
 
@@ -652,7 +649,13 @@ def load_shape(
         # -- Delete the transform
         transform.delete()
 
-        shape_list.append(curve_name)
+        # -- Name the shape for the node it is under, as maya names the
+        # -- shape of a new transform (a further shape gets a number added)
+        curve.rename(f"{_get_node(node).name()}Shape")
+
+        # -- Maya keeps the shape's name unique, so its short name is the
+        # -- name cmds would report for it
+        shape_list.append(curve.name())
 
     if color:
         apply_color(node, *color)

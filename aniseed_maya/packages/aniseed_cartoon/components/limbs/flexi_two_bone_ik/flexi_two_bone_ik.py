@@ -421,7 +421,11 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         Uses the other side's joints if they already exist (the search and
         replaced names), otherwise copies the original's chain and twist
         joints into the mirrored hierarchy for this component to drive.
+        Either way no joints are created on entering the stack, as this
+        component already has them.
         """
+        self.option("Create Joints").set(False)
+
         original_items = mirrored_from.mirror_mixin_items_to_mirror()
         if not original_items:
             return
@@ -438,3 +442,10 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             count = len([joint for joint in mirrored_from.input(input_name).get() or [] if joint])
             self.input(input_name).set(remaining[:count])
             remaining = remaining[count:]
+
+    def mirror_mixin_post_mirror(self, mirrored_from) -> None:
+        """
+        Restores the Create Joints option so this component's data matches
+        the original
+        """
+        self.option("Create Joints").set(mirrored_from.option("Create Joints").get(resolved=False))

@@ -51,17 +51,27 @@ class SoftIkConnection:
         third_joint: The third (end) joint of the chain
         host: The node to add the soft ik attributes to. A network node is
             created if this is not given.
+        config: Optional aniseed rig configuration. If given, every node is
+            named with it (mechanical, "<prefix>SoftIk<label>"), otherwise
+            the nodes keep maya's default names.
+        prefix: Placed in front of the description of every node name
+        location: The location token (config.left, config.middle etc)
 
     Usage:
         SoftIkConnection(ik_root, ik_target, elbow, wrist, host=ik_target).build()
     """
 
-    def __init__(self, root, target, second_joint, third_joint, host=None):
+    def __init__(self, root, target, second_joint, third_joint, host=None, config=None, prefix="", location=""):
         self.root = mref.get(root)
         self.target = mref.get(target)
         self.second_joint = mref.get(second_joint)
         self.third_joint = mref.get(third_joint)
         self.host = mref.get(host) if host else None
+        self.config = config
+        self.location = location
+
+        # -- "arm" becomes "Arm" so it reads as part of a camel cased description
+        self.prefix = prefix[:1].upper() + prefix[1:]
 
     def build(self) -> "SoftIkConnection":
         """
@@ -75,7 +85,7 @@ class SoftIkConnection:
             cmds.loadPlugin("lookdevKit", quiet=True)
 
         if not self.host:
-            self.host = mref.create("network")
+            self.host = self._create("network", "Host")
 
         self._add_attributes()
 
@@ -84,7 +94,7 @@ class SoftIkConnection:
         chain_length = self._float_math(_ADD, upper, lower)
         soft_start = self._float_math(_SUBTRACT, chain_length, self._attr("SoftDistance"))
 
-        distance = mref.create("distanceBetween")
+        distance = self._create("distanceBetween", "Distance")
         self._attr("root_matrix").connect(distance.attr("inMatrix1"))
         self._attr("target_matrix").connect(distance.attr("inMatrix2"))
         distance = distance.attr("distance")
@@ -93,7 +103,7 @@ class SoftIkConnection:
 
         # -- Beyond the start of the soft zone the bones are scaled, before
         # -- it they keep their length
-        condition = mref.create("condition")
+        condition = self._create("condition", "InSoftZone")
         condition.attr("operation").set(_GREATER_THAN)
         distance.connect(condition.attr("firstTerm"))
         soft_start.connect(condition.attr("secondTerm"))
@@ -114,6 +124,22 @@ class SoftIkConnection:
 
     def _attr(self, name: str) -> mref.ReferencedItem:
         return self.host.attr(name)
+
+    def _create(self, node_type: str, label: str) -> mref.ReferencedItem:
+        """
+        Creates a node, named for the label if there is a config
+        """
+        if not self.config:
+            return mref.create(node_type)
+
+        return mref.create(
+            node_type,
+            name=self.config.generate_name(
+                classification=self.config.mechanical,
+                description=f"{self.prefix}SoftIk{label}",
+                location=self.location,
+            ),
+        )
 
     def _add_attributes(self):
         """
@@ -174,23 +200,21 @@ class SoftIkConnection:
         length = self._float_math(_ADD, length, default_length)
         return self._float_math(_ADD, length, addition)
 
-    @staticmethod
-    def _drive_translate_x(length, joint: mref.ReferencedItem):
+    def _drive_translate_x(self, length, joint: mref.ReferencedItem):
         """
         Drives the joint's translateX by the length, keeping the sign of its
         rest translateX so chains which point down negative x keep doing so
         """
         if joint.attr("translateX").get() < 0:
-            length = SoftIkConnection._float_math(_MULTIPLY, length, -1)
+            length = self._float_math(_MULTIPLY, length, -1)
         length.connect(joint.attr("translateX"))
 
-    @staticmethod
-    def _float_math(operation: int, first_term, second_term) -> mref.ReferencedItem:
+    def _float_math(self, operation: int, first_term, second_term) -> mref.ReferencedItem:
         """
         Creates a floatMath node, connecting (plugs) or setting (numbers) its
         inputs, and returns its output plug
         """
-        node = mref.create("floatMath")
+        node = self._create("floatMath", "Math")
         node.attr("operation").set(operation)
 
         for term, plug in [(first_term, node.attr("floatA")), (second_term, node.attr("floatB"))]:

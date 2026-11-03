@@ -138,58 +138,20 @@ class BlendedConstraint(aniseed.RigComponent):
 
     def run(self) -> bool:
         """
-        Builds a cube control matched to the joint, adds a keyable Blend
-        attribute (default 0.5) to it, and parent constrains the control's
-        offset to both targets with Blend driving the weights (no-flip
-        interpolation). The control then parent and scale constrains the
-        joint, and is written to the Control output.
+        Builds the blend rotator (see au.rig.blend_rotator.create): a cube
+        control matched to the joint with a keyable Blend attribute (default
+        0.5), whose offset is parent constrained to both targets with Blend
+        driving the weights, and which drives the joint. The control is
+        written to the Control output.
         """
-
-        joint = self.input("Joint").get()
-        target_a = self.input("Target A").get()
-        target_b = self.input("Target B").get()
-        parent = self.input("Parent").get()
-        description = self.option("Description").get()
-        location = self.option("Location").get()
-
-        rotator_control = au.rig.control.create(
-            description=description,
-            location=location,
-            parent=parent,
+        rotator_control = au.rig.blend_rotator.create(
+            joint=self.input("Joint").get(),
+            target_a=self.input("Target A").get(),
+            target_b=self.input("Target B").get(),
+            description=self.option("Description").get(),
+            location=self.option("Location").get(),
             config=self.config,
-            shape="core_cube",
-            match_to=joint,
-        )
-
-        blend_attribute = mref.get(rotator_control.ctl).add_attribute(
-            "Blend",
-            value=0.5,
-            attribute_type="float",
-            keyable=True,
-        )
-
-        # -- Constrain the control's offset to both targets, with the
-        # -- blend attribute driving the weighting between them
-        mref.parentConstraint(
-            target_a,
-            rotator_control.off,
-            maintainOffset=True,
-        )
-
-        constraint = mref.parentConstraint(
-            target_b,
-            rotator_control.off,
-            maintainOffset=True,
-        )[0]
-        constraint.attr("interpType").set(0)  # No Flip
-
-        au.scene.constraints.blend_weights(blend_attribute, constraint)
-
-        # -- The control then drives the joint
-        au.scene.constraints.parent_and_scale(
-            rotator_control.ctl,
-            joint,
-            maintain_offset=True,
+            parent=self.input("Parent").get(),
         )
 
         self.output("Control").set(rotator_control.ctl)

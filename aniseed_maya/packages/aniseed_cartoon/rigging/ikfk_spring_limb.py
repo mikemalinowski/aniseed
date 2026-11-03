@@ -27,7 +27,7 @@ The structure built is:
 
     SpringRoot (control, matched to the start joint)
         SpringFk 01 -> ## (controls, each under the previous)
-        SpringIkTarget (control)
+        SpringIkTarget (control, named by IK_TARGET_LABEL)
             SpringIkHandleTransform (matched to the handle)
                 SpringIkHandle (spring ik handle, with a zero local transform)
         SpringPoleVector (control)
@@ -84,6 +84,10 @@ class IkfkSpringLimb:
     # -- controls above the second
     IK_VISIBLE_BELOW = 0.999
     FK_VISIBLE_ABOVE = 0.001
+
+    # -- The label the ik target control is named with, which a subclass can
+    # -- change to suit the limb (such as "IkFoot")
+    IK_TARGET_LABEL = "SpringIkTarget"
 
     def __init__(
             self,
@@ -150,6 +154,7 @@ class IkfkSpringLimb:
         self._create_root()
         self._create_fk()
         self._create_ik()
+        self._constrain_ik_end()
         self._create_spring_bias()
         self._create_blend()
 
@@ -267,13 +272,12 @@ class IkfkSpringLimb:
     def _create_ik(self):
         """
         Creates the ik chain, solved by a spring ik handle under the ik target
-        control and pole vectored to the pole vector control. The end joint's
-        rotation follows the ik target control.
+        control and pole vectored to the pole vector control.
         """
         self.ik_chain = self._replicate("SpringIkChain", self._create_org("SpringIk"))
 
         self.ik_target_control = self._create_control(
-            "SpringIkTarget",
+            self.IK_TARGET_LABEL,
             parent=self.root_control.ctl,
             shape="core_cube",
             match_to=self.ik_target_transform,
@@ -316,8 +320,26 @@ class IkfkSpringLimb:
         )
         mref.get(self.pole_vector_control.org).set_position(list(self._pole_vector_position(pole_vector)), space="world")
         mref.poleVectorConstraint(self.pole_vector_control.ctl, self.ik_handle, weight=1)
-        au.rig.guide.link(self.pole_vector_control.ctl, self.ik_chain[len(self.ik_chain) // 2])
 
+        curve, *clusters = au.rig.guide.link(self.pole_vector_control.ctl, self.ik_chain[len(self.ik_chain) // 2])
+        self._rename(curve, "SpringPoleVectorGuide")
+        for node, label in zip(clusters, ["Cluster", "Cluster", "ClusterHandle", "ClusterHandle"]):
+            self._rename(node, f"SpringPoleVectorGuide{label}")
+
+    def _rename(self, node: mref.ReferencedItem, label: str):
+        """
+        Names the node (and any shapes it has, after it) as a mechanical
+        node for the label
+        """
+        node.rename(self._name(self.config.mechanical, label))
+        for shape in cmds.listRelatives(node.full_name(), shapes=True, fullPath=True) or []:
+            cmds.rename(shape, f"{node.name()}Shape")
+
+    def _constrain_ik_end(self):
+        """
+        Makes the ik chain's end joint take its rotation from the ik target
+        control
+        """
         mref.orientConstraint(self.ik_target_control.ctl, self.ik_chain[-1], maintainOffset=True)
 
     def _pole_vector_position(self, pole_vector: om.MVector) -> om.MVector:
@@ -384,6 +406,8 @@ class IkfkSpringLimb:
         (at 1), which also adds the ikfk attribute to the root control, and
         constrains the given joints to it
         """
+        reverses = set(cmds.ls(type="reverse"))
+
         blend = _blend_chain.create_blend_chain(
             parent=self._create_org("SpringBlend"),
             transforms_a=self.ik_chain,
@@ -392,6 +416,11 @@ class IkfkSpringLimb:
             attribute_name="ikfk",
             match_transforms=self.fk_chain,
         )
+
+        # -- The blend chain gives the reverse node weighting each joint's
+        # -- constraint maya's default name
+        for node in sorted(set(cmds.ls(type="reverse")) - reverses):
+            cmds.rename(node, self._name(self.config.mechanical, "SpringBlendReverse"))
 
         for joint in blend.blend_joints:
             joint.rename(self._name(self.config.mechanical, "SpringBlendChain"))

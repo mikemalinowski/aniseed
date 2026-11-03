@@ -122,6 +122,11 @@ def link(item_a, item_b):
     Args:
         item_a: The node the line starts from (and which owns the curve)
         item_b: The node the line ends at
+
+    Returns:
+        The curve, then the two cluster deformers and the two cluster
+        handles (each the one at item_a first), as mref items, so the caller
+        can name them
     """
     cmds.select(clear=True)
     curve = mref.curve(
@@ -147,11 +152,11 @@ def link(item_a, item_b):
     # -- Create the first cluster (cmds.cluster returns the cluster
     # -- deformer followed by its handle transform)
     mref.select(f"{curve_shape.full_name()}.cv[0]")
-    _, cls_root_xfo = mref.cluster()
+    cls_root, cls_root_xfo = mref.cluster()
 
     # -- Create the second cluster
     mref.select(f"{curve.full_name()}.cv[1]")
-    _, cls_target_xfo = mref.cluster()
+    cls_target, cls_target_xfo = mref.cluster()
 
     # -- Hide the clusters, as we do not want them
     # -- to be interactable
@@ -171,6 +176,8 @@ def link(item_a, item_b):
 
     cls_root_xfo.match_to(item_a)
     cls_target_xfo.match_to(item_b)
+
+    return curve, cls_root, cls_target, cls_root_xfo, cls_target_xfo
 
 
 def create_tweens(drive_these, from_this, to_this, parent=None):

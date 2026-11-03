@@ -80,6 +80,20 @@ class DynamicPivotComponent(aniseed.RigComponent):
         )
 
         self.declare_option(
+            name="Rotation Multiplier",
+            description="Multiplies the pivot control's rotation before it drives anything",
+            value=2.0,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Rotation Limit",
+            description="The pivot control's x and z rotation is limited to plus and minus this value",
+            value=45.0,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="Create Joint",
             description="If true, a joint is created under the selection on stack entry and set as the Driven Joint",
             value=True,
@@ -174,6 +188,8 @@ class DynamicPivotComponent(aniseed.RigComponent):
             location=self.option("Location").get(),
             debug=self.option("Debug").get(),
             parent=self.input("Parent").get(),
+            rotation_multiplier=self.option("Rotation Multiplier").get(),
+            rotation_limit=self.option("Rotation Limit").get(),
         ).build()
 
         driven_joint = self.input("Driven Joint").get()
@@ -297,6 +313,8 @@ class DynamicFootPivotComponent(DynamicPivotComponent):
             toe=toe_joint,
             debug=self.option("Debug").get(),
             parent=self.input("Parent").get(),
+            rotation_multiplier=self.option("Rotation Multiplier").get(),
+            rotation_limit=self.option("Rotation Limit").get(),
         ).build()
 
         au.scene.constraints.parent_and_scale(setup.foot_anchor, foot_joint, maintain_offset=True)

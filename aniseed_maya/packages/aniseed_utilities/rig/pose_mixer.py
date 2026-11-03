@@ -25,9 +25,16 @@ class TransformMixer:
             node is created.
         parent: The parent for the new mixer node (only used when no node
             is given)
+        namer: Optional callable taking a camel cased label (such as
+            "Index1Deformer") and returning the name to give the node it
+            labels, used for every node the mixer creates. If not given the
+            nodes are given the mixer's own names (transformMixer,
+            deformer_<name>, target__<deformer>__<pose> etc).
     """
 
-    def __init__(self, node=None, parent=None):
+    def __init__(self, node=None, parent=None, namer=None):
+
+        self.namer = namer
 
         if not node:
             node = self.create_node(parent=parent)
@@ -46,6 +53,21 @@ class TransformMixer:
         # -- Cached output of get_target_mapping(). Updated or invalidated
         # -- whenever poses/deformers/targets change.
         self._target_mapping_cache = None
+
+    def _name(self, default: str, label: str) -> str:
+        """
+        Returns the name for a new node: the namer's name for the label, or
+        the default if there is no namer
+        """
+        return self.namer(label) if self.namer else default
+
+    @staticmethod
+    def _camel(name: str) -> str:
+        """
+        Returns the name with its first letter in upper case, so it reads as
+        part of a camel cased label ("fist" becomes "Fist")
+        """
+        return name[:1].upper() + name[1:]
 
     def __enter__(self):
         """
@@ -93,9 +115,17 @@ class TransformMixer:
         Returns:
             The deformer transform (mref item)
         """
-        deformer_parent = mref.create("transform", name=f"deformerspace_{name}", parent=self.deformer_root())
+        deformer_parent = mref.create(
+            "transform",
+            name=self._name(f"deformerspace_{name}", f"{self._camel(name)}DeformerSpace"),
+            parent=self.deformer_root(),
+        )
 
-        new_deformer = mref.create("transform", name=f"deformer_{name}", parent=deformer_parent)
+        new_deformer = mref.create(
+            "transform",
+            name=self._name(f"deformer_{name}", f"{self._camel(name)}Deformer"),
+            parent=deformer_parent,
+        )
         new_deformer.add_attribute(
             "deformer_name",
             attribute_type="string",
@@ -163,7 +193,11 @@ class TransformMixer:
                 keyable=True,
                 value=False,
             )
-        new_pose = mref.create("transform", name=f"pose_{name}", parent=self.pose_root())
+        new_pose = mref.create(
+            "transform",
+            name=self._name(f"pose_{name}", f"{self._camel(name)}Pose"),
+            parent=self.pose_root(),
+        )
         new_pose.add_attribute(
             "pose_name",
             attribute_type="string",
@@ -214,7 +248,16 @@ class TransformMixer:
         """
         label = f"{deformer.name()}__{pose.name()}"
 
-        target = mref.create("transform", name=f"target__{label}", parent=deformer.parent())
+        # -- The camel cased labels the namer is given: the pose and deformer
+        # -- for the target's nodes, and the deformer for the deformer's sums
+        deformer_label = self._camel(deformer.attr("deformer_name").get())
+        target_label = f"{self._camel(pose.attr('pose_name').get())}{deformer_label}"
+
+        target = mref.create(
+            "transform",
+            name=self._name(f"target__{label}", f"{target_label}Target"),
+            parent=deformer.parent(),
+        )
         target.set_matrix(deformer.get_matrix(space="world"), space="world")
 
         # -- Add a built-in locator shape rather than loading a curve
@@ -222,7 +265,9 @@ class TransformMixer:
         # -- localScale / localPosition for sizing, and is the standard
         # -- visual idiom for "transform in space" — much faster than
         # -- the curve-create-then-delete-temp-transform cycle.
-        mref.create("locator", parent=target)
+        locator = mref.create("locator", parent=target)
+        if self.namer:
+            locator.rename(f"{target.name()}Shape")
 
         target.add_attribute(
             "deformer_name",
@@ -235,22 +280,27 @@ class TransformMixer:
             value=pose.attr("pose_name").get(),
         )
         target.attr("message").connect_next(pose.attr("targets"))
-        blend_translation = mref.create("multiplyDivide", name=f"blendtrans__{label}")
-        blend_rotation = mref.create("multiplyDivide", name=f"blendtrot__{label}")
-        blend_scale = mref.create("multiplyDivide", name=f"blendtscale__{label}")
+        blend_translation = mref.create(
+            "multiplyDivide", name=self._name(f"blendtrans__{label}", f"{target_label}TranslateBlend"))
+        blend_rotation = mref.create(
+            "multiplyDivide", name=self._name(f"blendtrot__{label}", f"{target_label}RotateBlend"))
+        blend_scale = mref.create(
+            "multiplyDivide", name=self._name(f"blendtscale__{label}", f"{target_label}ScaleBlend"))
 
         # -- Each deformer channel is driven by a plusMinusAverage which
         # -- sums all the targets. Reuse it if it already exists.
         try:
             translation_combiner = deformer.attr("translate").inputs()[0].node()
         except IndexError:
-            translation_combiner = mref.create("plusMinusAverage", name=f"addtranslation_{label}")
+            translation_combiner = mref.create(
+                "plusMinusAverage", name=self._name(f"addtranslation_{label}", f"{deformer_label}TranslateSum"))
             translation_combiner.attr("output3D").connect(deformer.attr("translate"))
 
         try:
             rotation_combiner = deformer.attr("rotate").inputs()[0].node()
         except IndexError:
-            rotation_combiner = mref.create("plusMinusAverage", name=f"addrotate_{label}")
+            rotation_combiner = mref.create(
+                "plusMinusAverage", name=self._name(f"addrotate_{label}", f"{deformer_label}RotateSum"))
             rotation_combiner.attr("output3D").connect(deformer.attr("rotate"))
 
         # -- The scale sum is offset by one (scaleFromZero) before reaching
@@ -258,8 +308,10 @@ class TransformMixer:
         try:
             scale_combiner = deformer.attr("scale").inputs()[0].node().inputs()[0]
         except IndexError:
-            scale_combiner = mref.create("plusMinusAverage", name=f"addscale_{label}")
-            add_one = mref.create("plusMinusAverage", name=f"scaleFromZero_{label}")
+            scale_combiner = mref.create(
+                "plusMinusAverage", name=self._name(f"addscale_{label}", f"{deformer_label}ScaleSum"))
+            add_one = mref.create(
+                "plusMinusAverage", name=self._name(f"scaleFromZero_{label}", f"{deformer_label}ScaleFromOne"))
             for axis in ["x", "y", "z"]:
                 add_one.attr(f"input3D[0].input3D{axis}").set(1)
             scale_combiner.attr("output3D").connect_next(add_one.attr("input3D"))
@@ -269,7 +321,8 @@ class TransformMixer:
         target.attr("rotate").connect(blend_rotation.attr("input1"))
 
         # -- For the scale we need to add from zero rather than 1
-        scale_from_zero = mref.create("plusMinusAverage", name=f"scaleFromZero_{label}")
+        scale_from_zero = mref.create(
+            "plusMinusAverage", name=self._name(f"scaleFromZero_{label}", f"{target_label}ScaleFromZero"))
         scale_from_zero.attr("operation").set(2)  # -- Subtract
         target.attr("scale").connect_next(scale_from_zero.attr("input3D"))
         scale_from_zero.attr("output3D").connect(blend_scale.attr("input1"))
@@ -300,7 +353,7 @@ class TransformMixer:
         Returns:
             The mixer node (mref item)
         """
-        node = mref.create("transform", name="transformMixer", parent=parent)
+        node = mref.create("transform", name=self._name("transformMixer", "Mixer"), parent=parent)
         node.add_attribute(
             "deformers",
             attribute_type="message",
@@ -313,8 +366,16 @@ class TransformMixer:
             value=None,
             multi=True,
         )
-        mref.create("transform", name="deformerRoot", parent=node)
-        mref.create("transform", name="poseRoot", parent=node)
+
+        # -- The roots are linked to the mixer node, so they are found
+        # -- whatever they are named
+        for attribute_name, default, label in [
+            ("deformerRootNode", "deformerRoot", "MixerDeformers"),
+            ("poseRootNode", "poseRoot", "MixerPoses"),
+        ]:
+            root = mref.create("transform", name=self._name(default, label), parent=node)
+            node.add_attribute(attribute_name, attribute_type="message", value=None)
+            root.attr("message").connect(node.attr(attribute_name))
 
         return node
 
@@ -380,13 +441,26 @@ class TransformMixer:
         """
         Returns the deformerRoot transform beneath the mixer node.
         """
-        return self.node.children(node_type="transform", name_match="deformerRoot")[0]
+        return self._root("deformerRootNode", "deformerRoot")
 
     def pose_root(self):
         """
         Returns the poseRoot transform beneath the mixer node.
         """
-        return self.node.children(node_type="transform", name_match="poseRoot")[0]
+        return self._root("poseRootNode", "poseRoot")
+
+    def _root(self, attribute_name: str, default_name: str):
+        """
+        Returns the root linked to the mixer node by the given attribute, or
+        for a mixer made before the roots were linked, its child of the
+        default name
+        """
+        if self.node.has_attribute(attribute_name):
+            inputs = self.node.attr(attribute_name).inputs()
+            if inputs:
+                return inputs[0].node()
+
+        return self.node.children(node_type="transform", name_match=default_name)[0]
 
     def poses(self):
         """
@@ -542,7 +616,7 @@ class TransformMixer:
         return data
 
     @classmethod
-    def deserialise(cls, data, parent=None):
+    def deserialise(cls, data, parent=None, namer=None):
         """
         Creates a new mixer from data returned by serialise. The deformer
         and target transforms are applied as they are stored.
@@ -550,11 +624,13 @@ class TransformMixer:
         Args:
             data: The serialised mixer data
             parent: Optional parent for the new mixer node
+            namer: Optional callable naming the mixer's nodes (see the
+                class arguments)
 
         Returns:
             The new TransformMixer
         """
-        mixer = cls(parent=parent)
+        mixer = cls(parent=parent, namer=namer)
 
         with mixer:
             for deformer_data in data.get("deformers", list()):

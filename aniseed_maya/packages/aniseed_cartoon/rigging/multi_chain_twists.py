@@ -351,6 +351,12 @@ class MultiChainTwisters:
             knot=knots,
             name=self._name(self.config.mechanical, "MultiChainCurve", segment + 1),
         )
+
+        # -- The shape is named for the curve before the clusters are made,
+        # -- so the original shape they add is named for it too
+        for shape in cmds.listRelatives(curve, shapes=True, fullPath=True) or []:
+            cmds.rename(shape, f"{curve.split('|')[-1]}Shape")
+
         cmds.parent(curve, self.no_transform_org)
 
         # -- Show the curve as a reference so it can be seen but not picked
