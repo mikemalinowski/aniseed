@@ -9,9 +9,11 @@ rotate_flip.
 """
 import collections
 import logging
+import math
 import typing
 
 from maya import cmds
+from maya.api import OpenMaya as om
 import mref
 
 from . import joints as _joints
@@ -33,6 +35,7 @@ def mirror_transforms(
     rotate_flip: bool = False,
     name_replacement: list = None,
     targets: list = None,
+    additional_rotation: typing.Sequence[float] = None,
 ):
     """
     This function is taken from github with a minor modification. The
@@ -60,6 +63,11 @@ def mirror_transforms(
             given, each transform's mirrored matrix is applied to the target
             at the same index (and name_replacement is ignored). It must be
             the same length as transforms.
+        additional_rotation: Optional (x, y, z) rotation in degrees (XYZ
+            order), applied to every mirrored node in its own object space
+            once the whole set has been mirrored - as though its rotate
+            channels were zero, so the result does not depend on its current
+            rotation or rotate order. None (or all zeros) adds nothing.
 
     Returns:
         None
@@ -132,22 +140,27 @@ def mirror_transforms(
 
         stored_matrices[transform] = mtx
 
+    # -- The node each transform's mirrored matrix is applied to
+    mirror_targets = collections.OrderedDict()
+
+    for transform in stored_matrices:
+        if targets is not None:
+            mirror_targets[transform] = target_lookup[transform]
+
+        elif name_replacement:
+            mirror_targets[transform] = transform.replace(
+                name_replacement[0],
+                name_replacement[1],
+            )
+
+        else:
+            mirror_targets[transform] = transform
+
     # -- The matrices are world space, so setting a parent after its child
     # -- moves the child again. Applying the whole set once per transform
     # -- means every node ends up on its mirrored matrix regardless of order.
     for _ in stored_matrices:
-        for transform in stored_matrices:
-            target = transform
-
-            if targets is not None:
-                target = target_lookup[transform]
-
-            elif name_replacement:
-                target = target.replace(
-                    name_replacement[0],
-                    name_replacement[1],
-                )
-
+        for transform, target in mirror_targets.items():
             cmds.xform(
                 target,
                 worldSpace=True,
@@ -168,6 +181,40 @@ def mirror_transforms(
                 _joints.move_orients_to_rotation([joint.name()])
                 cmds.xform(target, matrix=joint.get_matrix(space="world"), ws=True)
                 joint.delete()
+
+    # -- Added after all the mirroring, because the world space pass above
+    # -- would overwrite a rotation added to any node before it
+    if not additional_rotation:
+        return
+
+    # -- The additional rotation is applied in each node's object space, as
+    # -- though its rotate channels were zero, rather than added onto the
+    # -- channels (which would make the result depend on the node's current
+    # -- rotation and rotate order)
+    additional_matrix = om.MEulerRotation(
+        [math.radians(value) for value in additional_rotation],
+    ).asMatrix()
+
+    for target in mirror_targets.values():
+        rotate_order = cmds.getAttr(f"{target}.rotateOrder")
+        current = om.MEulerRotation(
+            [math.radians(value) for value in cmds.getAttr(f"{target}.rotate")[0]],
+            rotate_order,
+        )
+        rotate_axis = om.MEulerRotation(
+            [math.radians(value) for value in cmds.getAttr(f"{target}.rotateAxis")[0]],
+        ).asMatrix()
+
+        # -- R' = RA^-1 * Add * RA * R, so that RA * R' = Add * RA * R
+        result_matrix = rotate_axis.inverse() * additional_matrix * rotate_axis * current.asMatrix()
+        result = om.MTransformationMatrix(result_matrix).rotation(asQuaternion=False)
+        result.reorderIt(rotate_order)
+        result = result.closestSolution(current)
+
+        cmds.setAttr(
+            f"{target}.rotate",
+            *[math.degrees(angle) for angle in (result.x, result.y, result.z)],
+        )
 
 
 def invert_translation(transforms: list[str] = None) -> None:

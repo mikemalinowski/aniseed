@@ -221,8 +221,9 @@ class MayaHost(aniseed.EmbeddedHost):
 
     def launch_toolkit(self, config):
         """
-        Shows the toolkit's window docked as a tab beside the Attribute
-        Editor, bringing it to the front if it is already open.
+        Shows the toolkit's window floating, bringing it to the front if it
+        is already open. The user can still dock it, but a new window always
+        opens floating.
         """
         window = DockableToolkitWindow.instance(config.toolkit)
         control = f"{toolkit_app.object_name(config)}WorkspaceControl"
@@ -235,24 +236,19 @@ class MayaHost(aniseed.EmbeddedHost):
                 parent=qtility.windows.application(),
             )
 
+            # -- The workspace control ignores the window's own size, so
+            # -- give it here
             window.show(
                 dockable=True,
-                area="right",
-                floating=False,
-            )
-
-            cmds.workspaceControl(
-                control,
-                e=True,
-                ttc=["AttributeEditor", -1],
-                wp="preferred",
-                mw=150,
+                floating=True,
+                width=380,
+                height=700,
             )
 
         else:
             window.show()
 
-        # -- Docking as a tab (or showing a hidden tab) does not make it the
+        # -- Showing a window the user docked as a tab does not make it the
         # -- current tab, so raise it
         cmds.workspaceControl(control, e=True, restore=True)
         return window

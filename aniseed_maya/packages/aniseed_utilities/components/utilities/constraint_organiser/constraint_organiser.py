@@ -4,8 +4,12 @@ constraint found on the descendants of a hierarchy root and reparents them
 under a single chosen node. This keeps constraints out of the deformation
 hierarchy and tidies the outliner.
 """
+import logging
+
 import aniseed
 import mref
+
+log = logging.getLogger(__name__)
 
 
 class ConstraintOrganiser(aniseed.RigComponent):
@@ -48,11 +52,28 @@ class ConstraintOrganiser(aniseed.RigComponent):
         """
         Gathers the constraints on every descendant of the hierarchy root
         and reparents them under the constraint parent. Errors if a
-        constraint is already parented there.
+        constraint is already parented there. Fails with a clear message if
+        either node is missing, which is checked here rather than in
+        is_valid, as earlier components in the same build (such as clearing
+        the control rig) can delete them after validation has run.
         """
-
-        node = mref.get(self.input("Hierarchy Root").get())
+        hierarchy_root = self.input("Hierarchy Root").get()
         constraint_parent = self.input("Constraint Parent").get()
+
+        for input_name, node_name in [
+            ("Hierarchy Root", hierarchy_root),
+            ("Constraint Parent", constraint_parent),
+        ]:
+            if not node_name or not mref.objExists(node_name):
+                log.error(
+                    f"{self.label()}: The {input_name} '{node_name}' does not exist. If it "
+                    "is a rig structure group, check that Make Rig Editable clears the "
+                    "control rig before it ensures the rig hierarchy, as deleting the "
+                    "controls can delete a group left empty."
+                )
+                return False
+
+        node = mref.get(hierarchy_root)
 
         # -- Gather everything before reparenting, so that moving the
         # -- constraints does not alter the hierarchy being walked

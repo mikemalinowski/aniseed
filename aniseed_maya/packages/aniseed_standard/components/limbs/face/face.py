@@ -15,6 +15,7 @@ import qtility
 import functools
 import aniseed
 import aniseed_utilities as au
+from aniseed import toolkits
 from aniseed_standard import rigging
 from Qt import QtWidgets
 
@@ -30,6 +31,10 @@ class FaceComponent(aniseed.RigComponent):
     """
 
     identifier = "Limb : Face"
+
+    # -- The options naming the mixer node and holding its data, which the
+    # -- Transform Mixer Pose Editor tool stores edited poses into
+    mixer_options = ("Mixer", "Mixer Data")
 
     # -- When adding the face we construct a skeleton. All the data relating to
     # -- the skeleton and the hierarchy are stored in this json file.
@@ -536,8 +541,15 @@ class FaceComponent(aniseed.RigComponent):
                 mixer_deformer.attr(channel).connect(control_offset.attr(channel))
 
         # -- Now we need to add each pose as defined in this components
-        # -- pose list.
-        for pose_name in self.pose_list:
+        # -- pose list, followed by any custom poses held in the stored data.
+        # -- Custom poses have no high level driver; their weights are left
+        # -- as keyable attributes on the mixer node.
+        custom_pose_names = [
+            pose["name"]
+            for pose in (mixer_data or dict()).get("poses", list())
+            if pose["name"] not in self.pose_list
+        ]
+        for pose_name in self.pose_list + custom_pose_names:
             mixer.add_pose(name=pose_name)
 
         # -- Finally, using the stored data, we set the matrices of each
@@ -589,6 +601,14 @@ class FaceComponent(aniseed.RigComponent):
 
                 # -- Skip separator attributes
                 if not attr.name(include_node=False).replace("_", ""):
+                    continue
+
+                # -- Only proxy what the animator sees in the channel box. This
+                # -- skips the control's internal metadata (the link_* message
+                # -- attributes and the naming_data string), which have no use
+                # -- on the face host, and with which duplicating the host (as
+                # -- Studio Library does when saving animation) crashes Maya.
+                if not attr.is_in_channel_box():
                     continue
 
                 try:
@@ -889,6 +909,7 @@ class FacialTools(QtWidgets.QWidget):
     # -- a dictionary of button labels, and function names which should be invoked when
     # -- that button is clicked.
     button_mapping = {
+        "Open Pose Editor": "open_pose_editor",
         "Snapshot Data": "snapshot_data",
         "Mirror Pose": "mirror_pose",
         "Show Pose": "show_pose",
@@ -1186,6 +1207,14 @@ class MixerTools:
         mixer = self.component.mixer()
         if mixer:
             mref.select(mixer.node)
+
+    def open_pose_editor(self):
+        """
+        Opens the Transform Mixer Pose Editor on this component's mixer
+        """
+        mixer = self.component.mixer()
+        if mixer:
+            toolkits.run("Transform Mixer Pose Editor", options={"Mixer Node": mixer.node.name()})
 
     def select_active_poses(self):
         """

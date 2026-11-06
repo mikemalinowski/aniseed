@@ -16,6 +16,7 @@ import mref
 import aniseed
 import qtility
 import aniseed_utilities as au
+from aniseed import toolkits
 from Qt import QtCore, QtWidgets
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,10 @@ class TransformMixer(aniseed.RigComponent):
     """
 
     identifier = "Utility : Transform Mixer"
+
+    # -- The options naming the mixer node and holding its data, which the
+    # -- Transform Mixer Pose Editor tool stores edited poses into
+    mixer_options = ("Node", "Data")
 
     def __init__(self, *args, **kwargs):
         """
@@ -93,6 +98,7 @@ class TransformMixer(aniseed.RigComponent):
             value=False,
         )
 
+        self.declare_option(name="Open Pose Editor", value=None)
         self.declare_option(name="Add Pose", value=None)
         self.declare_option(name="Remove Pose", value=None)
         self.declare_option(name="Add Deformer", value=None)
@@ -120,6 +126,9 @@ class TransformMixer(aniseed.RigComponent):
 
         if requirement_name == "Location":
             return aniseed.widgets.LocationSelector(self.config, self.option(requirement_name).get())
+
+        if requirement_name == "Open Pose Editor":
+            return aniseed.widgets.ButtonWidget(button_name="Open Pose Editor", func=self.open_pose_editor)
 
         if requirement_name == "Add Pose":
             return aniseed.widgets.ButtonWidget(button_name="Add Pose", func=self.add_pose)
@@ -392,6 +401,17 @@ class TransformMixer(aniseed.RigComponent):
             return
 
         mixer.remove_deformer(deformer_name)
+
+    def open_pose_editor(self):
+        """
+        Opens the Transform Mixer Pose Editor on this component's mixer.
+        """
+        mixer = self.mixer()
+
+        if not mixer:
+            return
+
+        toolkits.run("Transform Mixer Pose Editor", options={"Mixer Node": mixer.node.name()})
 
     def add_pose(self):
         """

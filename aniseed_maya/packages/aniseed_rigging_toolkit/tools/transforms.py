@@ -454,7 +454,9 @@ class GlobalMirrorTool(toolkits.Tool):
     result 180 degrees in X and Y. Give a Name Replacement of the form
     replace_this:with_this (such as _LF:_RT) to apply each mirrored transform
     to the node with that replaced name instead of the node itself; leave it
-    empty to mirror the selected nodes in place.
+    empty to mirror the selected nodes in place. With Add Additionals on, the
+    Additional X/Y/Z degrees rotate every mirrored node about its own local
+    axes once the mirror is done, as though its rotate channels were zero.
     """
 
     identifier = "Global Mirror"
@@ -488,6 +490,30 @@ class GlobalMirrorTool(toolkits.Tool):
             description="replace_this:with_this, to mirror onto the nodes with the replaced names. Empty mirrors in place",
         )
 
+        self.declare_option(
+            name="Additional X",
+            value=0.0,
+            description="Degrees to rotate each mirrored node about its local X axis when Add Additionals is on",
+        )
+
+        self.declare_option(
+            name="Additional Y",
+            value=0.0,
+            description="Degrees to rotate each mirrored node about its local Y axis when Add Additionals is on",
+        )
+
+        self.declare_option(
+            name="Additional Z",
+            value=0.0,
+            description="Degrees to rotate each mirrored node about its local Z axis when Add Additionals is on",
+        )
+
+        self.declare_option(
+            name="Add Additionals",
+            value=False,
+            description="Whether to add the Additional X/Y/Z rotations after mirroring",
+        )
+
     def option_widget(self, option_name: str):
         if option_name == "Across":
             return aniseed.widgets.ItemSelector(
@@ -510,12 +536,22 @@ class GlobalMirrorTool(toolkits.Tool):
         return True
 
     def run(self) -> None:
+        additional_rotation = None
+
+        if self.option("Add Additionals").get():
+            additional_rotation = [
+                self.option("Additional X").get(),
+                self.option("Additional Y").get(),
+                self.option("Additional Z").get(),
+            ]
+
         au.scene.mirror.mirror_transforms(
             transforms=cmds.ls(selection=True),
             across=self.option("Across").get(),
             behaviour=self.option("Behaviour").get(),
             rotate_flip=self.option("Flip XY Rotations").get(),
             name_replacement=_name_replacement(self.option("Name Replacement").get()),
+            additional_rotation=additional_rotation,
         )
 
 

@@ -8,6 +8,8 @@ import logging
 
 from maya import cmds
 
+import mref
+import qtility
 import aniseed
 import aniseed_utilities as au
 from aniseed import toolkits
@@ -23,6 +25,50 @@ def _requires_selection(message: str) -> bool:
     return True
 
 
+def _selected_names() -> list:
+    """
+    Returns the full names of the selected nodes.
+    """
+    return mref.selected().full_names()
+
+
+def _objects(option_value) -> list:
+    """
+    Returns the objects given in an object option as a list of names, or the
+    selected objects if the option is blank.
+    """
+    if not option_value:
+        return _selected_names()
+
+    if isinstance(option_value, str):
+        return [option_value]
+
+    return list(option_value)
+
+
+def _request_folder(title: str) -> str:
+    """
+    Asks the user for a folder. Returns an empty string if they cancel.
+    """
+    return qtility.request.folderpath(
+        title=title,
+        parent=qtility.windows.application(),
+    ) or ""
+
+
+def _request_file(title: str, filter_: str) -> str:
+    """
+    Asks the user for an existing file to open. Returns an empty string if
+    they cancel.
+    """
+    return qtility.request.filepath(
+        title=title,
+        save=False,
+        filter_=filter_,
+        parent=qtility.windows.application(),
+    ) or ""
+
+
 def _skin_filename(mesh: str) -> str:
     """
     Returns the skin file name for the given mesh: its name without any DAG
@@ -32,16 +78,29 @@ def _skin_filename(mesh: str) -> str:
     return mesh.split("|")[-1].split(":")[-1] + ".skin"
 
 
-def _requires_folder(folderpath: str, purpose: str) -> bool:
-    if not folderpath:
-        log.warning(f"Set the Folderpath to {purpose}")
-        return False
-
-    if not os.path.isdir(folderpath):
+def _folder_is_valid(folderpath: str) -> bool:
+    """
+    Checks a Folderpath option. A blank one is valid, as the user is asked
+    for the folder when the tool runs.
+    """
+    if folderpath and not os.path.isdir(folderpath):
         log.warning(f"The Folderpath does not exist: {folderpath}")
         return False
 
     return True
+
+
+def _folder(folderpath: str, title: str) -> str:
+    """
+    Returns the given folder, or asks the user for one if it is blank.
+    Returns an empty string if they cancel.
+    """
+    folderpath = folderpath or _request_folder(title)
+
+    if not folderpath:
+        log.warning(f"{title} : no folder was chosen")
+
+    return folderpath
 
 
 # --------------------------------------------------------------------------------------
@@ -82,7 +141,7 @@ class CopySkinToUnskinnedMeshes(toolkits.Tool):
         return True
 
     def run(self) -> None:
-        selection = cmds.ls(selection=True)
+        selection = _selected_names()
 
         au.scene.skin.copy_skin_to_unbound_meshes(
             skinned_mesh=self.option("Skinned Mesh").get() or selection[0],
@@ -244,7 +303,7 @@ class CopySkinWeightsToMemory(toolkits.Tool):
         return True
 
     def run(self) -> None or bool:
-        mesh = self.option("Mesh").get() or cmds.ls(selection=True, objectsOnly=True)[0]
+        mesh = self.option("Mesh").get() or mref.selected(objectsOnly=True).full_names()[0]
 
         # -- The library keeps the copied weights, for
         # -- paste_skin_to_matching_vertices
@@ -396,7 +455,7 @@ class SaveSkinFile(toolkits.Tool):
         self.declare_option(
             name="Folderpath",
             value="",
-            description="The folder to save the skin files in",
+            description="The folder to save the skin files in. If blank, you are asked for one",
         )
 
     def option_widget(self, option_name: str):
@@ -405,22 +464,21 @@ class SaveSkinFile(toolkits.Tool):
         return None
 
     def _meshes(self) -> list:
-        meshes = self.option("Meshes").get() or cmds.ls(selection=True)
-
-        if isinstance(meshes, str):
-            meshes = [meshes]
-
-        return meshes
+        return _objects(self.option("Meshes").get())
 
     def is_valid(self) -> bool:
         if not self._meshes():
             log.warning("Give or select the meshes to save the skin weights of")
             return False
 
-        return _requires_folder(self.option("Folderpath").get(), "save the skin files in")
+        return _folder_is_valid(self.option("Folderpath").get())
 
-    def run(self) -> None:
-        folderpath = self.option("Folderpath").get()
+    def run(self) -> None or bool:
+        folderpath = _folder(self.option("Folderpath").get(), "Save Skin Files To")
+
+        if not folderpath:
+            return False
+
         written = dict()
 
         for mesh in self._meshes():
@@ -461,7 +519,7 @@ class LoadSkinFile(toolkits.Tool):
         self.declare_option(
             name="Filepath",
             value="",
-            description="The skin file to load",
+            description="The skin file to load. If blank, you are asked for one",
         )
 
     def option_widget(self, option_name: str):
@@ -483,22 +541,29 @@ class LoadSkinFile(toolkits.Tool):
             log.warning("Give or select the mesh to load the skin weights onto")
             return False
 
+        # -- A blank Filepath is valid, as the user is asked for the file
+        # -- when the tool runs
         filepath = self.option("Filepath").get()
 
-        if not filepath:
-            log.warning("Set the Filepath of the skin file to load")
-            return False
-
-        if not os.path.exists(filepath):
+        if filepath and not os.path.exists(filepath):
             log.warning(f"The skin file does not exist: {filepath}")
             return False
 
         return True
 
-    def run(self) -> None:
-        mesh = self.option("Mesh").get() or cmds.ls(selection=True)[0]
+    def run(self) -> None or bool:
+        mesh = _objects(self.option("Mesh").get())[0]
 
-        skin = au.scene.skin.load(mesh, self.option("Filepath").get())
+        filepath = self.option("Filepath").get() or _request_file(
+            title="Load Skin File",
+            filter_="*.skin (*.skin)",
+        )
+
+        if not filepath:
+            log.warning("Load Skin File : no skin file was chosen")
+            return False
+
+        skin = au.scene.skin.load(mesh, filepath)
         log.info(f"Loaded the skin onto {mesh}: {skin}")
 
 
@@ -521,14 +586,17 @@ class LoadSkinDirectory(toolkits.Tool):
         self.declare_option(
             name="Folderpath",
             value="",
-            description="The folder to load the skin files from",
+            description="The folder to load the skin files from. If blank, you are asked for one",
         )
 
     def is_valid(self) -> bool:
-        return _requires_folder(self.option("Folderpath").get(), "load the skin files from")
+        return _folder_is_valid(self.option("Folderpath").get())
 
-    def run(self) -> None:
-        folderpath = self.option("Folderpath").get()
+    def run(self) -> None or bool:
+        folderpath = _folder(self.option("Folderpath").get(), "Load Skin Files From")
+
+        if not folderpath:
+            return False
 
         for filename in os.listdir(folderpath):
 

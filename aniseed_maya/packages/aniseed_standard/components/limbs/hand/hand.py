@@ -2,8 +2,8 @@
 Provides the "Limb : Hand" component, which builds a hand control with fk
 finger and thumb controls driven from the hand joint and finger/thumb tip
 inputs, with optional metacarpals. It adds hand level attributes (such as
-spread) weighted per finger, can generate and remove the hand skeleton and
-supports mirroring.
+spread) weighted per finger, where the weights can be set or left automatic.
+It can generate and remove the hand skeleton and supports mirroring.
 """
 import os
 import mref
@@ -25,8 +25,10 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         """
         Declares the parent, hand joint, finger tips and thumb tip inputs, the
         naming options (prefix, location, finger and thumb labels), the
-        metacarpal, digit count and attribute exposure behaviour options and
-        the joint creation options. The single (default) output is the hand.
+        metacarpal, digit count and attribute exposure behaviour options, how
+        much cup and spread the curl attribute adds, the per-finger cup,
+        spread and curl weights and the joint creation options. The single (default)
+        output is the hand.
         """
         super().__init__(*args, **kwargs)
 
@@ -111,6 +113,90 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         )
 
         self.declare_option(
+            name="Cup On Curl",
+            value=1.0,
+            group="Behaviour",
+            description=(
+                "How much cup the Curl attribute adds when it is at 1, given as the "
+                "equivalent value of the Cup attribute. 1.0 matches the Cup attribute "
+                "exactly, 0.0 means curl adds no cup."
+            ),
+        )
+
+        self.declare_option(
+            name="Spread On Curl",
+            value=0.0,
+            group="Behaviour",
+            description=(
+                "How much spread the Curl attribute adds when it is at 1, given as the "
+                "equivalent value of the Spread attribute. Negative values close the "
+                "fingers together as they curl. 0.0 means curl adds no spread."
+            ),
+        )
+
+        self.declare_option(
+            name="Cup Weights",
+            value=[],
+            group="Behaviour",
+            description=(
+                "How strongly cup acts on each finger, one value per finger in the same "
+                "order as Finger Tips (the thumb is not included). Leave the list empty, "
+                "or an entry blank, to use the automatic weight, which runs evenly from "
+                "1.0 on the first finger to -1.0 on the last."
+            ),
+        )
+
+        self.declare_option(
+            name="Spread Weights",
+            value=[],
+            group="Behaviour",
+            description=(
+                "How strongly spread acts on each finger, one value per finger in the "
+                "same order as Finger Tips (the thumb is not included). Leave the list "
+                "empty, or an entry blank, to use the automatic weight, which runs "
+                "evenly from 1.0 on the first finger to -1.0 on the last."
+            ),
+        )
+
+        self.declare_option(
+            name="Curl Weights",
+            value=[],
+            group="Behaviour",
+            description=(
+                "How strongly the Curl attribute rotates each finger, one multiplier per "
+                "finger in the same order as Finger Tips (the thumb is not included). "
+                "Leave the list empty, or an entry blank, to use 1.0. The individual "
+                "finger curl attributes are not affected."
+            ),
+        )
+
+        self.declare_option(
+            name="Curl Fall Offs",
+            value=[],
+            group="Behaviour",
+            description=(
+                "How strongly curl rotates each digit, one multiplier per digit from the "
+                "base of the finger to the tip, applied to every finger (the thumb is not "
+                "included). For instance 0.7, 1.0, 1.2 curls the first digits less and "
+                "the last digits more. It scales only the Curl attribute, not each "
+                "finger's own curl attribute. Leave the list empty, or an entry blank, "
+                "to use 1.0."
+            ),
+        )
+
+        self.declare_option(
+            name="_FillFingerWeights",
+            value=None,
+            group="Behaviour",
+            description=(
+                "Press to fill Cup Weights and Spread Weights with the automatic weight "
+                "of every finger, and Curl Weights with 1.0, so they can be edited from "
+                "the current behaviour. The finger count comes from Finger Tips, or from "
+                "Finger Labels when there are no finger tips yet."
+            ),
+        )
+
+        self.declare_option(
             name="Create Joints",
             value=True,
             pre_expose=True,
@@ -177,8 +263,14 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         if option_name == "Location":
             return aniseed.widgets.LocationSelector(self.config)
 
-        if option_name == "Finger Labels":
+        if option_name in ["Finger Labels", "Cup Weights", "Spread Weights", "Curl Weights", "Curl Fall Offs"]:
             return aniseed.widgets.TextList()
+
+        if option_name == "_FillFingerWeights":
+            return aniseed.widgets.ButtonWidget(
+                button_name="Auto Compute Finger Weights",
+                func=self.user_func_fill_finger_weights,
+            )
 
     def user_functions(self):
         """
@@ -189,7 +281,29 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         if not self.input("Hand Joint").get():
             menu["Create Joints"] = self.user_func_create_skeleton
 
+        if self.input("Finger Tips").get():
+            menu["Fill Finger Weights"] = self.user_func_fill_finger_weights
+
         return menu
+
+    def user_func_fill_finger_weights(self):
+        """
+        Writes the automatic weight of every finger into the Cup Weights and
+        Spread Weights options, and 1.0 for every finger into Curl Weights, so
+        they can be edited from the current behaviour. The finger count comes
+        from the Finger Tips input (which is what the build uses), or from
+        Finger Labels when there are no finger tips yet.
+        """
+        fingers = self.input("Finger Tips").get() or self.option("Finger Labels").get() or list()
+
+        automatic = [
+            f"{round(self._get_ranged_value(idx, fingers), 3)}"
+            for idx in range(len(fingers))
+        ]
+
+        self.option("Cup Weights").set(list(automatic))
+        self.option("Spread Weights").set(list(automatic))
+        self.option("Curl Weights").set(["1.0"] * len(fingers))
 
     def is_valid(self):
         """
@@ -223,6 +337,36 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                 log.warning(f"{self.label()}: {finger_tip} does not have {finger_depth} joints")
                 return False
 
+        # -- The per-finger lists have one entry per finger, and the fall offs
+        # -- one entry per digit
+        expected_counts = [
+            ("Cup Weights", len(finger_tips), "fingers"),
+            ("Spread Weights", len(finger_tips), "fingers"),
+            ("Curl Weights", len(finger_tips), "fingers"),
+            ("Curl Fall Offs", finger_depth, "digits"),
+        ]
+
+        for option_name, expected_count, counted_things in expected_counts:
+            entries = list(self.option(option_name).get() or list())
+
+            for entry in entries:
+                entry = str(entry).strip()
+                if not entry:
+                    continue
+
+                try:
+                    float(entry)
+
+                except ValueError:
+                    log.warning(f"{self.label()}: {option_name} entry '{entry}' is not a number")
+                    return False
+
+            if len(entries) > expected_count:
+                log.warning(
+                    f"{self.label()}: {option_name} has {len(entries)} entries but there are "
+                    f"only {expected_count} {counted_things}. The extra entries are ignored."
+                )
+
         return True
 
     def run(self):
@@ -238,6 +382,12 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         location = self.option("Location").get()
         finger_depth = self.option("Digit Count").get()
         proxy_to = self.option("Expose Attributes To Nodes").get()
+        cup_on_curl = self.option("Cup On Curl").get()
+        spread_on_curl = self.option("Spread On Curl").get()
+        cup_weights = self.finger_weights("Cup Weights")
+        spread_weights = self.finger_weights("Spread Weights")
+        curl_weights = self.finger_weights("Curl Weights", default=1.0)
+        curl_fall_offs = self.curl_fall_offs(finger_depth)
 
         # -- This is the default rotation of our shapes based on X down the chain.
         # -- Note: this is switched (for this and all subsequent fingers) the
@@ -279,6 +429,11 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         curl_attr = self._add_multiplied_attr(hand.ctl, "curl", 90, min=-0.25, proxy_to=proxy_to)
         spread_attr = self._add_multiplied_attr(hand.ctl, "spread", 90, proxy_to=proxy_to)
         cup_attr = self._add_multiplied_attr(hand.ctl, "cup", 90, proxy_to=proxy_to)
+
+        # -- How much cup and spread the curl adds. These are in the same units
+        # -- as the cup and spread attributes, so they can be summed with them
+        cup_from_curl = self._scaled_contribution(curl_attr, cup_on_curl)
+        spread_from_curl = self._scaled_contribution(curl_attr, spread_on_curl)
 
         finger_index_excluding_thumb = -1
 
@@ -347,19 +502,18 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                         rotate_shape=shape_rotation,
                     )
 
+                    # -- Connect the finger visibility
+                    finger_visibility.connect(
+                        mref.get(metacarpal.off).attr("visibility"),
+                        force=True,
+                    )
+
                     # -- Constrain the joint
                     au.scene.constraints.parent_and_scale(
                         metacarpal.ctl,
                         m_metacarpal,
                         maintain_offset=False,
                     )
-
-            # -- The ranged value gives us a float denoting how much influence
-            # -- this finger should get from features that spread etc.
-            ranged_value = self._get_ranged_value(
-                finger_index_excluding_thumb,
-                finger_tips,
-            )
 
             # -- Create the attribute for curling the individual finger
             finger_label = finger_labels[finger_idx]
@@ -417,11 +571,16 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                 self.setup_finger(
                     finger_controls,
                     metacarpal,
-                    ranged_value,
+                    cup_weights[finger_index_excluding_thumb],
+                    spread_weights[finger_index_excluding_thumb],
+                    curl_weights[finger_index_excluding_thumb],
+                    curl_fall_offs,
                     cup_attr,
                     curl_attr,
                     spread_attr,
                     finger_curl_attribute,
+                    cup_from_curl=cup_from_curl,
+                    spread_from_curl=spread_from_curl,
                     is_last=finger_idx == len(all_tips_including_thumb) - 2
                 )
 
@@ -436,48 +595,84 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                 -0.333,
             )
 
-    def setup_finger(self, finger_controls, metacarpal, ranged_value, cup_attr, curl_attr, spread_attr, finger_curl_attribute, is_last):
+    def setup_finger(
+            self,
+            finger_controls,
+            metacarpal,
+            cup_weight,
+            spread_weight,
+            curl_weight,
+            curl_fall_offs,
+            cup_attr,
+            curl_attr,
+            spread_attr,
+            finger_curl_attribute,
+            cup_from_curl=None,
+            spread_from_curl=None,
+            is_last=False,
+    ):
         """
         Drives the curl, cup and spread of the finger controls (and the
-        metacarpal if there is one) from the hand attributes
+        metacarpal if there is one) from the hand attributes. On each digit
+        the hand curl is scaled by this finger's curl weight and by that
+        digit's entry in curl_fall_offs (one per finger control, base to
+        tip); the finger's own curl attribute is not scaled. The cup and spread also take the curl's contribution to them
+        (if any), and are scaled by this finger's cup and spread weights.
         """
-        # -- Setup the curl
-        for control in finger_controls:
+        # -- Setup the curl. Only the hand curl is scaled (by this finger's
+        # -- curl weight and the digit's fall off); the finger's own curl
+        # -- attribute drives every digit fully
+        for digit_idx, control in enumerate(finger_controls):
+            fall_off = curl_fall_offs[digit_idx] if digit_idx < len(curl_fall_offs) else 1.0
+
+            curl_inputs = [finger_curl_attribute]
+            weighted_curl = self._scaled_contribution(curl_attr, curl_weight * fall_off)
+            if weighted_curl:
+                curl_inputs.insert(0, weighted_curl)
+
             self._connect_with_inversion(
-                [curl_attr, finger_curl_attribute],
+                curl_inputs,
                 f"{control.off}.rotateZ",
                 -1,
             )
 
         # -- Do the cup
+        cup_inputs = [cup_attr]
+        if cup_from_curl:
+            cup_inputs.append(cup_from_curl)
+
         cup_control = metacarpal or finger_controls[0]
         self._connect_with_inversion(
-            [cup_attr, curl_attr],
+            cup_inputs,
             f"{cup_control.off}.rotateX",
             1,
-            multiplier=ranged_value * 0.25,
+            multiplier=cup_weight * 0.25,
         )
 
         # -- Setup the spread
+        spread_inputs = [spread_attr]
+        if spread_from_curl:
+            spread_inputs.append(spread_from_curl)
+
         spread_factor = -0.4
 
         if metacarpal:
             spread_factor *= 0.5
             self._connect_with_inversion(
-                [spread_attr],
+                spread_inputs,
                 f"{metacarpal.off}.rotateY",
                 1,
-                multiplier=ranged_value * spread_factor,
+                multiplier=spread_weight * spread_factor,
             )
 
         if is_last:
             spread_factor *= 2
 
         self._connect_with_inversion(
-            [spread_attr],
+            spread_inputs,
             f"{finger_controls[0].off}.rotateY",
             1,
-            multiplier=ranged_value * spread_factor,
+            multiplier=spread_weight * spread_factor,
         )
 
     def get_parent(self, node: str, parent_index: int) -> str:
@@ -801,6 +996,61 @@ class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
             # -- This silently does nothing if to_this is already connected
             mref.get(multiplied_attr).connect(to_this)
+
+    def finger_weights(self, option_name: str, default: float = None) -> list:
+        """
+        Returns the weight of every finger (thumb excluded), in Finger Tips
+        order, for the given weights option (such as Cup Weights). Each
+        finger uses its entry in that option if it has a non-blank one, and
+        otherwise the default - or, when no default is given, its automatic
+        (ranged) weight.
+        """
+        finger_tips = self.input("Finger Tips").get() or list()
+        entries = list(self.option(option_name).get() or list())
+
+        weights = []
+        for idx in range(len(finger_tips)):
+            entry = str(entries[idx]).strip() if idx < len(entries) else ""
+
+            if entry:
+                weights.append(float(entry))
+
+            elif default is not None:
+                weights.append(default)
+
+            else:
+                weights.append(self._get_ranged_value(idx, finger_tips))
+
+        return weights
+
+    def curl_fall_offs(self, digit_count: int) -> list:
+        """
+        Returns the curl multiplier of every digit, from the base of the
+        finger to the tip, from the Curl Fall Offs option. A digit without
+        a non-blank entry uses 1.0.
+        """
+        entries = list(self.option("Curl Fall Offs").get() or list())
+
+        fall_offs = []
+        for idx in range(digit_count):
+            entry = str(entries[idx]).strip() if idx < len(entries) else ""
+            fall_offs.append(float(entry) if entry else 1.0)
+
+        return fall_offs
+
+    @classmethod
+    def _scaled_contribution(cls, attribute: str, factor: float):
+        """
+        Returns the attribute scaled by the factor, the attribute itself when
+        the factor is 1, or None when the factor is 0 (no contribution).
+        """
+        if factor == 0:
+            return None
+
+        if factor == 1:
+            return attribute
+
+        return au.scene.node_math.multiply(attribute, factor)
 
     @classmethod
     def _get_ranged_value(cls, idx, items):

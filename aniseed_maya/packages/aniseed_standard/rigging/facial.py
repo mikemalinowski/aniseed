@@ -88,7 +88,7 @@ class FacialControlRig:
         it as part of the rig build. This function will return the existing control
         if one has been specified, otherwise it will generate a new one.
 
-        The settings read (through read_setting) are "<identity_label>au.rig.control",
+        The settings read (through read_setting) are "<identity_label>_control",
         "<identity_label>_parent" and "<identity_label>_shape".
 
         Args:
@@ -105,7 +105,7 @@ class FacialControlRig:
         """
         # -- If the user has specified a control then we use that rather
         # -- than create one.
-        control_name = self.read_setting(f"{identity_label}au.rig.control")
+        control_name = self.read_setting(f"{identity_label}_control")
         if control_name:
             return mref.get(control_name)
 

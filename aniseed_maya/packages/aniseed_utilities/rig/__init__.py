@@ -14,6 +14,7 @@ from . import controls
 from . import guide
 from . import pinning
 from . import pose_mixer
+from . import pose_editing
 from . import space
 from . import tagging
 
@@ -36,6 +37,7 @@ __all__ = [
     "guide",
     "pinning",
     "pose_mixer",
+    "pose_editing",
     "space",
     "tagging",
     "all_controls",

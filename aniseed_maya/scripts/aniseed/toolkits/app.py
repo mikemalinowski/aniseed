@@ -46,11 +46,41 @@ _FILTER_SEPARATORS = re.compile(r"[,;]")
 class ToolkitDelegate(delegate.ComponentItemDelegate):
     """
     Draws a tool's name alone. The stack's default delegate follows it with
-    the component type, which for a tool is its name again.
+    the component type, which for a tool is its name again. Organisers and
+    tools are filled with the config's colours, and organiser names are bold.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.organiser_font = QtGui.QFont(self.text_font)
+        self.organiser_font.setBold(True)
+
+    def paint_highlight(self, component, painter, option, index):
+        if isinstance(component, core.Organiser):
+            color = self.app_config.organiser_color
+            alpha = self.app_config.organiser_alpha
+
+        else:
+            color = self.app_config.tool_color
+            alpha = self.app_config.tool_alpha
+
+        # -- Without a colour, keep xstack's own gradient
+        if color is None:
+            super().paint_highlight(component, painter, option, index)
+            return
+
+        if option.state & QtWidgets.QStyle.State_Selected:
+            alpha += self.app_config.selected_alpha_increase
+
+        elif option.state & QtWidgets.QStyle.State_MouseOver:
+            alpha += self.app_config.hover_alpha_increase
+
+        painter.fillRect(option.rect, QtGui.QColor(*color, min(alpha, 255)))
+
     def paint_text(self, component, painter, option, index):
-        painter.setFont(self.text_font)
+        is_organiser = isinstance(component, core.Organiser)
+        painter.setFont(self.organiser_font if is_organiser else self.text_font)
         painter.setPen(self.text_pen)
         painter.drawText(
             option.rect.x() + self.item_size + self.bfr + self.STATUS_WIDTH + self.bfr,
@@ -163,6 +193,19 @@ class ToolkitConfig(app.AppConfig):
     # -- Whether a filter is shown above the tree
     show_filter = True
 
+    # -- The background (rgb) of organiser and tool items, and how opaque it
+    # -- is (0-255). Hovered and selected items are drawn more opaque than
+    # -- this. A colour of None keeps xstack's default white gradient.
+    organiser_color = [60, 90, 120]
+    organiser_alpha = 140
+
+    tool_color = [50, 200, 75]
+    tool_alpha = 20
+
+    # -- How much more opaque (0-255) hovered and selected items are
+    hover_alpha_increase = 30
+    selected_alpha_increase = 60
+
     label = "Toolkit"
     component_label = "Tool"
     execute_label = "Run"
@@ -175,6 +218,8 @@ class ToolkitConfig(app.AppConfig):
     component_build_actions = ("only",)
     show_stack_build_actions = False
     tree_widget = ToolkitTree
+
+    status_unknown_color = [200, 100, 255, 0]
 
     log_logger_names = app.AppConfig.log_logger_names + [
         "aniseed.toolkits",

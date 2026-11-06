@@ -235,9 +235,9 @@ class TransformMixer:
     def create_target(self, deformer, pose):
         """
         Creates the target transform for the given deformer and pose, at
-        the deformer's current world transform and with a locator shape,
-        and wires its local translate, rotate and scale (as an offset from
-        1) multiplied by the pose weight into the deformer.
+        rest beneath the deformer's parent and with a locator shape, and
+        wires its local translate, rotate and scale (as an offset from 1)
+        multiplied by the pose weight into the deformer.
 
         Args:
             deformer: The deformer transform (mref item)
@@ -253,12 +253,13 @@ class TransformMixer:
         deformer_label = self._camel(deformer.attr("deformer_name").get())
         target_label = f"{self._camel(pose.attr('pose_name').get())}{deformer_label}"
 
+        # -- The target starts at rest, so the new pose moves nothing. Matching
+        # -- it to the deformer would copy in whatever the active poses add up to.
         target = mref.create(
             "transform",
             name=self._name(f"target__{label}", f"{target_label}Target"),
             parent=deformer.parent(),
         )
-        target.set_matrix(deformer.get_matrix(space="world"), space="world")
 
         # -- Add a built-in locator shape rather than loading a curve
         # -- from disk. The locator is rendered natively by Maya, has

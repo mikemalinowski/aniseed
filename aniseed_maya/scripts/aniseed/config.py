@@ -143,6 +143,19 @@ class RigConfiguration(component.RigComponent):
             label="Make Rig Editable",
         )
 
+        # -- Clear the control rig before the rig hierarchy is ensured. Deleting
+        # -- the controls deletes the constraints which target them, and Maya then
+        # -- deletes any group left empty by that (such as the constraints group).
+        # -- Ensuring the hierarchy afterwards recreates anything removed this way.
+        self.rig.add_component(
+            component_type="Utility : Delete Children",
+            label="Clear Control Rig",
+            inputs={
+                "Node": control_org_name,
+            },
+            parent=make_editable,
+        )
+
         construction_org = self.rig.add_component(
             component_type="Stack : Organiser",
             label="Rig Hierarchy",
@@ -176,15 +189,6 @@ class RigConfiguration(component.RigComponent):
                 "New Parent": skeleton_org_name
             },
             parent=construction_org,
-        )
-
-        self.rig.add_component(
-            component_type="Utility : Delete Children",
-            label="Clear Control Rig",
-            inputs={
-                "Node": control_org_name,
-            },
-            parent=make_editable,
         )
 
         return make_editable
