@@ -23,8 +23,9 @@ knuckle) is driven between the controls of the digits either side of it.
 
 A digit with twist joints also gets a MultiChainTwisters setup from its first
 joint to its tip, so its twist joints bend, twist and squash along each of
-its bones. Its controls are hidden unless the bendyVisibility attribute on
-the digit's first control is on.
+its bones. Its controls are hidden unless the ShowDetailedFingerControls
+attribute on the digit's first control (proxied to the digit's other
+controls) is on.
 
 Added to the IkfkSpringLimb structure:
 
@@ -44,6 +45,10 @@ Added to the IkfkSpringLimb structure:
                     <Digit>MultiChainTwisters (per digit with twist joints,
                         visibility from the digit's first control)
         MultiChainTwisters (upper arm to hand, if twist joints are given)
+
+The ShowDetailedControls attribute on the root control (proxied to the ik, fk
+and pivot controls) shows the shapes of the arm's multi chain twist key and
+cv controls, which are hidden by default.
 """
 import typing
 import collections
@@ -111,12 +116,27 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             along the digit it is in
         finger_cvs_per_segment: How many cvs each finger twist curve has
         debug: Passed to the hand pivot
+        pivot_control_transform: Optional node to match the pivot control's
+            org to (position and rotation)
 
     Usage:
         arm = FlexiArm(shoulder, wrist, palm_guide, config, "arm", config.left, digits=digits).build()
     """
 
     IK_TARGET_LABEL = "IkHand"
+
+    # -- The attribute on the root control which shows the arm's multi chain
+    # -- twist key and cv control shapes
+    SHOW_DETAILED_CONTROLS = "ShowDetailedControls"
+
+    # -- The attribute on each digit's first control (proxied to the rest of
+    # -- the digit's controls) which shows that digit's twist controls
+    SHOW_DETAILED_FINGER_CONTROLS = "ShowDetailedFingerControls"
+
+    # -- The scale of the arm's and the fingers' multi chain twist key
+    # -- (paddle) and cv (lollipop) control shapes
+    TWIST_SHAPE_SCALE = 24
+    FINGER_TWIST_SHAPE_SCALE = 6
 
     def __init__(
             self,
@@ -141,6 +161,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             finger_twist_joints: typing.List[str] = None,
             finger_cvs_per_segment: int = 3,
             debug: bool = False,
+            pivot_control_transform: str = None,
     ):
         super().__init__(
             start_joint=upper_joint,
@@ -161,8 +182,9 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         self.rotation_multiplier = rotation_multiplier
         self.rotation_limit = rotation_limit
         self.debug = debug
+        self.pivot_control_transform = pivot_control_transform
 
-        self.digits = collections.OrderedDict(
+        self.digits =collections.OrderedDict(
             (label, [mref.get(joint).full_name() for joint in joints])
             for label, joints in (digits or dict()).items()
             if joints
@@ -203,6 +225,8 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         for control in controls + self.blend_rotators:
             mref.get(control.ctl).add_proxy("ikfk", ikfk)
 
+        self._create_detailed_visibility()
+
         cmds.select(clear=True)
         return self
 
@@ -237,6 +261,11 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             rotation_limit=self.rotation_limit,
             align_to_guide=True,
         ).build()
+
+        dynamic_pivot.set_rotator_shape(self.pivot.control)
+
+        if self.pivot_control_transform:
+            cmds.matchTransform(self.pivot.control.org, self.pivot_control_transform, position=True, rotation=True)
 
         handle = mref.get(self.ik_handle)
         handle_transform = mref.get(self.ik_handle_transform)
@@ -286,6 +315,50 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             root_twist_node=self.root_control.ctl,
         ).build()
 
+        for control in self.twisters.key_controls:
+            _set_shape(control, "core_paddle", self.TWIST_SHAPE_SCALE)
+
+        for controls in self.twisters.cv_controls:
+            for control in controls:
+                _set_shape(control, "core_lollipop", self.TWIST_SHAPE_SCALE)
+
+    def _create_detailed_visibility(self):
+        """
+        Adds the ShowDetailedControls attribute to the root control (off by
+        default), which shows the shapes of the arm's multi chain twist key
+        and cv controls, and proxies it to the ik, fk and pivot controls. Only
+        the shapes are hidden, so the cv controls under a key control are
+        unaffected by its visibility.
+        """
+        show = mref.get(self.root_control.ctl).add_attribute(
+            self.SHOW_DETAILED_CONTROLS,
+            value=False,
+            attribute_type="bool",
+            keyable=False,
+            defaultValue=False,
+        )
+        show.set(channelBox=True)
+
+        if self.twisters:
+            detailed = self.twisters.key_controls + [
+                control
+                for controls in self.twisters.cv_controls
+                for control in controls
+            ]
+            for control in detailed:
+                for shape in cmds.listRelatives(control.ctl, shapes=True, type="nurbsCurve", fullPath=True) or []:
+                    show.connect(f"{shape}.visibility")
+
+        for control in self.fk_controls + [
+            self.ik_target_control,
+            self.pole_vector_control,
+            self.pivot.control,
+        ]:
+            mref.get(control.ctl).add_proxy(
+                self.SHOW_DETAILED_CONTROLS,
+                f"{self.root_control.ctl}.{self.SHOW_DETAILED_CONTROLS}",
+            )
+
     def _create_fingers(self):
         """
         Creates an fk control per digit joint but the tip, each under the
@@ -315,7 +388,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
                     description=label,
                     location=self.location,
                     parent=parent,
-                    shape="core_paddle",
+                    shape="core_rounded_square",
                     config=self.config,
                     match_to=joint,
                     shape_scale=self.finger_shape_scale,
@@ -401,8 +474,9 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         Builds a MultiChainTwisters setup from the first joint to the tip of
         each digit which has twist joints (each twist joint belonging to the
         digit its parent is in), under the Fingers org. Its controls are
-        hidden unless the bendyVisibility attribute on the digit's first
-        control is on.
+        hidden unless the ShowDetailedFingerControls attribute on the digit's
+        first control is on, which every other control of the digit carries
+        as a proxy.
         """
         if not self.finger_twist_joints:
             return
@@ -433,8 +507,18 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
                 shape_scale=self.finger_shape_scale * 0.5,
             ).build()
 
-            visibility = mref.get(self.fingers[label][0].ctl).add_attribute(
-                "bendyVisibility",
+            # -- Styled as the arm's twist controls, at a quarter of their size
+            # -- and turned 90 in x
+            for control in twisters.key_controls:
+                _set_shape(control, "core_paddle", self.FINGER_TWIST_SHAPE_SCALE, rotate=[90, 0, 0])
+
+            for controls in twisters.cv_controls:
+                for control in controls:
+                    _set_shape(control, "core_lollipop", self.FINGER_TWIST_SHAPE_SCALE, rotate=[90, 0, 0])
+
+            first, *others = self.fingers[label]
+            visibility = mref.get(first.ctl).add_attribute(
+                self.SHOW_DETAILED_FINGER_CONTROLS,
                 value=False,
                 attribute_type="bool",
                 keyable=False,
@@ -443,12 +527,30 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             visibility.set(channelBox=True)
             visibility.connect(mref.get(twisters.org).attr("visibility"))
 
+            # -- So it can be switched from any control of the digit
+            for control in others:
+                mref.get(control.ctl).add_proxy(
+                    self.SHOW_DETAILED_FINGER_CONTROLS,
+                    f"{first.ctl}.{self.SHOW_DETAILED_FINGER_CONTROLS}",
+                )
+
             self.finger_twisters[label] = twisters
+
+
+def _set_shape(control: au.rig.control.Control, shape: str, scale: float, rotate: typing.List[float] = None):
+    """
+    Replaces the control's shape, scaled and optionally rotated, as
+    au.rig.control.create applies one
+    """
+    au.scene.shapes.load_shape(control.ctl, shape)
+    au.scene.shapes.scale(control.ctl, scale_by=scale)
+    if rotate:
+        au.scene.shapes.rotate(control.ctl, *rotate)
 
 
 def _shape_rotation(joints: typing.List[str]) -> typing.List[float]:
     """
-    Returns the rotation to give a digit's paddle shapes, as the standard
+    Returns the rotation to give a digit's control shapes, as the standard
     hand does: the default for digits running down positive x, switched for
     digits running down negative x (such as a mirrored hand)
     """

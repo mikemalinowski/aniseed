@@ -27,10 +27,18 @@ Added to the IkfkSpringLimb structure:
             ... foot (rotation from the FootResult)
                 IkToe (rotation from the pivot's Toe control)
         MultiChainTwisters (upper leg to foot, if twist joints are given)
+
+The ik target control (IkFoot) is matched to the guide curve unless an ik
+target transform is given, and its shape is an outline of the guide curve
+where it sits in world space (an even gap outside it, 15% bigger). The ShowDetailedControls attribute on the root control
+(proxied to every ik and fk control) shows the shapes of the multi chain
+twist key and cv controls, which are hidden by default.
 """
+import math
 import typing
 
 from maya import cmds
+from maya.api import OpenMaya as om
 
 import mref
 import aniseed_utilities as au
@@ -59,7 +67,11 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
         location: The location token (config.left, config.middle etc)
         parent: Optional node to parent the root control under
         ik_target_transform: Optional node to match the ik target control
-            to. If not given, it is matched to the foot joint.
+            to. If not given, it is matched to the guide curve.
+        pivot_control_transform: Optional node to match the pivot control's
+            org to (position and rotation)
+        invert_pivot_z: Passed to the foot pivot as invert_z, inverting the
+            pivot control's z rotation
         shape_scale: Optional scale for the control shapes. If not given it
             is derived from the length of the chain.
         soft_ik: If True, soft ik (with stretch) is applied to the ik chain,
@@ -78,6 +90,10 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
     """
 
     IK_TARGET_LABEL = "IkFoot"
+
+    # -- The attribute on the root control which shows the multi chain
+    # -- twist key and cv control shapes
+    SHOW_DETAILED_CONTROLS = "ShowDetailedControls"
 
     def __init__(
             self,
@@ -98,11 +114,13 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
             rotation_multiplier: float = 2.0,
             rotation_limit: float = 45.0,
             debug: bool = False,
+            pivot_control_transform: str = None,
+            invert_pivot_z: bool = False,
     ):
         super().__init__(
             start_joint=upper_joint,
             end_joint=foot_joint,
-            ik_target_transform=ik_target_transform,
+            ik_target_transform=ik_target_transform or guide_curve,
             config=config,
             prefix=prefix,
             location=location,
@@ -119,6 +137,8 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
         self.rotation_multiplier = rotation_multiplier
         self.rotation_limit = rotation_limit
         self.debug = debug
+        self.pivot_control_transform = pivot_control_transform
+        self.invert_pivot_z = invert_pivot_z
 
         # -- Populated by build
         self.foot_pivot: dynamic_pivot.DynamicFootPivot = None
@@ -149,22 +169,34 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
         ]:
             mref.get(control.ctl).add_proxy("ikfk", ikfk)
 
+        self._create_detailed_visibility()
+
         cmds.select(clear=True)
         return self
+
+    def _create_root(self):
+        """
+        Creates the root control, with a sphere shape
+        """
+        super()._create_root()
+        _set_shape(self.root_control, "core_sphere", 8)
 
     def _create_fk(self):
         """
         Creates the fk chain and controls, then the FkToe control under the
-        fk foot control
+        fk foot control. Every fk control has a rounded square shape.
         """
         super()._create_fk()
+
+        for control in self.fk_controls:
+            _set_shape(control, "core_rounded_square", 14, rotate=[0, 0, 90])
 
         self.fk_toe_control = self._create_control(
             "FkToe",
             parent=self.fk_controls[-1].ctl,
-            shape="core_paddle",
+            shape="core_rounded_square",
             match_to=self.toe_joint,
-            shape_scale=self.shape_scale,
+            shape_scale=14,
             rotate_shape=[0, 0, 90],
         )
 
@@ -187,7 +219,15 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
             parent=self.ik_target_control.ctl,
             rotation_multiplier=self.rotation_multiplier,
             rotation_limit=self.rotation_limit,
+            invert_z=self.invert_pivot_z,
         ).build()
+
+        dynamic_pivot.set_rotator_shape(self.foot_pivot.control)
+        if self.pivot_control_transform:
+            cmds.matchTransform(self.foot_pivot.control.org, self.pivot_control_transform, position=True, rotation=True)
+
+        _set_world_shape_offset(self.guide_curve, self.ik_target_control.ctl, growth=0.15)
+        _set_shape(self.foot_pivot.heel_control, "core_saddle", 6)
 
         handle = mref.get(self.ik_handle)
         handle_transform = mref.get(self.ik_handle_transform)
@@ -259,3 +299,100 @@ class FlexiLeg(ikfk_spring_limb.IkfkSpringLimb):
             shape_scale=self.shape_scale,
             root_twist_node=self.root_control.ctl,
         ).build()
+
+        for control in self.twisters.key_controls:
+            _set_shape(control, "core_paddle", 24)
+
+        for controls in self.twisters.cv_controls:
+            for control in controls:
+                _set_shape(control, "core_lollipop", 24)
+
+    def _create_detailed_visibility(self):
+        """
+        Adds the ShowDetailedControls attribute to the root control (off by
+        default), which shows the shapes of the multi chain twist key and cv
+        controls, and proxies it to every ik and fk control. Only the shapes
+        are hidden, so the cv controls under a key control are unaffected
+        by its visibility.
+        """
+        show = mref.get(self.root_control.ctl).add_attribute(
+            self.SHOW_DETAILED_CONTROLS,
+            value=False,
+            attribute_type="bool",
+            keyable=False,
+            defaultValue=False,
+        )
+        show.set(channelBox=True)
+
+        if self.twisters:
+            detailed = self.twisters.key_controls + [
+                control
+                for controls in self.twisters.cv_controls
+                for control in controls
+            ]
+            for control in detailed:
+                for shape in cmds.listRelatives(control.ctl, shapes=True, type="nurbsCurve", fullPath=True) or []:
+                    show.connect(f"{shape}.visibility")
+
+        for control in self.fk_controls + [
+            self.fk_toe_control,
+            self.ik_target_control,
+            self.pole_vector_control,
+            self.foot_pivot.control,
+            self.foot_pivot.heel_control,
+            self.foot_pivot.toe_control,
+        ]:
+            mref.get(control.ctl).add_proxy(
+                self.SHOW_DETAILED_CONTROLS,
+                f"{self.root_control.ctl}.{self.SHOW_DETAILED_CONTROLS}",
+            )
+
+
+def _set_shape(control: au.rig.control.Control, shape: str, scale: float, rotate: typing.List[float] = None):
+    """
+    Replaces the control's shape, scaled and optionally rotated, as
+    au.rig.control.create applies one
+    """
+    au.scene.shapes.load_shape(control.ctl, shape)
+    au.scene.shapes.scale(control.ctl, scale_by=scale)
+    if rotate:
+        au.scene.shapes.rotate(control.ctl, *rotate)
+
+
+def _set_world_shape(source: str, target: str):
+    """
+    Gives the target the curve shapes of the source, keeping them where they
+    sit in world space
+    """
+    to_target = (
+        om.MMatrix(cmds.xform(source, query=True, matrix=True, worldSpace=True)) *
+        om.MMatrix(cmds.xform(target, query=True, matrix=True, worldSpace=True)).inverse()
+    )
+
+    data = au.scene.shapes.shape_to_dict(source)
+    for curve in data["curves"]:
+        curve["cvs"] = [list(om.MPoint(cv) * to_target)[:3] for cv in curve["cvs"]]
+
+    au.scene.shapes.load_shape(target, data)
+
+
+def _set_world_shape_offset(source: str, target: str, growth: float):
+    """
+    Gives the target an outline of the source curve, an even gap outside it,
+    keeping it where it sits in world space. The gap is sized so a circle
+    would grow by the given fraction (0.15 is 15% bigger), which is the
+    perimeter times growth over 2 pi.
+    """
+    length = cmds.arclen(source)
+    distance = length * growth / (2 * math.pi)
+
+    # -- Which side a positive distance offsets to depends on the curve's
+    # -- direction, so if it came out shorter it went inwards and is redone
+    outline = cmds.offsetCurve(source, distance=distance, useGivenNormal=True, normal=(0, 1, 0), constructionHistory=False)
+    if cmds.arclen(outline[0]) < length:
+        cmds.delete(outline)
+        outline = cmds.offsetCurve(source, distance=-distance, useGivenNormal=True, normal=(0, 1, 0), constructionHistory=False)
+
+    # -- The offset curves are created in world space under identity transforms
+    _set_world_shape(outline[0], target)
+    cmds.delete(outline)

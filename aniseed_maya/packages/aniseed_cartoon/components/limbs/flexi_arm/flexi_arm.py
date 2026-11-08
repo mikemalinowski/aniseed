@@ -92,8 +92,8 @@ _DIGIT_JOINTS = collections.OrderedDict([
 # -- The inputs which hold lists of joints, in the order they are mirrored
 _JOINT_LISTS = [name for name, *_ in _TWISTS] + ["Blend Rotator Joints", "Finger Twist Joints"]
 
-# -- The guide inputs, which may both be given the same node
-_GUIDES = ["Pivot Guide Curve", "IK Target Guide"]
+# -- The guide inputs, which may be given the same node
+_GUIDES = ["Pivot Guide Curve", "IK Target Guide", "Pivot Control Transform"]
 
 # -- The outputs the Transform Mixer's poses are proxied onto
 _PROXY_HOSTS = ["Root", "IK Target", "FK Hand"]
@@ -149,7 +149,8 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     either side of it. Finger twist joints (parented under any digit joint
     but the tip) are driven by multi chain twists running from the digit's
     first joint to its tip, for bendy and squashy fingers. Their controls are
-    shown by the bendyVisibility attribute on the digit's first control.
+    shown by the ShowDetailedFingerControls attribute on the digit's first
+    control, which every other control of the digit carries as a proxy.
 
     A Transform Mixer is added beneath the component when it enters the
     stack, driving the offsets of the finger controls, with no poses. Add
@@ -252,6 +253,13 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             group="Optional Nodes",
         )
 
+        self.declare_input(
+            name="Pivot Control Transform",
+            description="Optional transform to match the Pivot control's org to (position and rotation)",
+            validate=False,
+            group="Optional Nodes",
+        )
+
         self.declare_option(
             name="Descriptive Prefix",
             description=(
@@ -334,6 +342,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         self.declare_option(name="Blend Rotators Per Knuckle", value=1, pre_expose=True)
         self.declare_option(name="Finger Twist Count", value=3, pre_expose=True)
         self.declare_option(name="Create Pose Mixer", value=True, pre_expose=True)
+        self.declare_option(name="Apply Space Switches", value=True, pre_expose=True)
 
         for output_name in [
             "Root",
@@ -364,17 +373,18 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         """
         Hooks the Parent input to the parent component's default output,
         creates the joints and pivot guide if the Create Joints option is
-        set, and adds the Transform Mixer if the Create Pose Mixer option is
-        set.
+        set, adds the Transform Mixer if the Create Pose Mixer option is set,
+        and adds the space switches if the Apply Space Switches option is set.
         """
         create_joints = self.option("Create Joints")
         create_pose_mixer = self.option("Create Pose Mixer")
+        apply_space_switches = self.option("Apply Space Switches")
         counts = [
             self.option(name)
             for name in ["Upper Twist Count", "Lower Twist Count", "Blend Rotators Per Knuckle", "Finger Twist Count"]
         ]
 
-        for option in [create_joints, create_pose_mixer] + counts:
+        for option in [create_joints, create_pose_mixer, apply_space_switches] + counts:
             option.set_hidden(True)
 
         self.input("Parent").hook_to_parent()
@@ -391,6 +401,52 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         if create_pose_mixer.get():
             self.user_func_add_pose_mixer()
+
+        if apply_space_switches.get():
+            self._create_space_switches()
+
+    def _create_space_switches(self):
+        """
+        Adds space switch components beneath this one for the IK Target
+        control (Parent and World, defaulting to World) and the Pole Vector
+        control (Parent, Hand and World, defaulting to Hand). Parent is the
+        Root control, Hand the IK Target control and World the Global
+        Control Root's main control. Skipped with a logged message if there
+        is no "Core : Global Control Root" component in the stack.
+        """
+        global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
+        if not global_srt_component:
+            log.info(f"{self.label()}: No Global Control Root found, so no space switches are added")
+            return
+
+        world = global_srt_component.output("Main Control").address()
+        root = self.output("Root").address()
+        ik_target = self.output("IK Target").address()
+
+        space_switch = self.rig.component_library.request("Augment : Space Switch")
+
+        space_switch.add_to(
+            component=self,
+            label=f"{self.label()} IK Space Switch",
+            driven=ik_target,
+            default_space="World",
+            spaces=[
+                ("Parent", root),
+                ("World", world),
+            ],
+        )
+
+        space_switch.add_to(
+            component=self,
+            label=f"{self.label()} Pole Vector Space Switch",
+            driven=self.output("Pole Vector").address(),
+            default_space="Hand",
+            spaces=[
+                ("Parent", root),
+                ("Hand", ik_target),
+                ("World", world),
+            ],
+        )
 
     def option_widget(self, option_name: str):
         """
@@ -729,7 +785,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         exists (and is used once), that each blend rotator joint is parented
         under a controlled digit joint with another after it and each finger
         twist joint under a digit joint other than the tip, and that the ik
-        target guide exists if it is given.
+        target guide and pivot control transform exist if they are given.
         """
         for input_name in _JOINTS:
             joint = self.input(input_name).get()
@@ -792,10 +848,11 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         # -- A guide connected to another component's output may only be
         # -- created as that component builds, so only a given guide is checked
-        ik_target_guide = self.input("IK Target Guide")
-        if ik_target_guide.get() and not ik_target_guide.is_address() and not mref.objExists(ik_target_guide.get()):
-            log.warning(f"{self.label()}: The IK Target Guide ({ik_target_guide.get()}) does not exist")
-            return False
+        for input_name in ["IK Target Guide", "Pivot Control Transform"]:
+            optional_guide = self.input(input_name)
+            if optional_guide.get() and not optional_guide.is_address() and not mref.objExists(optional_guide.get()):
+                log.warning(f"{self.label()}: The {input_name} ({optional_guide.get()}) does not exist")
+                return False
 
         # -- The joints a blend rotator joint may be parented under (every
         # -- controlled digit joint with another after it) and those a finger
@@ -864,6 +921,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             finger_twist_joints=self.input("Finger Twist Joints").get() or [],
             finger_cvs_per_segment=self.option("Finger CVs Per Segment").get(),
             debug=self.option("Debug").get(),
+            pivot_control_transform=self.input("Pivot Control Transform").get() or None,
         ).build()
 
         for output_name, node in [
@@ -1014,8 +1072,9 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def _guides(self) -> typing.List[str]:
         """
-        Returns the pivot guide curve and the IK Target Guide (when given),
-        listing a node used by both only once
+        Returns the pivot guide curve, then the IK Target Guide and Pivot
+        Control Transform (when given), listing a node used by more than one
+        only once
         """
         guides = []
         for input_name in _GUIDES:
@@ -1042,11 +1101,12 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         search and replaced names), otherwise copies the original's into the
         mirrored hierarchy for this component to drive. Either way no joints
         are created on entering the stack, as this component already has them,
-        and no Transform Mixer is added, as the original's is mirrored with
-        this component.
+        and no Transform Mixer or space switches are added, as the original's
+        are mirrored with this component.
         """
         self.option("Create Joints").set(False)
         self.option("Create Pose Mixer").set(False)
+        self.option("Apply Space Switches").set(False)
 
         original_items = mirrored_from.mirror_mixin_items_to_mirror()
         if not original_items:
@@ -1071,7 +1131,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             self.input(input_name).set(copies[:count])
             copies = copies[count:]
 
-        # -- A guide used by both inputs was only copied once
+        # -- A guide used by more than one input was only copied once
         guide_copies = dict(zip(mirrored_from._guides(), copies))
         for input_name in _GUIDES:
             guide = mirrored_from.input(input_name).get()
@@ -1080,8 +1140,9 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Restores the Create Joints and Create Pose Mixer options so this
-        component's data matches the original, and mirrors the pivot guide
+        Restores the Create Joints, Create Pose Mixer and Apply Space Switches
+        options so this component's data matches the original, and mirrors
+        the pivot guide
         curve. The mirror pass mirrors the curve's transform as it would a
         joint, which turns its y to the other side of the curve (the pivot
         lifts the side its y points to) and turns its shape around. So its
@@ -1089,7 +1150,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         around (see _mirror_guide_matrix), and its cvs to the reflection of
         the original's (in world space, across the YZ plane).
         """
-        for option_name in ["Create Joints", "Create Pose Mixer"]:
+        for option_name in ["Create Joints", "Create Pose Mixer", "Apply Space Switches"]:
             self.option(option_name).set(mirrored_from.option(option_name).get(resolved=False))
 
         original = mirrored_from.input("Pivot Guide Curve").get()

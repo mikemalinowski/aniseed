@@ -49,6 +49,29 @@ if typing.TYPE_CHECKING:
     import aniseed
 
 
+def set_rotator_shape(control: au.rig.control.Control):
+    """
+    Replaces the control's shape with a circle and two rotators, the first
+    rotated 90 on x and the second 90 on x then 90 on y, all scaled by 3.
+    Used by the flexi limbs for their pivot controls.
+    """
+    au.scene.shapes.load_shape(control.ctl, "core_circle")
+
+    # -- The shape data is cached, so the rotated cvs go into new curve data
+    # -- rather than changing it
+    rotator = au.scene.shapes.shape_data_from_file("core_rotator")
+
+    for rotation in [(90, 0, 0), (90, 90, 0)]:
+        euler = om.MEulerRotation(*[math.radians(value) for value in rotation])
+        curves = [
+            dict(curve, cvs=[list(om.MVector(cv).rotateBy(euler)) for cv in curve["cvs"]])
+            for curve in rotator["curves"]
+        ]
+        au.scene.shapes.load_shape(control.ctl, dict(rotator, curves=curves), clear=False)
+
+    au.scene.shapes.scale(control.ctl, scale_by=3)
+
+
 class DynamicPivot:
     """
     Builds the dynamic pivot setup around a guide curve.
@@ -71,6 +94,9 @@ class DynamicPivot:
         align_to_guide: If True the setup takes the guide curve's world
             orientation (ignoring its scale) rather than being world
             aligned, so the guide curve's local xz plane is the pivot plane
+        invert_z: If True the control's z rotation is inverted before it
+            drives anything, so rotating it the other way rocks the pivot
+            the same way (such as on a mirrored limb)
 
     Usage:
         setup = DynamicPivot(guide, config, "foot", config.left).build()
@@ -88,6 +114,7 @@ class DynamicPivot:
             rotation_multiplier: float = 2.0,
             rotation_limit: float = 45.0,
             align_to_guide: bool = False,
+            invert_z: bool = False,
     ):
         self.guide_curve = mref.get(guide_curve)
         self.config = config
@@ -97,6 +124,7 @@ class DynamicPivot:
         self.rotation_multiplier = rotation_multiplier
         self.rotation_limit = rotation_limit
         self.align_to_guide = align_to_guide
+        self.invert_z = invert_z
 
         # -- "foot" becomes "Foot" so it reads as part of a camel cased description
         self.prefix = prefix[:1].upper() + prefix[1:]
@@ -205,6 +233,7 @@ class DynamicPivot:
         Duplicates the guide curve into the pivot track and creates the
         normalized curve from it. The track is frozen under the org, so its
         local space is the org's space, which the pivot point is read in.
+        Both curves are hidden.
         """
         track = cmds.duplicate(
             self.guide_curve.full_name(),
@@ -230,6 +259,11 @@ class DynamicPivot:
         normalized = _normalized_circle(self._track_shape())
         normalized = cmds.rename(normalized, self._name(self.config.mechanical, "NormalizedCurve"))
         self.normalized_curve = mref.get(cmds.parent(normalized, self.org, relative=True)[0]).full_name()
+
+        # -- Both curves are mechanical, read only through their outputs, so
+        # -- neither is shown
+        for curve in [self.track_curve, self.normalized_curve]:
+            cmds.setAttr(f"{curve}.visibility", False)
 
     def _track_shape(self) -> str:
         return cmds.listRelatives(
@@ -273,7 +307,11 @@ class DynamicPivot:
 
         multiplier = self._create_node("multiplyDivide", "RotationMultiplier")
         ctl.attr("rotate").connect(multiplier.attr("input1"))
-        multiplier.attr("input2").set(*[self.rotation_multiplier] * 3)
+        multiplier.attr("input2").set(
+            self.rotation_multiplier,
+            self.rotation_multiplier,
+            -self.rotation_multiplier if self.invert_z else self.rotation_multiplier,
+        )
 
         self.rotate_x = multiplier.attr("outputX")
         self.rotate_y = multiplier.attr("outputY")
@@ -398,6 +436,7 @@ class DynamicFootPivot(DynamicPivot):
             parent: str = None,
             rotation_multiplier: float = 2.0,
             rotation_limit: float = 45.0,
+            invert_z: bool = False,
     ):
         super().__init__(
             guide_curve,
@@ -408,6 +447,7 @@ class DynamicFootPivot(DynamicPivot):
             parent=parent,
             rotation_multiplier=rotation_multiplier,
             rotation_limit=rotation_limit,
+            invert_z=invert_z,
         )
         self.foot = foot
         self.toe = toe

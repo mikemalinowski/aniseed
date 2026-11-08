@@ -36,7 +36,7 @@ class SplineSpine(aniseed.RigComponent, au.mixins.MirrorMixin):
     )
 
     # -- The default size of the controls
-    control_scale = 10
+    control_scale = 30
 
     def __init__(self, *args, **kwargs):
         """
@@ -371,6 +371,7 @@ class SplineSpine(aniseed.RigComponent, au.mixins.MirrorMixin):
                 parent=fk_control.full_name(),
                 shape="core_circle",
                 shape_scale=self.control_scale,
+                rotate_shape=[0, 0, 90],
                 config=self.config,
                 match_to=fk_control.full_name(),
             )
@@ -507,6 +508,7 @@ class SplineSpine(aniseed.RigComponent, au.mixins.MirrorMixin):
                 parent=next_parent,
                 shape=self.option("Shape").get(),
                 shape_scale=self.control_scale,
+                rotate_shape=[0, 0, 90],
                 config=self.config,
                 match_to=trace_joint.full_name(),
             )

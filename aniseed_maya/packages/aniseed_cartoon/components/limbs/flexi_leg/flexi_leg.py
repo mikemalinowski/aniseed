@@ -13,6 +13,7 @@ import aniseed
 import functools
 import aniseed_utilities as au
 from maya import cmds
+from maya.api import OpenMaya as om
 from aniseed_cartoon.rigging import flexi_leg
 from aniseed_cartoon.rigging import multi_chain_twists
 
@@ -29,8 +30,8 @@ _TWISTS = [
     ("Lower Twist Joints", "Lower", "Mid Leg Joint", "Foot Joint"),
 ]
 
-# -- The guide inputs, which may both be given the same node
-_GUIDES = ["Pivot Guide Curve", "IK Target Guide"]
+# -- The guide inputs, which may be given the same node
+_GUIDES = ["Pivot Guide Curve", "IK Target Guide", "Pivot Control Transform"]
 
 
 class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
@@ -108,7 +109,14 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         self.declare_input(
             name="IK Target Guide",
-            description="Optional transform to place the IK Target control at. If not given, it matches the Foot Joint.",
+            description="Optional transform to place the IK Target control at. If not given, it matches the Pivot Guide Curve.",
+            validate=False,
+            group="Optional Nodes",
+        )
+
+        self.declare_input(
+            name="Pivot Control Transform",
+            description="Optional transform to match the Pivot control's org to (position and rotation)",
             validate=False,
             group="Optional Nodes",
         )
@@ -151,6 +159,13 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         )
 
         self.declare_option(
+            name="Invert Pivot Z",
+            description="If True, the Pivot control's z rotation is inverted. Mirroring sets it to the opposite of the original's.",
+            value=False,
+            group="Behaviour",
+        )
+
+        self.declare_option(
             name="CVs Per Segment",
             description="How many cvs each twist curve (upper and lower leg) has, including the cvs at the leg joints",
             value=4,
@@ -171,10 +186,12 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             group="Behaviour",
         )
 
-        # -- Only used to create the joints when entering the stack
+        # -- Only used to create the joints and space switches when entering
+        # -- the stack
         self.declare_option(name="Create Joints", value=True, pre_expose=True)
         self.declare_option(name="Upper Twist Count", value=2, pre_expose=True)
         self.declare_option(name="Lower Twist Count", value=2, pre_expose=True)
+        self.declare_option(name="Apply Space Switches", value=True, pre_expose=True)
 
         for output_name in [
             "Root",
@@ -200,14 +217,16 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def on_enter_stack(self):
         """
-        Hooks the Parent input to the parent component's default output, and
-        creates the joints if the Create Joints option is set.
+        Hooks the Parent input to the parent component's default output,
+        creates the joints if the Create Joints option is set, and adds the
+        space switches if the Apply Space Switches option is set.
         """
         create_joints = self.option("Create Joints")
         upper_twist_count = self.option("Upper Twist Count")
         lower_twist_count = self.option("Lower Twist Count")
+        apply_space_switches = self.option("Apply Space Switches")
 
-        for option in [create_joints, upper_twist_count, lower_twist_count]:
+        for option in [create_joints, upper_twist_count, lower_twist_count, apply_space_switches]:
             option.set_hidden(True)
 
         self.input("Parent").hook_to_parent()
@@ -218,6 +237,52 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                 upper_twist_count=upper_twist_count.get(),
                 lower_twist_count=lower_twist_count.get(),
             )
+
+        if apply_space_switches.get():
+            self._create_space_switches()
+
+    def _create_space_switches(self):
+        """
+        Adds space switch components beneath this one for the IK Target
+        control (Parent and World, defaulting to World) and the Pole Vector
+        control (Parent, Foot and World, defaulting to Foot). Parent is the
+        Root control, Foot the IK Target control and World the Global
+        Control Root's main control. Skipped with a logged message if there
+        is no "Core : Global Control Root" component in the stack.
+        """
+        global_srt_component = self.stack.get_component_by_type("Core : Global Control Root")
+        if not global_srt_component:
+            log.info(f"{self.label()}: No Global Control Root found, so no space switches are added")
+            return
+
+        world = global_srt_component.output("Main Control").address()
+        root = self.output("Root").address()
+        ik_target = self.output("IK Target").address()
+
+        space_switch = self.rig.component_library.request("Augment : Space Switch")
+
+        space_switch.add_to(
+            component=self,
+            label=f"{self.label()} IK Space Switch",
+            driven=ik_target,
+            default_space="World",
+            spaces=[
+                ("Parent", root),
+                ("World", world),
+            ],
+        )
+
+        space_switch.add_to(
+            component=self,
+            label=f"{self.label()} Pole Vector Space Switch",
+            driven=self.output("Pole Vector").address(),
+            default_space="Foot",
+            spaces=[
+                ("Parent", root),
+                ("Foot", ik_target),
+                ("World", world),
+            ],
+        )
 
     def option_widget(self, option_name: str):
         """
@@ -354,16 +419,28 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             log.warning(f"{self.label()}: The Pivot Guide Curve ({guide}) is not a nurbs curve")
             return False
 
+        # -- The IK Target control is matched to the guide, so it would take
+        # -- on any scale the guide has (including scale from its parents)
+        guide_matrix = om.MMatrix(cmds.xform(guide, query=True, matrix=True, worldSpace=True))
+        guide_scale = om.MTransformationMatrix(guide_matrix).scale(om.MSpace.kWorld)
+        if any(abs(value - 1.0) > 1e-4 for value in guide_scale):
+            log.warning(
+                f"{self.label()}: The Pivot Guide Curve ({guide}) has a world scale of "
+                f"{[round(value, 4) for value in guide_scale]}. It must be 1 (freeze its scale)."
+            )
+            return False
+
         if self.option("CVs Per Segment").get() < 2:
             log.warning(f"{self.label()}: CVs Per Segment must be at least 2")
             return False
 
         # -- A guide connected to another component's output may only be
         # -- created as that component builds, so only a given guide is checked
-        ik_target_guide = self.input("IK Target Guide")
-        if ik_target_guide.get() and not ik_target_guide.is_address() and not mref.objExists(ik_target_guide.get()):
-            log.warning(f"{self.label()}: The IK Target Guide ({ik_target_guide.get()}) does not exist")
-            return False
+        for input_name in ["IK Target Guide", "Pivot Control Transform"]:
+            optional_guide = self.input(input_name)
+            if optional_guide.get() and not optional_guide.is_address() and not mref.objExists(optional_guide.get()):
+                log.warning(f"{self.label()}: The {input_name} ({optional_guide.get()}) does not exist")
+                return False
 
         # -- The leg joints are driven by the limb, and each twist joint by the
         # -- twists, so no joint may be used twice
@@ -408,6 +485,8 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             rotation_multiplier=self.option("Rotation Multiplier").get(),
             rotation_limit=self.option("Rotation Limit").get(),
             debug=self.option("Debug").get(),
+            pivot_control_transform=self.input("Pivot Control Transform").get() or None,
+            invert_pivot_z=self.option("Invert Pivot Z").get(),
         ).build()
 
         for output_name, node in [
@@ -485,8 +564,9 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def _guides(self) -> typing.List[str]:
         """
-        Returns the pivot guide curve and the IK Target Guide (when given),
-        listing a node used by both only once
+        Returns the pivot guide curve, then the IK Target Guide and Pivot
+        Control Transform (when given), listing a node used by more than one
+        only once
         """
         guides = []
         for input_name in _GUIDES:
@@ -512,9 +592,12 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         Uses the other side's joints and guides if they already exist (the
         search and replaced names), otherwise copies the original's into the
         mirrored hierarchy for this component to drive. Either way no joints
-        are created on entering the stack, as this component already has them.
+        are created on entering the stack, as this component already has them,
+        and no space switches are added, as the original's are mirrored with
+        this component.
         """
         self.option("Create Joints").set(False)
+        self.option("Apply Space Switches").set(False)
 
         original_items = mirrored_from.mirror_mixin_items_to_mirror()
         if not original_items:
@@ -533,7 +616,7 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             self.input(input_name).set(copies[:count])
             copies = copies[count:]
 
-        # -- A guide used by both inputs was only copied once
+        # -- A guide used by more than one input was only copied once
         guide_copies = dict(zip(mirrored_from._guides(), copies))
         for input_name in _GUIDES:
             guide = mirrored_from.input(input_name).get()
@@ -542,13 +625,17 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
-        Restores the Create Joints option so this component's data matches
-        the original, and reflects the pivot guide curve's cvs. The mirror
-        pass mirrors the curve's transform as it would a joint, which turns
-        the curve's shape around, so its cvs are set to the reflection of the
-        original's (in world space, across the YZ plane).
+        Restores the Create Joints and Apply Space Switches options so this
+        component's data matches the original, sets Invert Pivot Z to the
+        opposite of the original's,
+        and reflects the pivot guide curve's cvs. The mirror pass mirrors the
+        curve's transform as it would a joint, which turns the curve's shape
+        around, so its cvs are set to the reflection of the original's (in
+        world space, across the YZ plane).
         """
-        self.option("Create Joints").set(mirrored_from.option("Create Joints").get(resolved=False))
+        for option_name in ["Create Joints", "Apply Space Switches"]:
+            self.option(option_name).set(mirrored_from.option(option_name).get(resolved=False))
+        self.option("Invert Pivot Z").set(not mirrored_from.option("Invert Pivot Z").get())
 
         original = mirrored_from.input("Pivot Guide Curve").get()
         mirrored = self.input("Pivot Guide Curve").get()
