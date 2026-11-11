@@ -1,6 +1,6 @@
 """
 Provides the "Limb : Flexi Arm" component, an ik/fk spring limb arm whose ik
-is driven by a dynamic pivot on the hand, with optional soft ik and multi
+is driven by a pivot control on the hand, with optional soft ik and multi
 chain twists, fk fingers (with metacarpals, except on the thumb), optional
 blend rotators at the knuckles and optional multi chain twists along each
 digit for bendy, squashy fingers (see aniseed_cartoon.rigging.flexi_arm). A
@@ -15,7 +15,6 @@ import aniseed
 import functools
 import aniseed_utilities as au
 from maya import cmds
-from maya.api import OpenMaya as om
 from aniseed_cartoon.rigging import flexi_arm
 from aniseed_cartoon.rigging import multi_chain_twists
 
@@ -93,7 +92,7 @@ _DIGIT_JOINTS = collections.OrderedDict([
 _JOINT_LISTS = [name for name, *_ in _TWISTS] + ["Blend Rotator Joints", "Finger Twist Joints"]
 
 # -- The guide inputs, which may be given the same node
-_GUIDES = ["Pivot Guide Curve", "IK Target Guide", "Pivot Control Transform"]
+_GUIDES = ["IK Target Guide", "Pivot Control Transform"]
 
 # -- The outputs the Transform Mixer's poses are proxied onto
 _PROXY_HOSTS = ["Root", "IK Target", "FK Hand"]
@@ -130,10 +129,10 @@ def _default_joint_count(digit: str) -> int:
 class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
     Builds an ik/fk arm on an upper arm, mid arm and hand joint, with fk
-    fingers. The ik is a spring ik whose handle follows a dynamic pivot under
-    the IK Target control, so the Pivot control rocks the hand over the
-    Pivot Guide Curve (which lies around the knuckles). In fk the FK controls
-    drive the arm and hand.
+    fingers. The ik is a spring ik whose handle sits under the Pivot control,
+    which is under the IK Target control at the Pivot Control Transform (or
+    the IK Target if not given), so the Pivot control turns the hand about
+    that point. In fk the FK controls drive the arm and hand.
 
     The ikfk attribute is on the Root control (0 is ik, 1 is fk), and every
     other control carries it as a proxy. Soft ik attributes are on the IK
@@ -206,13 +205,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             )
 
         self.declare_input(
-            name="Pivot Guide Curve",
-            description="The curve the hand pivot slides along, lying in its own xz plane (the plane of the palm) around the knuckles",
-            validate=True,
-            group="Required Nodes",
-        )
-
-        self.declare_input(
             name="Upper Twist Joints",
             description="Joints between the upper and mid arm joints, driven by the multi chain twists",
             validate=False,
@@ -255,7 +247,10 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         self.declare_input(
             name="Pivot Control Transform",
-            description="Optional transform to match the Pivot control's org to (position and rotation)",
+            description=(
+                "Optional transform to place the Pivot control at (position and rotation), which the ik handle "
+                "sits under. If not given, it matches the IK Target control."
+            ),
             validate=False,
             group="Optional Nodes",
         )
@@ -287,20 +282,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         )
 
         self.declare_option(
-            name="Rotation Multiplier",
-            description="Multiplies the Pivot control's rotation before it drives anything",
-            value=2.0,
-            group="Behaviour",
-        )
-
-        self.declare_option(
-            name="Rotation Limit",
-            description="The Pivot control's x and z rotation is limited to plus and minus this value",
-            value=45.0,
-            group="Behaviour",
-        )
-
-        self.declare_option(
             name="CVs Per Segment",
             description="How many cvs each twist curve (upper and lower arm) has, including the cvs at the arm joints",
             value=4,
@@ -325,13 +306,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             name="Finger Shape Scale",
             description="The scale of the finger control shapes. If zero, it is worked out from the length of the digits.",
             value=0.0,
-            group="Behaviour",
-        )
-
-        self.declare_option(
-            name="Debug",
-            description="If True, a sphere is created which sits at the hand pivot point",
-            value=False,
             group="Behaviour",
         )
 
@@ -372,7 +346,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     def on_enter_stack(self):
         """
         Hooks the Parent input to the parent component's default output,
-        creates the joints and pivot guide if the Create Joints option is
+        creates the joints if the Create Joints option is
         set, adds the Transform Mixer if the Create Pose Mixer option is set,
         and adds the space switches if the Apply Space Switches option is set.
         """
@@ -467,8 +441,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     def user_functions(self) -> typing.Dict[str, callable]:
         """
         Offers to create the twist joints for whichever twist input is empty,
-        the blend rotator joints, finger twist joints and pivot guide if they
-        are not set, and the Transform Mixer if there is not one. Mirroring is
+        the blend rotator joints and finger twist joints if they are not set, and the Transform Mixer if there is not one. Mirroring is
         offered by au.mixins.MirrorMixin.
         """
         menu = super().user_functions()
@@ -482,9 +455,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
             if self._digits() and not self.input("Finger Twist Joints").get():
                 menu["Create Finger Twist Joints"] = functools.partial(self.user_func_create_finger_twist_joints)
-
-            if not self.input("Pivot Guide Curve").get():
-                menu["Create Pivot Guide"] = functools.partial(self.user_func_create_pivot_guide)
 
         if not self._pose_mixers():
             menu["Add Pose Mixer"] = functools.partial(self.user_func_add_pose_mixer)
@@ -614,70 +584,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         self.input("Finger Twist Joints").set(created)
 
-    def user_func_create_pivot_guide(self):
-        """
-        Creates a flat circle around the knuckles (the joints after the
-        finger metacarpals), lying in the hand joint's xz plane, and sets the
-        Pivot Guide Curve input to it. Reshape it to the area the hand should
-        rock over.
-        """
-        if not self._joints_exist():
-            log.warning(f"{self.label()}: Set the arm joints before creating the pivot guide")
-            return
-
-        hand = self.input("Hand Joint").get()
-        knuckles = [
-            om.MVector(cmds.xform(joints[1], query=True, translation=True, worldSpace=True))
-            for digit, joints in self._digits().items()
-            if digit != _THUMB and len(joints) > 1
-        ]
-
-        if knuckles:
-            centre = om.MVector()
-            for knuckle in knuckles:
-                centre += knuckle
-            centre /= len(knuckles)
-            radius = max((knuckle - centre).length() for knuckle in knuckles) * 1.5
-        else:
-            centre = om.MVector(cmds.xform(hand, query=True, translation=True, worldSpace=True))
-            radius = 0.0
-
-        # -- Fall back to a size relative to the arm if the knuckles are too close
-        if radius < 1e-3:
-            radius = au.scene.joints.chain_length(
-                self.input("Upper Arm Joint").get(),
-                hand,
-                log_result=False,
-            ) / 20.0
-
-        guide = cmds.circle(
-            name=self.config.generate_name(
-                classification="gde",
-                description=f"{self.option('Descriptive Prefix').get()}HandPivot",
-                location=self.option("Location").get(),
-            ),
-            normal=[0, 1, 0],
-            radius=radius,
-            constructionHistory=False,
-        )[0]
-
-        # -- Oriented as the hand joint (without its scale), at the knuckles.
-        # -- The pivot lifts the side of the curve its local y points to, so
-        # -- for a hand mirrored by behaviour (running down negative x, with
-        # -- its y on the palm side) the x and y are turned around, giving the
-        # -- same frame as mirroring a guide (see _mirror_guide_matrix).
-        hand_matrix = om.MMatrix(cmds.xform(hand, query=True, matrix=True, worldSpace=True))
-        rotation = list(om.MTransformationMatrix(hand_matrix).rotation(asQuaternion=True).asMatrix())
-
-        facing = au.scene.joints.get_chain_facing_direction(self.input("Mid Arm Joint").get(), hand)
-        if facing == facing.NegativeX:
-            rotation = [-value for value in rotation[:8]] + rotation[8:]
-
-        cmds.xform(guide, matrix=rotation[:12] + [centre.x, centre.y, centre.z, 1], worldSpace=True)
-
-        self.input("Pivot Guide Curve").set(mref.get(guide).name())
-        cmds.select(clear=True)
-
     def user_func_add_pose_mixer(self):
         """
         Adds a Transform Mixer beneath this component, with no poses, whose
@@ -719,7 +625,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         example's, see _ARM_JOINTS) in world space, then places it under, and
         at the position of, the parent. The digits (each ending in a tip
         joint) are created under the hand, then the twist joints, blend
-        rotator joints, finger twist joints and pivot guide.
+        rotator joints and finger twist joints.
         """
         prefix = self.option("Descriptive Prefix").get()
         location = self.option("Location").get()
@@ -761,8 +667,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         if finger_twist_count:
             self.user_func_create_finger_twist_joints(count=finger_twist_count)
 
-        self.user_func_create_pivot_guide()
-
     def _create_digit(self, digit: str, joint_data: collections.OrderedDict, hand: str):
         """
         Creates a digit's chain under the hand (named for the digit, without
@@ -780,8 +684,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         """
         Checks the upper arm to hand joints form a chain of exactly three
         joints, that each given digit is below the hand (with at least one
-        phalanx and a tip, and a finger also a metacarpal), that the guide is
-        a nurbs curve, that every twist, blend rotator and finger twist joint
+        phalanx and a tip, and a finger also a metacarpal), that every twist, blend rotator and finger twist joint
         exists (and is used once), that each blend rotator joint is parented
         under a controlled digit joint with another after it and each finger
         twist joint under a digit joint other than the tip, and that the ik
@@ -831,15 +734,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
                     log.warning(f"{self.label()}: {joint} is in the {digit.lower()} but is already one of the {used[joint]}")
                     return False
                 used[joint] = f"{digit.lower()} joints"
-
-        guide = self.input("Pivot Guide Curve").get()
-        if not guide or not mref.objExists(guide):
-            log.warning(f"{self.label()}: The Pivot Guide Curve must be set to an existing curve")
-            return False
-
-        if not mref.listRelatives(guide, shapes=True, type="nurbsCurve", noIntermediate=True):
-            log.warning(f"{self.label()}: The Pivot Guide Curve ({guide}) is not a nurbs curve")
-            return False
 
         for option_name in ["CVs Per Segment", "Finger CVs Per Segment"]:
             if self.option(option_name).get() < 2:
@@ -902,7 +796,6 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         arm = flexi_arm.FlexiArm(
             upper_joint=self.input("Upper Arm Joint").get(),
             hand_joint=self.input("Hand Joint").get(),
-            guide_curve=self.input("Pivot Guide Curve").get(),
             config=self.config,
             prefix=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
@@ -913,14 +806,11 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             upper_twist_joints=self.input("Upper Twist Joints").get() or [],
             lower_twist_joints=self.input("Lower Twist Joints").get() or [],
             cvs_per_segment=self.option("CVs Per Segment").get(),
-            rotation_multiplier=self.option("Rotation Multiplier").get(),
-            rotation_limit=self.option("Rotation Limit").get(),
             digits=digits,
             blend_rotator_joints=self.input("Blend Rotator Joints").get() or [],
             finger_shape_scale=self.option("Finger Shape Scale").get() or None,
             finger_twist_joints=self.input("Finger Twist Joints").get() or [],
             finger_cvs_per_segment=self.option("Finger CVs Per Segment").get(),
-            debug=self.option("Debug").get(),
             pivot_control_transform=self.input("Pivot Control Transform").get() or None,
         ).build()
 
@@ -928,7 +818,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             ("Root", arm.root_control.ctl),
             ("IK Target", arm.ik_target_control.ctl),
             ("Pole Vector", arm.pole_vector_control.ctl),
-            ("Pivot", arm.pivot.control.ctl),
+            ("Pivot", arm.pivot_control.ctl),
             ("FK Upper", arm.fk_controls[0].ctl),
             ("FK Mid", arm.fk_controls[1].ctl),
             ("FK Hand", arm.fk_controls[2].ctl),
@@ -1072,9 +962,8 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def _guides(self) -> typing.List[str]:
         """
-        Returns the pivot guide curve, then the IK Target Guide and Pivot
-        Control Transform (when given), listing a node used by more than one
-        only once
+        Returns the IK Target Guide and Pivot Control Transform (when given),
+        listing a node used by both only once
         """
         guides = []
         for input_name in _GUIDES:
@@ -1141,55 +1030,7 @@ class FlexiArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     def mirror_mixin_post_mirror(self, mirrored_from) -> None:
         """
         Restores the Create Joints, Create Pose Mixer and Apply Space Switches
-        options so this component's data matches the original, and mirrors
-        the pivot guide
-        curve. The mirror pass mirrors the curve's transform as it would a
-        joint, which turns its y to the other side of the curve (the pivot
-        lifts the side its y points to) and turns its shape around. So its
-        transform is set to the original's reflection with only its z turned
-        around (see _mirror_guide_matrix), and its cvs to the reflection of
-        the original's (in world space, across the YZ plane).
+        options so this component's data matches the original.
         """
         for option_name in ["Create Joints", "Create Pose Mixer", "Apply Space Switches"]:
             self.option(option_name).set(mirrored_from.option(option_name).get(resolved=False))
-
-        original = mirrored_from.input("Pivot Guide Curve").get()
-        mirrored = self.input("Pivot Guide Curve").get()
-
-        if not original or not mirrored or original == mirrored:
-            return
-
-        if not mref.objExists(original) or not mref.objExists(mirrored):
-            return
-
-        positions = cmds.xform(f"{original}.cv[*]", query=True, translation=True, worldSpace=True)
-        if len(positions) != len(cmds.xform(f"{mirrored}.cv[*]", query=True, translation=True, worldSpace=True)):
-            log.warning(f"{self.label()}: {mirrored} does not have the same cvs as {original}, so it is not reflected")
-            return
-
-        cmds.xform(
-            mirrored,
-            matrix=_mirror_guide_matrix(cmds.xform(original, query=True, matrix=True, worldSpace=True)),
-            worldSpace=True,
-        )
-
-        for idx in range(len(positions) // 3):
-            x, y, z = positions[idx * 3:idx * 3 + 3]
-            cmds.xform(f"{mirrored}.cv[{idx}]", translation=[-x, y, z], worldSpace=True)
-
-
-def _mirror_guide_matrix(matrix: typing.List[float]) -> typing.List[float]:
-    """
-    Returns the given world matrix reflected across the YZ plane, with its z
-    axis then turned around so it is not flipped (inside out). Its x and y
-    are the reflections of the given x and y, so the side of the guide its y
-    points to (which the pivot lifts) mirrors the original's. As the z is
-    turned around, the Pivot control's z rotation mirrors the original's with
-    the same value, while its x rotation mirrors it with the opposite value.
-    """
-    rows = [list(matrix[idx:idx + 4]) for idx in range(0, 16, 4)]
-    for row in rows:
-        row[0] = -row[0]
-
-    rows[2] = [-value for value in rows[2][:3]] + [rows[2][3]]
-    return [value for row in rows for value in row]

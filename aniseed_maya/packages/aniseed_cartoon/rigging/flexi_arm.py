@@ -1,13 +1,13 @@
 """
 Provides the FlexiArm class, an IkfkSpringLimb from the upper arm to the hand
-with a DynamicPivot on the hand driving its ik, optional soft ik and multi
+with a pivot control on the hand driving its ik, optional soft ik and multi
 chain twists, and fk fingers with optional blend rotators at the knuckles.
 
-The dynamic pivot sits under the ik target control, aligned to its guide
-curve (which lies around the knuckles, in the plane of the palm), and the
-spring ik handle follows the pivot's result, so rocking the pivot rolls the
-hand over its knuckles and carries the arm with it. The ik chain's hand joint
-takes its rotation from the pivot's result and its position from the ik
+The pivot control sits under the ik target control (at the pivot control
+transform if one is given, otherwise at the ik target), and the spring ik
+handle sits under the pivot control, so rotating the pivot control turns the
+hand about that point and carries the arm with it. The ik chain's hand joint
+takes its rotation from the pivot control and its position from the ik
 chain, so the given hand joint follows the spring limb's blend chain like the
 upper and mid joints, whether in ik or fk.
 
@@ -31,11 +31,10 @@ Added to the IkfkSpringLimb structure:
 
     SpringRoot
         IkHand (the ik target control)
-            PivotSetup (the DynamicPivot, aligned to the guide curve)
-                ... DynamicPivotResult
-                    SpringIkHandleTransform (moved here from the ik target)
+            IkHandPivot (the pivot control)
+                SpringIkHandleTransform (moved here from the ik target)
         SpringIkChain
-            ... hand (rotation from the DynamicPivotResult)
+            ... hand (rotation from the pivot control)
         SpringBlendChain
             ... hand
                 Fingers (org)
@@ -80,8 +79,6 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         upper_joint: The upper arm joint
         hand_joint: The hand joint, which must be below the upper joint with
             the mid arm joint between them
-        guide_curve: The curve the hand pivot slides along. Its local xz
-            plane is the pivot plane (see dynamic_pivot.DynamicPivot).
         config: The aniseed rig configuration used to name every node
         prefix: Placed in front of the description of every node name
         location: The location token (config.left, config.middle etc)
@@ -97,8 +94,6 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         lower_twist_joints: Optional twist joints between the mid and hand
             joints, driven by the multi chain twists
         cvs_per_segment: How many cvs each multi chain twist curve has
-        rotation_multiplier: Passed to the hand pivot
-        rotation_limit: Passed to the hand pivot
         digits: Ordered mapping of digit label (such as "Index") to its
             joints, root first, all below the hand joint. The last joint is
             the tip, an end joint which is not given a control.
@@ -115,12 +110,12 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             joint other than the tip, driven by a MultiChainTwisters setup
             along the digit it is in
         finger_cvs_per_segment: How many cvs each finger twist curve has
-        debug: Passed to the hand pivot
-        pivot_control_transform: Optional node to match the pivot control's
-            org to (position and rotation)
+        pivot_control_transform: Optional node to match the pivot control
+            to (position and rotation). If not given, it is matched to the
+            ik target control.
 
     Usage:
-        arm = FlexiArm(shoulder, wrist, palm_guide, config, "arm", config.left, digits=digits).build()
+        arm = FlexiArm(shoulder, wrist, config, "arm", config.left, digits=digits).build()
     """
 
     IK_TARGET_LABEL = "IkHand"
@@ -142,7 +137,6 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             self,
             upper_joint: str,
             hand_joint: str,
-            guide_curve: str,
             config: "aniseed.RigConfiguration",
             prefix: str = "",
             location: str = "",
@@ -153,14 +147,11 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             upper_twist_joints: typing.List[str] = None,
             lower_twist_joints: typing.List[str] = None,
             cvs_per_segment: int = 4,
-            rotation_multiplier: float = 2.0,
-            rotation_limit: float = 45.0,
             digits: typing.Dict[str, typing.List[str]] = None,
             blend_rotator_joints: typing.List[str] = None,
             finger_shape_scale: float = None,
             finger_twist_joints: typing.List[str] = None,
             finger_cvs_per_segment: int = 3,
-            debug: bool = False,
             pivot_control_transform: str = None,
     ):
         super().__init__(
@@ -174,14 +165,10 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
             shape_scale=shape_scale,
         )
 
-        self.guide_curve = guide_curve
         self.soft_ik = soft_ik
         self.upper_twist_joints = upper_twist_joints or []
         self.lower_twist_joints = lower_twist_joints or []
         self.cvs_per_segment = cvs_per_segment
-        self.rotation_multiplier = rotation_multiplier
-        self.rotation_limit = rotation_limit
-        self.debug = debug
         self.pivot_control_transform = pivot_control_transform
 
         self.digits =collections.OrderedDict(
@@ -195,7 +182,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         self.finger_shape_scale = finger_shape_scale or self._digit_length() / 10.0
 
         # -- Populated by build
-        self.pivot: dynamic_pivot.DynamicPivot = None
+        self.pivot_control: au.rig.control.Control = None
         self.soft_ik_connection: soft_ik_connection.SoftIkConnection = None
         self.twisters: multi_chain_twists.MultiChainTwisters = None
         self.finger_org: str = ""
@@ -206,7 +193,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
 
     def build(self) -> "FlexiArm":
         """
-        Creates the spring limb with the hand pivot, then the twists, which
+        Creates the spring limb with the pivot control, then the twists, which
         need the blend chain to be driving the joints, then the fingers and
         blend rotators under the blend chain's hand.
 
@@ -221,7 +208,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         self._create_finger_twisters()
 
         ikfk = f"{self.root_control.ctl}.ikfk"
-        controls = [self.pivot.control] + [control for chain in self.fingers.values() for control in chain]
+        controls = [self.pivot_control] +[control for chain in self.fingers.values() for control in chain]
         for control in controls + self.blend_rotators:
             mref.get(control.ctl).add_proxy("ikfk", ikfk)
 
@@ -244,32 +231,24 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
 
     def _create_ik(self):
         """
-        Creates the ik chain, then the hand pivot under the ik target control
-        and moves the ik handle under the pivot's result. Soft ik is applied
-        if enabled.
+        Creates the ik chain, then the pivot control under the ik target
+        control (at the pivot control transform, or the ik target if not
+        given) and moves the ik handle under it. Soft ik is applied if
+        enabled.
         """
         super()._create_ik()
 
-        self.pivot = dynamic_pivot.DynamicPivot(
-            guide_curve=self.guide_curve,
-            config=self.config,
-            prefix=self.prefix,
-            location=self.location,
-            debug=self.debug,
+        self.pivot_control = self._create_control(
+            "IkHandPivot",
             parent=self.ik_target_control.ctl,
-            rotation_multiplier=self.rotation_multiplier,
-            rotation_limit=self.rotation_limit,
-            align_to_guide=True,
-        ).build()
-
-        dynamic_pivot.set_rotator_shape(self.pivot.control)
-
-        if self.pivot_control_transform:
-            cmds.matchTransform(self.pivot.control.org, self.pivot_control_transform, position=True, rotation=True)
+            shape="core_circle",
+            match_to=self.pivot_control_transform or self.ik_target_control.ctl,
+        )
+        dynamic_pivot.set_rotator_shape(self.pivot_control)
 
         handle = mref.get(self.ik_handle)
         handle_transform = mref.get(self.ik_handle_transform)
-        handle_transform.set_parent(self.pivot.anchor)
+        handle_transform.set_parent(self.pivot_control.ctl)
         self.ik_handle_transform = handle_transform.full_name()
         self.ik_handle = handle.full_name()
 
@@ -287,9 +266,9 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
 
     def _constrain_ik_end(self):
         """
-        Makes the ik chain's hand take its rotation from the pivot's result
+        Makes the ik chain's hand take its rotation from the pivot control
         """
-        mref.orientConstraint(self.pivot.anchor, self.ik_chain[-1], maintainOffset=True)
+        mref.orientConstraint(self.pivot_control.ctl,self.ik_chain[-1], maintainOffset=True)
 
     def _create_twisters(self):
         """
@@ -352,7 +331,7 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         for control in self.fk_controls + [
             self.ik_target_control,
             self.pole_vector_control,
-            self.pivot.control,
+            self.pivot_control,
         ]:
             mref.get(control.ctl).add_proxy(
                 self.SHOW_DETAILED_CONTROLS,

@@ -1,9 +1,10 @@
 """
 Provides the "Limb : Shoulder" component, an fk shoulder (a single bone,
-driven only by its control) with an automated scapula, which counters the
-shoulder's rotation and pulls out (back, off the ribcage) as the shoulder is
-rotated down and/or back, each dialled by an attribute on the Shoulder
-control (see aniseed_cartoon.rigging.shoulder).
+driven only by its control) with an automated scapula, which stays upright
+with the spine, follows the shoulder turning forward and is progressively
+held as the shoulder turns back, dialled by the
+scapulaAuto attribute on the Shoulder control (see
+aniseed_cartoon.rigging.shoulder).
 """
 import os
 import mref
@@ -27,17 +28,16 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     Builds a Shoulder control which drives the shoulder joint (with nothing
     automated), and a Scapula control which drives the scapula joint.
 
-    The scapula follows the shoulder's position, and its rotation counters
-    the shoulder's by the scapulaCounter attribute on the Shoulder control (1
-    keeps the orientation of the shoulder's parent, 0 rotates with the
-    shoulder). As the shoulder is rotated down and/or back the scapula pulls
-    out (back, off the ribcage), by the Pull Out Amount option, dialled by
-    the pullOut attribute. Both attributes are proxied onto the Scapula
-    control.
+    The scapula only turns about the vertical axis, so it stays upright with
+    the spine as the shoulder rotates up and down, and rises and falls
+    without swinging out sideways. Turning forward it follows the shoulder
+    like a child. Turning back it follows the shoulder progressively less,
+    easing to a stop at the Retract Limit toward the spine, and turns out
+    about its own -y by up to the Retract Turn. The scapulaAuto attribute on the Shoulder control (proxied
+    onto the Scapula control) blends from a plain child of the shoulder (0)
+    to this (1).
 
-    The end of the shoulder bone is the shoulder joint's first child joint
-    other than the scapula joint (such as the upper arm). The Shoulder output
-    is the default, for an arm to hang from.
+    The Shoulder output is the default, for an arm to hang from.
     """
 
     identifier = "Limb : Shoulder"
@@ -63,14 +63,14 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         self.declare_input(
             name="Shoulder Joint",
-            description="The shoulder joint. The end of its bone is its first child joint other than the scapula.",
+            description="The shoulder joint",
             validate=True,
             group="Required Joints",
         )
 
         self.declare_input(
             name="Scapula Joint",
-            description="The scapula joint, which counters the shoulder's rotation",
+            description="The scapula joint, which is automated by the shoulder's rotation",
             validate=True,
             group="Required Joints",
         )
@@ -92,18 +92,31 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         )
 
         self.declare_option(
-            name="Pull Out Amount",
+            name="Retract Limit",
             description=(
-                "How far the scapula pulls out (back, off the ribcage) for each unit the end of the "
-                "shoulder moves down and back (at pullOut 1)"
+                "The furthest the scapula moves toward the spine as the shoulder turns back. It eases "
+                "into this. If zero, it is 0.25 of the distance between the shoulder and scapula."
             ),
-            value=0.15,
+            value=0.0,
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Retract Turn",
+            description=(
+                "How far (in degrees) the scapula turns out about its own -y as the shoulder turns back, "
+                "building steadily to this at the Retract Limit"
+            ),
+            value=20.0,
             group="Behaviour",
         )
 
         self.declare_option(
             name="Shape Scale",
-            description="The scale of the control shapes. If zero, it is worked out from the length of the shoulder.",
+            description=(
+                "The scale of the control shapes. If zero, it is worked out from the distance between "
+                "the shoulder and scapula."
+            ),
             value=0.0,
             group="Behaviour",
         )
@@ -146,8 +159,8 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     def _create_joints(self, parent):
         """
-        Creates a shoulder joint with an end joint along its x, and a scapula
-        joint under it (set back and down from the shoulder), under the given
+        Creates a shoulder joint, and a scapula joint under it (set back and
+        down from the shoulder), under the given
         parent (or the world if there is none) at the parent's position, and
         sets the joint inputs to them
         """
@@ -156,7 +169,6 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
         joint_data = collections.OrderedDict()
         joint_data[""] = {}
-        joint_data["End"] = {"tx": 15}
 
         joints = au.scene.joints.chain_from_ordered_dict(
             joint_data=joint_data,
@@ -188,8 +200,7 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     def is_valid(self) -> bool:
         """
         Checks the shoulder and scapula joints exist and are different
-        joints, and that the shoulder has an end joint (a child joint other
-        than the scapula)
+        joints
         """
         for input_name in _JOINTS:
             joint = self.input(input_name).get()
@@ -202,13 +213,6 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
             log.warning(f"{self.label()}: The Shoulder Joint and Scapula Joint must be different joints")
             return False
 
-        if not self._shoulder_end():
-            log.warning(
-                f"{self.label()}: The Shoulder Joint ({shoulder_joint}) needs a child joint other than the "
-                f"scapula, at the end of the shoulder bone"
-            )
-            return False
-
         return True
 
     def run(self) -> bool:
@@ -217,13 +221,13 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         """
         built = shoulder.Shoulder(
             shoulder_joint=self.input("Shoulder Joint").get(),
-            shoulder_end=self._shoulder_end(),
             scapula_joint=self.input("Scapula Joint").get(),
             config=self.config,
             prefix=self.option("Descriptive Prefix").get(),
             location=self.option("Location").get(),
             parent=self.input("Parent").get(),
-            pull_out_amount=self.option("Pull Out Amount").get(),
+            retract_limit=self.option("Retract Limit").get() or None,
+            retract_turn=self.option("Retract Turn").get(),
             shape_scale=self.option("Shape Scale").get() or None,
         ).build()
 
@@ -231,55 +235,14 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
         self.output("Scapula").set(built.scapula_control.ctl)
         return True
 
-    def _shoulder_end(self) -> str:
-        """
-        Returns the shoulder joint's first child joint other than the scapula
-        joint, or an empty string if there is none (or either joint is
-        missing)
-        """
-        shoulder_joint = self.input("Shoulder Joint").get()
-        scapula_joint = self.input("Scapula Joint").get()
-
-        if not shoulder_joint or not mref.objExists(shoulder_joint):
-            return ""
-
-        scapula = mref.get(scapula_joint).full_name() if scapula_joint and mref.objExists(scapula_joint) else ""
-        for child in cmds.listRelatives(shoulder_joint, children=True, type="joint", fullPath=True) or []:
-            if child != scapula:
-                return child
-        return ""
-
     def mirror_mixin_items_to_mirror(self) -> list:
         """
-        Returns the shoulder and scapula joints, then the end joint unless
-        another mirrorable component uses it (such as an arm under the
-        shoulder, which mirrors it itself). Empty if either joint is missing.
+        Returns the shoulder and scapula joints. Empty if either is missing.
         """
         joints = [self.input(name).get() for name in _JOINTS]
         if not all(joint and mref.objExists(joint) for joint in joints):
             return []
-
-        end = self._shoulder_end()
-        if end and not self._used_elsewhere(end):
-            joints.append(mref.get(end).name())
-
         return joints
-
-    def _used_elsewhere(self, node: str) -> bool:
-        """
-        Returns True if another mirrorable component in the stack mirrors the
-        given node. Other shoulders are skipped, as they never mirror this
-        shoulder's end (and asking them would ask this one in turn).
-        """
-        full_name = mref.get(node).full_name()
-        for other in self.stack.components():
-            if other is self or not isinstance(other, au.mixins.MirrorMixin) or isinstance(other, ShoulderComponent):
-                continue
-
-            for item in other.mirror_mixin_items_to_mirror() or []:
-                if item and mref.objExists(item) and mref.get(item).full_name() == full_name:
-                    return True
-        return False
 
     def mirror_mixin_parent_item(self) -> str:
         """
