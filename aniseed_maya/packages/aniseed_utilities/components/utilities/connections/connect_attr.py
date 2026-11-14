@@ -3,7 +3,8 @@ Provides the attribute connection components. "Utility : Connect Attribute"
 connects one source attribute into one destination attribute, optionally
 routing it through a reverse node. "Utility : Connect Attribute (Multi)"
 connects one source attribute into the same named attribute on a list of
-nodes. Both expose a Force option to replace existing connections.
+nodes (an entry may be an address, such as a component's list output). Both
+expose a Force option to replace existing connections.
 """
 import mref
 import aniseed
@@ -159,8 +160,21 @@ class ConnectManyAttr(aniseed.RigComponent):
         destination_attribute = self.input("Destination Attribute").get()
         force = self.option("Force").get()
 
-        for destination_node_name in self.input("Destination Nodes").get():
+        for destination_node_name in self._destination_nodes():
             source_attribute.connect(
                 mref.get(destination_node_name).attr(destination_attribute),
                 force=force,
             )
+
+    def _destination_nodes(self) -> list:
+        """
+        Returns the Destination Nodes, with any entry which is an address
+        replaced by the value it resolves to (which may itself be a list of
+        nodes, such as a component's list output)
+        """
+        nodes = []
+        for entry in self.input("Destination Nodes").get() or []:
+            attribute = self.rig.resolve_attribute(entry) if entry else None
+            value = attribute.get() if attribute else entry
+            nodes.extend(value if isinstance(value, (list, tuple)) else [value])
+        return nodes

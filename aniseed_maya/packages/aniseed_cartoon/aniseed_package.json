@@ -1,7 +1,0 @@
-{
-    "version": "1.0.0",
-    "description": "[NOT PRODUCTION READY] [This package is subject to dramatic changes!] Contains components and functionality for building cartoon style components within aniseed",
-    "hosts": ["maya"],
-    "requires": ["aniseed_standard", "aniseed_utilities"],
-    "enabled_by_default": false
-}

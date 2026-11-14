@@ -1,12 +1,17 @@
 """
 Provides visibility components. "Utility : Show/Hide" sets the visibility
-of the given nodes or of their shapes, and "Utility : Type Driven
-Show/Hide" shows or hides every node of the given types found under a set
-of search roots, using drawStyle for joints.
+of the given nodes or of their shapes, "Utility : Drive Shape Visibility"
+adds an attribute which drives the visibility of the shapes of the given
+transforms, and "Utility : Type Driven Show/Hide" shows or hides every node
+of the given types found under a set of search roots, using drawStyle for
+joints.
 """
 import os
 import mref
+import logging
 import aniseed
+
+log = logging.getLogger(__name__)
 
 
 class VisibilityComponent(aniseed.RigComponent):
@@ -70,6 +75,102 @@ class VisibilityComponent(aniseed.RigComponent):
                 node_to_affect.attr("visibility").set(
                     self.option("Visibility").get(),
                 )
+
+
+class DriveShapeVisibility(aniseed.RigComponent):
+    """
+    Adds a visibility attribute to the attribute host which drives the
+    visibility of the shapes of every given transform. Any existing input
+    to those shape visibilities is replaced.
+    """
+
+    identifier = "Utility : Drive Shape Visibility"
+
+    icon = os.path.join(
+        os.path.dirname(__file__),
+        "icon.png",
+    )
+
+    def __init__(self, *args, **kwargs):
+        """
+        Declares the Attribute Host and Transforms inputs and the Attribute
+        Name and Default Value options.
+        """
+        super().__init__(*args, **kwargs)
+
+        self.declare_input(
+            name="Attribute Host",
+            description="The node the visibility attribute is added to",
+            validate=True,
+            group="Required Nodes",
+        )
+
+        self.declare_input(
+            name="Transforms",
+            description="The transforms (or addresses) whose shapes the attribute shows and hides",
+            value=[],
+            validate=True,
+            group="Required Nodes",
+        )
+
+        self.declare_option(
+            name="Attribute Name",
+            description="The name of the visibility attribute added to the attribute host",
+            value="shape_visibility",
+            group="Behaviour",
+        )
+
+        self.declare_option(
+            name="Default Value",
+            description="Whether the shapes are shown by default",
+            value=False,
+            group="Behaviour",
+        )
+
+    def input_widget(self, requirement_name):
+        """
+        Returns an object list for the Transforms input and an object
+        selector for the Attribute Host.
+        """
+        if requirement_name == "Transforms":
+            return aniseed.widgets.ObjectList()
+
+        if requirement_name == "Attribute Host":
+            return aniseed.widgets.ObjectSelector(component=self)
+
+    def run(self):
+        """
+        Adds the attribute (shown in the channel box, not keyable) and
+        connects it to the visibility of every shape of each transform.
+        """
+        host = mref.get(self.input("Attribute Host").get())
+        attribute = host.add_attribute(
+            self.option("Attribute Name").get(),
+            value=self.option("Default Value").get(),
+            attribute_type="bool",
+            keyable=False,
+        )
+        attribute.set(channelBox=True)
+
+        for transform in self.input("Transforms").get() or list():
+            transform = self._resolve(transform)
+
+            if not transform or not mref.objExists(transform):
+                log.warning(f"{self.label()} : {transform!r} does not exist, so its shapes are not driven")
+                continue
+
+            for shape in mref.get(transform).shapes():
+                attribute.connect(shape.attr("visibility"), force=True)
+
+        return True
+
+    def _resolve(self, value):
+        """
+        Returns the value of the attribute the given value addresses, or the
+        value itself if it is not an address.
+        """
+        attribute = self.rig.resolve_attribute(value) if value else None
+        return attribute.get() if attribute else value
 
 
 class ObjectTypeVisibility(aniseed.RigComponent):

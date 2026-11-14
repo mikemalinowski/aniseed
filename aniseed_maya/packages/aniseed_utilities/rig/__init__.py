@@ -1,6 +1,6 @@
 """
 Rig concepts: controls, guides, tagging, pinning, spaces, blend rotators and
-the pose mixer.
+the Matrix Mixer.
 
 Modules in this layer may import from the core and scene layers.
 
@@ -12,9 +12,9 @@ from . import component_outputs
 from . import control
 from . import controls
 from . import guide
+from . import matrix_mixer
+from . import matrix_mixer_editing
 from . import pinning
-from . import pose_mixer
-from . import pose_editing
 from . import space
 from . import tagging
 
@@ -35,9 +35,9 @@ __all__ = [
     "control",
     "controls",
     "guide",
+    "matrix_mixer",
+    "matrix_mixer_editing",
     "pinning",
-    "pose_mixer",
-    "pose_editing",
     "space",
     "tagging",
     "all_controls",

@@ -2,9 +2,9 @@
 Provides the "Limb : Face" component, which generates a face skeleton from
 skeleton.json and builds a bone driven face rig. It reuses the mouth and eyes
 components, creates direct controls for every face bone, drives them through
-a transform mixer of poses (which behave like blendshapes) and adds a high
-level animator control rig. It also defines the FacialTools widget and
-MixerTools helpers used to edit, mirror, save and load the pose data.
+a matrix mixer of poses (which behave like blendshapes, see
+au.rig.matrix_mixer) and adds a high level animator control rig. The poses
+are edited, mirrored, saved and loaded in the Matrix Mixer Pose Editor.
 """
 import os
 import json
@@ -12,12 +12,10 @@ import logging
 import mref
 import copy
 import qtility
-import functools
 import aniseed
 import aniseed_utilities as au
 from aniseed import toolkits
 from aniseed_standard import rigging
-from Qt import QtWidgets
 
 log = logging.getLogger(__name__)
 
@@ -26,15 +24,29 @@ class FaceComponent(aniseed.RigComponent):
     """
     This will automatically create eye and mouth components as well
     as a series of singulars to represent face bones. It will then
-    create a transform mixer and a construct a facial control rig
+    create a matrix mixer and a construct a facial control rig
     to drive it all.
+
+    The mixer drives every direct control through its offsetParentMatrix,
+    with the poses keyed by bone label (such as lip_corner_left). The bones
+    are only needed to create the rig: from then on the poses and the tools
+    deal with the direct controls alone.
     """
 
     identifier = "Limb : Face"
 
     # -- The options naming the mixer node and holding its data, which the
-    # -- Transform Mixer Pose Editor tool stores edited poses into
+    # -- Matrix Mixer Pose Editor tool stores edited poses into
     mixer_options = ("Mixer", "Mixer Data")
+
+    # -- The driven objects are the direct controls made from the skeleton,
+    # -- so the pose editor does not offer to add or remove them
+    mixer_fixed_driven = True
+
+    # -- The mixer node keeps the name the face's previous mixer had, so
+    # -- anything referring to it (such as animation keyed on a custom pose
+    # -- weight) keeps working
+    mixer_node_name = "transformMixer"
 
     # -- When adding the face we construct a skeleton. All the data relating to
     # -- the skeleton and the hierarchy are stored in this json file.
@@ -164,24 +176,16 @@ class FaceComponent(aniseed.RigComponent):
                 group="Joints",
             )
 
-        # -- The mixer (au.rig.pose_mixer.TransformMixer) is a special
-        # -- structure and node setup which allows for poses to be defined through collections
-        # -- of transforms. The deformers are then blended additively to these transforms. This
-        # -- allows for a face rig which feels like a morph target rig but is bone driven.
-        # -- This option specifically stores all the pose data. This is a bit like storing all
-        # -- the morph targets in a blendshape setup.
+        # -- The mixer (au.rig.matrix_mixer.MatrixMixer) blends poses onto the
+        # -- direct controls, which makes for a face rig which feels like a
+        # -- morph target rig but is bone driven. This option stores the poses
+        # -- ({"poses": [{"name": ..., "matrices": {bone label: matrix}}]}),
+        # -- a bit like storing all the morph targets in a blendshape setup.
+        # -- When empty, default_pose_data.json is used.
         self.declare_option(
             name="Mixer Data",
-            value=[],
-            hidden=False,
-        )
-
-        # -- If set, the mixer targets are deleted once their pose data has
-        # -- been applied
-        self.declare_option(
-            name="Optimise",
-            value="",
-            hidden=False,
+            value={},
+            hidden=True,
         )
 
         # -- Store the name of the mixer so that our tools can easily interact
@@ -190,6 +194,14 @@ class FaceComponent(aniseed.RigComponent):
             name="Mixer",
             value="",
             hidden=False,
+        )
+
+        self.declare_option(
+            name="Open Pose Editor",
+            value=None,
+            description=(
+                "Opens the Matrix Mixer Pose Editor on the built face, to edit, mirror, save and load its poses"
+            ),
         )
 
         # -- The control groups represent each high level control for the
@@ -304,8 +316,8 @@ class FaceComponent(aniseed.RigComponent):
         """
         This is where we return any bespoke widgets for the options
         """
-        if option_name == "Mixer Data":
-            return FacialTools(component=self)
+        if option_name == "Open Pose Editor":
+            return aniseed.widgets.ButtonWidget(button_name="Open Pose Editor", func=self.open_pose_editor)
         return None
 
     def run(self):
@@ -500,74 +512,35 @@ class FaceComponent(aniseed.RigComponent):
 
         # ----------------------------------------------------
         # -- The mixer is the functional heart of the whole setup. It is this mixer
-        # -- which allows the transforms to behave like blendshapes. Therefore we
-        # -- start by getting the stored transformation shape data
-        mixer_data = self.option("Mixer Data").get()
-
-        if not mixer_data:
-            mixer_data = copy.deepcopy(self.default_pose_data)
+        # -- which allows the controls to behave like blendshapes. Its data is
+        # -- just the poses: for each, the matrix of every bone it moves.
+        mixer_data = self.option("Mixer Data").get() or copy.deepcopy(self.default_pose_data)
 
         # -- Instance the mixer, but store a reference to the mixer in the component. This
         # -- allows any tools to inspect the component and know which mixer to interact
         # -- with.
-        mixer = au.rig.pose_mixer.TransformMixer(parent=org.name())
+        mixer = au.rig.matrix_mixer.MatrixMixer(parent=org.name())
+        mixer.node.rename(self.mixer_node_name)
         self.option("Mixer").set(mixer.node.name())
 
-        # -- Cycle over all our direct controls and add them as deformers into our
-        # -- mixer
-        for plug_name, control in direct_controls.items():
+        with mixer:
+            # -- Every direct control is driven through its offsetParentMatrix,
+            # -- keyed by its bone label so the poses do not depend on how the
+            # -- controls are named
+            for label, control in direct_controls.items():
+                mixer.add_driven(control, key=label)
 
-            # -- Get the control, and then access the offset node
-            control_instance = au.rig.control.get(control)
-            controller = mref.get(control_instance.ctl)
-            control_offset = mref.get(control_instance.off)
+            # -- The built-in poses come first, in pose_list order. Applying the
+            # -- data adds any custom poses it holds (whose weights have no high
+            # -- level driver, so are left keyable on the mixer node) and sets
+            # -- the matrices.
+            for pose_name in self.pose_list:
+                mixer.add_pose(name=pose_name)
 
-            # -- Add a new deformer (node controlled by the mixer) and ensure its parent
-            # -- is transformed to the location of the control offset
-            mixer_deformer = mixer.add_deformer(plug_name)
-            mixer_deformer.parent().match_to(control_offset)
+            missing = mixer.apply_data(mixer_data)
 
-            # -- Add a link to the controller
-            control_link = mixer_deformer.add_attribute(
-                "control_link",
-                attribute_type="message",
-                value=None,
-            )
-            controller.attr("message").connect(control_link)
-
-            # -- Finally we drive the control offsets local values through the mixers
-            # -- deformer node.
-            for channel in ["translate", "rotate", "scale"]:
-                mixer_deformer.attr(channel).connect(control_offset.attr(channel))
-
-        # -- Now we need to add each pose as defined in this components
-        # -- pose list, followed by any custom poses held in the stored data.
-        # -- Custom poses have no high level driver; their weights are left
-        # -- as keyable attributes on the mixer node.
-        custom_pose_names = [
-            pose["name"]
-            for pose in (mixer_data or dict()).get("poses", list())
-            if pose["name"] not in self.pose_list
-        ]
-        for pose_name in self.pose_list + custom_pose_names:
-            mixer.add_pose(name=pose_name)
-
-        # -- Finally, using the stored data, we set the matrices of each
-        # -- target. This is a little time consuming sadly, as its a LOT
-        # -- of data! When optimising, each target is deleted once its
-        # -- matrix has been applied.
-        optimise = self.option("Optimise").get()
-
-        if mixer_data:
-            for pose in mixer_data["poses"]:
-                for target_data in pose["targets"]:
-                    target = mixer.get_target(pose["name"], target_data["name"])
-
-                    if target:
-                        target.set_matrix(target_data["transform"])
-
-                        if optimise:
-                            target.delete()
+        for label in missing:
+            log.warning(f"{self.label()} : Poses are stored for {label!r}, which has no direct control")
 
         # -- Create the high level control rig which drives everything.
         high_level_control_rig = HighLevelControlRig(
@@ -765,29 +738,37 @@ class FaceComponent(aniseed.RigComponent):
         """
         This will attempt to return the mixer for the component. The mixer is a
         class which points to a node in the scene and exposes an API to interact
-        with the deformers and poses.
+        with the driven controls and poses.
         """
         mixer_name = self.option("Mixer").get()
 
         # -- If the mixer does not exist then we cannot do anything. Providing
         # -- we're not asked to return it silently we should inform the user that
         # -- the mixer is not there.
-        if not mixer_name or not mref.objExists(mixer_name):
+        if not au.rig.matrix_mixer.MatrixMixer.is_mixer(mixer_name):
             if not silent:
                 qtility.request.message(
-                    title="Cannot Snapshot Data",
-                    message="You must build the rig before using the snapshot"
+                    title="No Face Mixer",
+                    message="You must build the rig before editing the face poses",
                 )
             return None
 
         # -- Instance the mixer object and return it
-        return au.rig.pose_mixer.TransformMixer(node=mixer_name)
+        return au.rig.matrix_mixer.MatrixMixer(node=mixer_name)
+
+    def open_pose_editor(self):
+        """
+        Opens the Matrix Mixer Pose Editor on this component's mixer
+        """
+        mixer = self.mixer()
+        if mixer:
+            toolkits.run("Matrix Mixer Pose Editor", options={"Mixer Node": mixer.node.name()})
 
 
 class HighLevelControlRig(rigging.facial.FacialControlRig):
     """
     The high level control rig is a set of controls which ultimately drives
-    the transformation mixer. This makes for a much nicer animator-friendly
+    the pose weights of the matrix mixer. This makes for a much nicer animator-friendly
     interface.
 
     The control settings are read from the component's inputs, every animator
@@ -898,356 +879,3 @@ class HighLevelControlRig(rigging.facial.FacialControlRig):
             for pose in self.component.pose_list
         }
 
-
-class FacialTools(QtWidgets.QWidget):
-    """
-    This is a QWidget which exposes various tools useful for interacting
-    with the face.
-    """
-    # -- We essentially just show a big list of buttons currently (not pretty!). Ideally
-    # -- it would get its own dedicated ui. But for now, whilst its a list we just declare
-    # -- a dictionary of button labels, and function names which should be invoked when
-    # -- that button is clicked.
-    button_mapping = {
-        "Open Pose Editor": "open_pose_editor",
-        "Snapshot Data": "snapshot_data",
-        "Mirror Pose": "mirror_pose",
-        "Show Pose": "show_pose",
-        "Hide Pose": "hide_pose",
-        "Save Data": "save_data",
-        "Load Data": "load_data",
-        "Clear Data": "clear_data",
-        "Snap Pose": "snap_pose",
-        "Reset Pose": "reset_pose",
-        "Select Pose": "select_pose",
-        "Select Active Poses": "select_active_poses",
-        "Select Mixer": "select_mixer",
-    }
-
-    def __init__(self, component, parent=None):
-        """
-        Builds a vertical list of buttons, one per entry in button_mapping,
-        each calling the matching MixerTools method.
-
-        Args:
-            component: The face component the tools operate on
-            parent: Optional parent widget
-        """
-        super().__init__(parent=parent)
-
-        # -- Store a reference to the component
-        self.component = component
-
-        # -- Instance the tools
-        self.mixer_tools = MixerTools(component)
-
-        # -- Build the base layout
-        self.setLayout(QtWidgets.QVBoxLayout())
-
-        # -- Cycle the button dictionary
-        for button_label, function_name in FacialTools.button_mapping.items():
-
-            # -- Create the button and connect the click event to the tool class
-            button = QtWidgets.QPushButton(button_label)
-            self.layout().addWidget(button)
-            button.clicked.connect(
-                functools.partial(
-                    getattr(self.mixer_tools, function_name),
-                )
-            )
-
-
-class MixerTools:
-    """
-    This class is a collection of functionality that makes it easier to interact
-    with the mixer in the context of the face.
-    """
-
-    def __init__(self, component):
-        """
-        Args:
-            component: The face component whose mixer the tools operate on
-        """
-        self.component = component
-
-    def mirror_pose(self):
-        """
-        This needs some work! But essentially it will look for the side in the given
-        pose
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        # -- Construct our direction mapping
-        left_to_right = ["left", "right"]
-        right_to_left = ["right", "left"]
-
-        skip_list = [
-            "eye_lower_lid_left",
-            "eye_lower_lid_right",
-            "eye_upper_lid_left",
-            "eye_upper_lid_right",
-            "eye_pupil_left",
-            "eye_pupil_right",
-            "eye_left",
-            "eye_right",
-        ]
-        for pose in mref.selected():
-
-            # -- Get the name of the pose
-            source_pose_name = pose.pose_name.get()
-
-            # -- Determine the mapping direction
-            if "left" in source_pose_name:
-                direction_mapping = left_to_right
-            else:
-                direction_mapping = right_to_left
-
-            # -- Get our active side, and declare the list where we will populate
-            # -- the source targets to drive the mirror
-            active_side = direction_mapping[0]
-            source_targets = []
-
-            # -- Cycle the deformers and get the targets for this pose and deformer.
-            for deformer in mixer.deformers():
-                deformer_name = deformer.deformer_name.get()
-
-                if deformer_name in skip_list:
-                    continue
-
-                if active_side in deformer_name:
-                    source_target = mixer.get_target(source_pose_name, deformer_name)
-                    source_targets.append(source_target)
-
-            # -- Select the nodes and instigate the mirror
-            mref.select(source_targets)
-            au.scene.mirror.mirror_transforms(
-                transforms=[target.name() for target in source_targets],
-                name_replacement=[direction_mapping[0], direction_mapping[1]],
-                behaviour=True,
-                rotate_flip=True,
-            )
-
-    def set_pose_visibility(self, value):
-        """
-        This will se the visibility of the given pose
-        """
-        # -- If we cannot resolve a mixer then we do nothing
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        # -- Cycle each selected pose
-        for pose in mref.selected():
-
-            # -- Get the visibility attribute for this pose and show it.
-            pose_name = pose.pose_name.get()
-            attribute_name = f"show_{pose_name}_targets"
-            mixer.node.attr(attribute_name).set(value)
-
-    def show_pose(self):
-        """
-        This will show the targets for the given pose.
-        """
-        self.set_pose_visibility(True)
-
-    def hide_pose(self):
-        """
-        This will hide the targets for the given pose.
-        """
-        self.set_pose_visibility(False)
-
-    @staticmethod
-    def pose_targets(mixer, pose_name):
-        """
-        Returns a list of (deformer, target) pairs for the given pose
-        """
-        return [
-            (deformer, mixer.get_target(pose_name, deformer.deformer_name.get()))
-            for deformer in mixer.deformers()
-        ]
-
-    @staticmethod
-    def zero_transform(node):
-        """
-        Resets the translation, rotation and scale of the given node, skipping
-        any channels which cannot be set (such as locked channels).
-        """
-        for axis in ["X", "Y", "Z"]:
-            for channel, value in [("translate", 0), ("rotate", 0), ("scale", 1)]:
-                try:
-                    node.attr(f"{channel}{axis}").set(value)
-                except RuntimeError:
-                    # -- Locked or connected channels are left as they are
-                    pass
-
-    def snap_pose(self):
-        """
-        This will snap the targets of the selected poses to the current
-        (world space) transforms of their controls, and then zero the controls.
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        for pose in mref.selected():
-            pose_targets = self.pose_targets(mixer, pose.pose_name.get())
-
-            # -- Store the world matrix of each deformer's control and
-            # -- then zero that control
-            matrices = dict()
-            for deformer, target in pose_targets:
-                controller = deformer.control_link.inputs()[0].node()
-
-                matrices[target] = controller.get_matrix(space="world")
-                self.zero_transform(controller)
-
-            # -- Setting one target can move others which sit below it, so the
-            # -- matrices are applied once per deformer to let them settle.
-            for _ in range(len(pose_targets)):
-                for target, matrix in matrices.items():
-                    target.set_matrix(matrix, space="world")
-
-    def select_pose(self):
-        """
-        Selects all the targets of the selected poses
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        targets = []
-
-        for pose in mref.selected():
-            targets.extend(
-                target
-                for _, target in self.pose_targets(mixer, pose.pose_name.get())
-            )
-
-        mref.select(targets)
-
-    def snapshot_data(self, silent=False):
-        """
-        Stores the current state of the mixer into the Mixer Data option
-        """
-        mixer = self.component.mixer(silent=silent)
-        if not mixer:
-            return
-
-        self.component.option("Mixer Data").set(mixer.serialise())
-
-        if not silent:
-            qtility.request.message(
-                title="Snapshot Complete",
-                message="The snapshot has been made",
-            )
-
-    def save_data(self, filepath=None):
-        """
-        Saves the current state of the mixer to a json file
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        if not filepath:
-            filepath = qtility.request.filepath(
-                title="Save Data",
-                save=True,
-            )
-            if not filepath:
-                return
-
-        with open(filepath, "w") as f:
-            json.dump(mixer.serialise(), f, indent=4)
-
-        qtility.request.message(
-            title="Save Complete",
-            message="The data has been saved",
-        )
-
-    def load_data(self, filepath=None):
-        """
-        Loads mixer data from a json file into the Mixer Data option
-        """
-        if not filepath:
-            filepath = qtility.request.filepath(
-                title="Load Data",
-                save=False,
-            )
-            if not filepath:
-                return
-
-        with open(filepath, "r") as f:
-            self.component.option("Mixer Data").set(json.load(f))
-
-        qtility.request.message(
-            title="Load Complete",
-            message="The data has been loaded, please rebuild the rig",
-        )
-
-    def clear_data(self):
-        """
-        Clears the stored mixer data
-        """
-        confirmation = qtility.request.confirmation(
-            title="Clear Data",
-            message="Are you sure you want to clear the data?",
-        )
-        if not confirmation:
-            return
-
-        self.component.option("Mixer Data").set([])
-
-    def select_mixer(self):
-        """
-        Selects the mixer node
-        """
-        mixer = self.component.mixer()
-        if mixer:
-            mref.select(mixer.node)
-
-    def open_pose_editor(self):
-        """
-        Opens the Transform Mixer Pose Editor on this component's mixer
-        """
-        mixer = self.component.mixer()
-        if mixer:
-            toolkits.run("Transform Mixer Pose Editor", options={"Mixer Node": mixer.node.name()})
-
-    def select_active_poses(self):
-        """
-        Selects all the poses which are currently active
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        active_poses = []
-        for pose_attribute in mixer.pose_attributes():
-            if pose_attribute.get() > 0.0001:
-                pose_name = pose_attribute.name(include_node=False)
-                active_poses.append(mixer.get_pose(pose_name))
-
-        mref.select(active_poses)
-
-    def reset_pose(self):
-        """
-        Resets all the targets of the selected poses
-        """
-        mixer = self.component.mixer()
-        if not mixer:
-            return
-
-        confirmation = qtility.request.confirmation(
-            title="Reset Pose",
-            message="Are you sure you want to reset the selected poses?",
-        )
-        if not confirmation:
-            return
-
-        identity_matrix = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-        for pose in mref.selected():
-            for _, target in self.pose_targets(mixer, pose.pose_name.get()):
-                target.set_matrix(identity_matrix)

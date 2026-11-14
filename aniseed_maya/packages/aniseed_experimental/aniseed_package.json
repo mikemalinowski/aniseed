@@ -1,0 +1,7 @@
+{
+    "version": "1.0.0",
+    "description": "[NOT PRODUCTION READY] [This package is subject to dramatic changes!] Contains experimental components and functionality within aniseed",
+    "hosts": ["maya"],
+    "requires": ["aniseed_standard", "aniseed_utilities"],
+    "enabled_by_default": false
+}

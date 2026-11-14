@@ -23,7 +23,7 @@ without touching the others.
 |-----------------------------|--------------------------------------------------------------------------------------------------------------|---------------|
 | `aniseed_utilities`         | General utility components, such as Root, Space Switch and Insert Control. Every other package relies on it. | Always on |
 | `aniseed_standard`          | The standard limbs and mechanisms, such as arms, legs, spines and heads.                                     | Yes |
-| `aniseed_cartoon`           | Cartoon style components.                                                                                    | Yes |
+| `aniseed_experimental`      | Experimental components, not production ready and subject to change.                                         | No |
 | `aniseed_rigging_toolkit`   | The Rigging Toolkit window and its tools.                                                                    | Yes |
 | `aniseed_animation_toolkit` | The Animation Toolkit window and its tools.                                                                  | Yes |
 | `aniseed_dev_examples`      | Documented example components, for people learning to write their own.                                       | No |
@@ -195,14 +195,14 @@ If any code in your package imports another package, list that package in
 
 List every package you import directly, even if it is also required by one
 of your other requirements. In the example above, `aniseed_standard` already
-requires `aniseed_utilities`, but `aniseed_cartoon` lists it too because its
+requires `aniseed_utilities`, but `aniseed_experimental` lists it too because its
 components import it.
 
 Requirements are only between packages. They should never form a loop. The
 dependency direction in this folder is:
 
 ```
-aniseed_utilities  <-  aniseed_standard  <-  aniseed_cartoon
+aniseed_utilities  <-  aniseed_standard  <-  aniseed_experimental
         ^
         +---- aniseed_rigging_toolkit, aniseed_animation_toolkit, aniseed_dev_examples
 ```
