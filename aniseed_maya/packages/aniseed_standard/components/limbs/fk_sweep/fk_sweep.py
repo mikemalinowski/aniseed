@@ -4,6 +4,7 @@ creates a standard fk control (optionally with an offset control) for every
 joint which is not already constrained. Controls are parented under the
 driver of the parent joint and named from regex matches on the joint names.
 """
+import os
 import re
 import logging
 import mref
@@ -27,6 +28,7 @@ class FkSweep(aniseed.RigComponent):
     """
 
     identifier = 'Limb : Fk Sweep'
+    icon = os.path.join(os.path.dirname(__file__), "fk_sweep.png")
 
     def __init__(self, *args, **kwargs):
         """

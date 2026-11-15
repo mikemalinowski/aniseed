@@ -30,10 +30,7 @@ class SplineSpine(aniseed.RigComponent, au.mixins.MirrorMixin):
     This is a spline setup with any number of controls and joints.
     """
     identifier = "Limb : Spline Spine"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "spline_spine.png")
 
     # -- The default size of the controls
     control_scale = 30
@@ -1026,10 +1023,7 @@ class QuadSplineSpine(SplineSpine):
     outer controls).
     """
     identifier = "Limb : Spline Spine (Quad)"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "spline_spine_quad.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -1094,10 +1088,7 @@ class TriSplineSpine(SplineSpine):
     a bezier style of manipulation.
     """
     identifier = "Limb : Spline Spine (Tri)"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "spline_spine_tri.png")
 
     def __init__(self, *args, **kwargs):
         """

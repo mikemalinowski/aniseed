@@ -24,7 +24,7 @@ class StoreControlShapes(aniseed.RigComponent):
     now has functionality to snapshot and hold the shape data it applies.
     """
     identifier = "Utility : Store Control Shapes"
-    icon = os.path.join(os.path.dirname(__file__), "store_shapes.png")
+    icon = os.path.join(os.path.dirname(__file__), "store_control_shapes.png")
 
     deprecated = True
 
@@ -79,7 +79,7 @@ class ApplyControlShapes(aniseed.RigComponent):
     """
 
     identifier = "Utility : Apply Control Shapes"
-    icon = os.path.join(os.path.dirname(__file__), "apply_shapes.png")
+    icon = os.path.join(os.path.dirname(__file__), "apply_control_shapes.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -299,6 +299,7 @@ class DeleteShapes(aniseed.RigComponent):
     """
 
     identifier = "Utility : Delete Shapes"
+    icon = os.path.join(os.path.dirname(__file__), "delete_shapes.png")
 
     def __init__(self, *args, **kwargs):
         """

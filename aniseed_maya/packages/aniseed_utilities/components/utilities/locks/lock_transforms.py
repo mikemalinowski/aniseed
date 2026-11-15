@@ -3,6 +3,7 @@ Provides the "Utility : Lock Transform Attributes" component, which locks
 the translate, rotate and scale channels of the given nodes, optionally
 hiding them from the channel box.
 """
+import os
 import mref
 import aniseed
 
@@ -14,6 +15,7 @@ class LockTransformComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Lock Transform Attributes"
+    icon = os.path.join(os.path.dirname(__file__), "lock_transform_attributes.png")
 
     def __init__(self, *args, **kwargs):
         """

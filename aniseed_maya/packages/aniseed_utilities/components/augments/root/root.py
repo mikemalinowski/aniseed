@@ -26,10 +26,7 @@ class GlobalControlRoot(aniseed.RigComponent):
     """
 
     identifier = "Core : Global Control Root"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "root.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "global_control_root.png")
 
     def __init__(self, *args, **kwargs):
         """

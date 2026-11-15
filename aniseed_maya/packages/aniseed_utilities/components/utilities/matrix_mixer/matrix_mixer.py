@@ -10,6 +10,7 @@ Other components can attach a mixer beneath themselves with add_to, listing
 their own outputs (addresses) as the driven objects, as those nodes only
 exist once they have built.
 """
+import os
 import logging
 
 import mref
@@ -35,6 +36,7 @@ class MatrixMixer(aniseed.RigComponent):
     """
 
     identifier = "Utility : Matrix Mixer"
+    icon = os.path.join(os.path.dirname(__file__), "matrix_mixer.png")
 
     # -- The options naming the mixer node and holding its data, which the
     # -- Matrix Mixer Pose Editor tool stores edited poses into

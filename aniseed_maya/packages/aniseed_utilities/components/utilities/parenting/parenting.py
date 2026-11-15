@@ -5,6 +5,7 @@ Reparent (Multi)" parents a list of nodes under a single new parent, or
 under the world if no new parent is given. Parenting failures are logged and
 skipped.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -44,6 +45,7 @@ class MakeHierarchical(aniseed.RigComponent):
     """
 
     identifier = "Utility : Parent Hierarchy"
+    icon = os.path.join(os.path.dirname(__file__), "parent_hierarchy.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -84,6 +86,7 @@ class SetParentMulti(aniseed.RigComponent):
     """
 
     identifier = "Utility : Reparent (Multi)"
+    icon = os.path.join(os.path.dirname(__file__), "reparent_multi.png")
 
     def __init__(self, *args, **kwargs):
         """

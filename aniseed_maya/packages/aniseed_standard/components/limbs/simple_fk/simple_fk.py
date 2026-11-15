@@ -16,10 +16,7 @@ log = logging.getLogger(__name__)
 class SimpleFkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     identifier = "Limb : Simple Fk"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "simple_fk.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "simple_fk.png")
 
     def __init__(self, *args, **kwargs):
         """

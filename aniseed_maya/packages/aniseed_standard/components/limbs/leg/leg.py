@@ -34,10 +34,7 @@ class LegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
     identifier = "Limb : Leg"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "leg.png")
 
     _LABELS = [
         "Upper",

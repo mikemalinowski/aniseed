@@ -8,6 +8,7 @@ controls' attributes onto the attribute host.
 The "Limb : Modular Face" component adds one of these beneath itself, but it
 can drive any mixer which has poses of the expected names (see POSE_NAMES).
 """
+import os
 import logging
 
 import mref
@@ -100,6 +101,7 @@ class FaceHighLevelControls(aniseed.RigComponent):
     """
 
     identifier = "Face : High Level Controls"
+    icon = os.path.join(os.path.dirname(__file__), "high_level_controls.png")
 
     def __init__(self, *args, **kwargs):
         """

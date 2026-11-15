@@ -4,6 +4,7 @@ if needed. "Utility : Add Children Of Type To Layer" adds every descendant
 of a root node whose type is in a given list, and "Utility : Add Controls
 To Layer" adds every controller whose name contains a given string.
 """
+import os
 import mref
 import aniseed
 
@@ -29,6 +30,7 @@ class AddChildrenOfTypeToLayer(aniseed.RigComponent):
     """
 
     identifier = "Utility : Add Children Of Type To Layer"
+    icon = os.path.join(os.path.dirname(__file__), "add_children_of_type_to_layer.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -96,6 +98,7 @@ class AddControlsToLayer(aniseed.RigComponent):
     """
 
     identifier = "Utility : Add Controls To Layer"
+    icon = os.path.join(os.path.dirname(__file__), "add_controls_to_layer.png")
 
     def __init__(self, *args, **kwargs):
         """

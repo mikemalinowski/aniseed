@@ -16,10 +16,7 @@ class MouthComponent(aniseed.RigComponent):
 
     identifier = "Limb : Mouth"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "mouth.png")
 
     def __init__(self, *args, **kwargs):
         """

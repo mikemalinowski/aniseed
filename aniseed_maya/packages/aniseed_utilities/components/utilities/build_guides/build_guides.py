@@ -4,6 +4,7 @@ components. These call user_func_create_guide or user_func_remove_guide on
 every component in the stack which defines it, giving a single entry point
 for building or tearing down all guide rigs.
 """
+import os
 import aniseed
 
 
@@ -16,6 +17,7 @@ class BuildGuidesComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Build All Guides"
+    icon = os.path.join(os.path.dirname(__file__), "build_all_guides.png")
 
     def run(self):
         """
@@ -36,6 +38,7 @@ class RemoveGuidesComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Remove All Guides"
+    icon = os.path.join(os.path.dirname(__file__), "remove_all_guides.png")
 
     def run(self):
         """

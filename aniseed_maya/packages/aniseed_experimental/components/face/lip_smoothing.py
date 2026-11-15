@@ -6,6 +6,7 @@ blended between a proxy following the jaw and one following the lips, with
 smooth_lips_left and smooth_lips_right attributes on the jaw control (proxied
 onto the attribute host) dialling it in and out.
 """
+import os
 import logging
 
 import mref
@@ -24,6 +25,7 @@ class FaceLipSmoothing(aniseed.RigComponent):
     """
 
     identifier = "Face : Lip Smoothing"
+    icon = os.path.join(os.path.dirname(__file__), "lip_smoothing.png")
 
     def __init__(self, *args, **kwargs):
         """

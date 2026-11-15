@@ -4,6 +4,7 @@ whose pivot slides along a guide curve to the point its rotation tips towards
 (see aniseed_experimental.rigging.dynamic_pivot), and the "Augment : Dynamic Foot
 Pivot" component, which extends it with a heel roll and toe to drive a foot.
 """
+import os
 import mref
 import logging
 import aniseed
@@ -26,6 +27,7 @@ class DynamicPivotComponent(aniseed.RigComponent):
     """
 
     identifier = "Augment : Dynamic Pivot"
+    icon = os.path.join(os.path.dirname(__file__), "dynamic_pivot.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -213,6 +215,7 @@ class DynamicFootPivotComponent(DynamicPivotComponent):
     """
 
     identifier = "Augment : Dynamic Foot Pivot"
+    icon = os.path.join(os.path.dirname(__file__), "dynamic_foot_pivot.png")
 
     def __init__(self, *args, **kwargs):
         """

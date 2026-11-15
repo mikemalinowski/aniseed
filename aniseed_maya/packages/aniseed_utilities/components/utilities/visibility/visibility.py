@@ -21,10 +21,7 @@ class VisibilityComponent(aniseed.RigComponent):
 
     identifier = "Utility : Show/Hide"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "show_hide.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -86,10 +83,7 @@ class DriveShapeVisibility(aniseed.RigComponent):
 
     identifier = "Utility : Drive Shape Visibility"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "drive_shape_visibility.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -181,10 +175,7 @@ class ObjectTypeVisibility(aniseed.RigComponent):
     """
 
     identifier = "Utility : Type Driven Show/Hide"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "type_driven_show_hide.png")
 
     def __init__(self, *args, **kwargs):
         """

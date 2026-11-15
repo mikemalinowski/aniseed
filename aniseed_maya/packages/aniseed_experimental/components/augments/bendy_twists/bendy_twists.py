@@ -27,10 +27,7 @@ class BendyTwistsComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Augment : Bendy Twists"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "bendy_twists.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "bendy_twists.png")
 
     # -- How many bendy controls the setup creates (one per curve point)
     BENDY_CONTROL_COUNT = len(bendy_twists.BendyTwisters.POINT_PERCENTAGES)

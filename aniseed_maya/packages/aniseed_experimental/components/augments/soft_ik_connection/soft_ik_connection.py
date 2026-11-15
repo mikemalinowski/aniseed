@@ -3,6 +3,7 @@ Provides the "Augment : Soft IK Connection" component, which applies soft ik
 (with stretch) to an existing two bone ik chain (see
 aniseed_experimental.rigging.soft_ik_connection).
 """
+import os
 import aniseed
 from aniseed_experimental.rigging import soft_ik_connection
 
@@ -20,6 +21,7 @@ class SoftIkConnectionComponent(aniseed.RigComponent):
     """
 
     identifier = "Augment : Soft IK Connection"
+    icon = os.path.join(os.path.dirname(__file__), "soft_ik_connection.png")
 
     def __init__(self, *args, **kwargs):
         """

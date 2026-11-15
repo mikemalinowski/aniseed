@@ -33,10 +33,7 @@ class SimpleIKFKComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Mechanics : Two Bone IKFK"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "arm.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "two_bone_ikfk.png")
 
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):

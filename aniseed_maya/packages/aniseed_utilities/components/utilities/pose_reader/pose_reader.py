@@ -5,6 +5,7 @@ transform's rotation and its distance to a stored target is remapped to a
 0-to-1 float attribute on the Attribute Host, reading 1.0 when the target
 orientation is reached.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -22,6 +23,7 @@ class RotationAxisReader(aniseed.RigComponent):
     """
 
     identifier = "Utility : Rotation Axis Reader"
+    icon = os.path.join(os.path.dirname(__file__), "rotation_axis_reader.png")
 
     rotate_order_enum = {
         "X": 0,

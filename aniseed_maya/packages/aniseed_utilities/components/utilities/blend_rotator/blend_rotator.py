@@ -5,6 +5,7 @@ with a keyable Blend attribute on the control driving the weighting. The
 control then drives a joint, which can optionally be created on stack entry
 under the current selection.
 """
+import os
 import mref
 import aniseed
 import aniseed_utilities as au
@@ -19,6 +20,7 @@ class BlendedConstraint(aniseed.RigComponent):
     """
 
     identifier = "Utility : Blend Rotator"
+    icon = os.path.join(os.path.dirname(__file__), "blend_rotator.png")
 
     def __init__(self, *args, **kwargs):
         """

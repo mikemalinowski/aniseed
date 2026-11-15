@@ -36,10 +36,7 @@ class SpaceSwitchComponent(aniseed.RigComponent):
 
     identifier = "Augment : Space Switch"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "space_switch.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -5,6 +5,7 @@ builds high level facial controls to drive its weights. Also provides the
 "TPS : Link BlendShapes" component, which connects the aliased weights of a
 driving blendshape to the matching weights of other blendshapes.
 """
+import os
 import mref
 import aniseed
 import aniseed_utilities as au
@@ -19,6 +20,7 @@ class BlendshapeFacialRig(aniseed.RigComponent):
     """
 
     identifier = "Face : BlendShape Based Facial Rig"
+    icon = os.path.join(os.path.dirname(__file__), "blendshape_based_facial_rig.png")
 
     shape_list = [
 
@@ -297,6 +299,7 @@ class LinkBlendshapes(aniseed.RigComponent):
     """
 
     identifier = "Face : Link BlendShapes"
+    icon = os.path.join(os.path.dirname(__file__), "link_blendshapes.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -5,6 +5,7 @@ The created attribute's full node.attr name is exposed as an output for
 downstream components. The value is coerced by evaluating "<type>(<value>)",
 so only types which are also python builtins (such as float or int) work.
 """
+import os
 import mref
 import aniseed
 
@@ -18,6 +19,7 @@ class AddAttributeComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Add Attribute"
+    icon = os.path.join(os.path.dirname(__file__), "add_attribute.png")
 
     def __init__(self, *args, **kwargs):
         """

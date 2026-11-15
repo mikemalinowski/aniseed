@@ -59,11 +59,7 @@ class FlexiLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     identifier = "Limb : Leg (Dynamic Pivot)"
     deprecated_names = ["Limb : Flexi Leg"]
-    icon = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "flexi_two_bone_ik",
-        "flexi_two_bone_ik.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "leg_dynamic_pivot.png")
 
     def __init__(self, *args, **kwargs):
         """

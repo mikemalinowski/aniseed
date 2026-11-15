@@ -34,6 +34,7 @@ class FaceComponent(aniseed.RigComponent):
     """
 
     identifier = "Limb : Face"
+    icon = os.path.join(os.path.dirname(__file__), "face.png")
 
     # -- The options naming the mixer node and holding its data, which the
     # -- Matrix Mixer Pose Editor tool stores edited poses into

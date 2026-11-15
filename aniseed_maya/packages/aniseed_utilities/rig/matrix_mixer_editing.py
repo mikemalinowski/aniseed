@@ -322,7 +322,7 @@ def frame_axes(matrix) -> list:
     ]
 
 
-def mirror_permutation(mixer, source, mirror) -> om.MMatrix:
+def mirror_permutation(mixer, source, mirror, target_mixer=None) -> om.MMatrix:
     """
     Returns the signed permutation P taking coordinates in the source's rest
     frame to the mirror's (x_mirror = x_source * P), found by reflecting
@@ -330,11 +330,18 @@ def mirror_permutation(mixer, source, mirror) -> om.MMatrix:
     axis of the mirror's frame. No assumption is made about how the rig
     orients mirrored objects.
 
+    Args:
+        mixer: The MatrixMixer driving the source
+        source: The source driven object
+        mirror: The mirror driven object
+        target_mixer: The MatrixMixer driving the mirror, if not the same mixer
+
     Raises:
         ValueError: If the two frames are not symmetric enough to mirror
     """
+    target_mixer = target_mixer or mixer
     source_axes = frame_axes(mixer.rest_frame(source))
-    mirror_axes = frame_axes(mixer.rest_frame(mirror))
+    mirror_axes = frame_axes(target_mixer.rest_frame(mirror))
 
     permutation = om.MMatrix()
     for row in range(3):
@@ -348,7 +355,7 @@ def mirror_permutation(mixer, source, mirror) -> om.MMatrix:
 
         if abs(alignments[column]) < MIRROR_AXIS_ALIGNMENT or column in used:
             raise ValueError(
-                f"{mixer.driven_key(source)} and {mixer.driven_key(mirror)} are not oriented symmetrically",
+                f"{mixer.driven_key(source)} and {target_mixer.driven_key(mirror)} are not oriented symmetrically",
             )
 
         used.append(column)
@@ -549,6 +556,85 @@ def mirror_pose(mixer, pose_name: str, links=None) -> UpdateResult:
         for target, matrix in writes:
             mixer.set_pose_matrix(target_pose, target.index, matrix)
             result.mirrored.append(target.key)
+
+    return result
+
+
+@dataclasses.dataclass
+class MirrorMixerResult:
+    """
+    The outcome of mirror_to_mixer: the target poses written, the target
+    poses which had to be created, and the (key, reason) pairs skipped.
+    """
+    poses: list = dataclasses.field(default_factory=list)
+    created: list = dataclasses.field(default_factory=list)
+    skipped: list = dataclasses.field(default_factory=list)
+    warnings: list = dataclasses.field(default_factory=list)
+
+
+def mirror_to_mixer(source_mixer, target_mixer, source_links=None, target_links=None) -> MirrorMixerResult:
+    """
+    Writes every pose of the source mixer, mirrored, into the target mixer
+    (typically the same mixer on the other side). Each pose goes into the
+    target pose with its side tokens swapped (see mirror_name), which is
+    created if the target does not have it. Each driven object's matrix
+    (identity included, so the target poses end up an exact mirror) goes
+    onto the target's driven object with its side tokens swapped.
+
+    Args:
+        source_mixer: The MatrixMixer to mirror from
+        target_mixer: The MatrixMixer to mirror into
+        source_links: The DrivenLinks of the source mixer, if already resolved
+        target_links: The DrivenLinks of the target mixer, if already resolved
+
+    Returns:
+        A MirrorMixerResult
+
+    Raises:
+        ValueError: If a missing target pose cannot be created
+    """
+    if source_links is None:
+        source_links = resolve_links(source_mixer)
+
+    if target_links is None:
+        target_links = resolve_links(target_mixer)
+
+    result = MirrorMixerResult()
+
+    # -- Pair up the driven objects and their permutations once, as they are
+    # -- the same for every pose
+    pairs = []
+    for link in source_links:
+        target = mirror_link(target_links, link)
+
+        if not target:
+            result.skipped.append(
+                (link.key, f"{target_mixer.node.name()} has no driven object called {mirror_name(link.node.name())}"),
+            )
+            continue
+
+        try:
+            pairs.append((link, target, mirror_permutation(source_mixer, link.index, target.index, target_mixer)))
+
+        except ValueError as error:
+            result.skipped.append((link.key, str(error)))
+
+    with undo_chunk(f"Mirror {source_mixer.node.name()} to {target_mixer.node.name()}"):
+        for pose_name in source_mixer.pose_names():
+            target_pose = mirror_name(pose_name)
+
+            if not target_mixer.get_pose(target_pose):
+                target_mixer.add_pose(target_pose)
+                result.created.append(target_pose)
+
+            for link, target, permutation in pairs:
+                target_mixer.set_pose_matrix(
+                    target_pose,
+                    target.index,
+                    mirror_matrix(source_mixer.pose_matrix(pose_name, link.index), permutation),
+                )
+
+            result.poses.append(target_pose)
 
     return result
 

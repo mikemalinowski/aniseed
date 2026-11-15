@@ -4,6 +4,7 @@ node between two targets using a pair of constraints of a chosen type
 (parent, point, orient or scale). If an Attribute Host is given, a float
 blend attribute is created on it to drive the weighting between the targets.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -21,6 +22,7 @@ class ConstrainBetween(aniseed.RigComponent):
     """
 
     identifier = "Utility : Constrain Between"
+    icon = os.path.join(os.path.dirname(__file__), "constrain_between.png")
 
     def __init__(self, *args, **kwargs):
         """

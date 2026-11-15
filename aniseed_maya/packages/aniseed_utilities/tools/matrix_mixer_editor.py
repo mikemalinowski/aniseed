@@ -331,8 +331,10 @@ class PoseEditorWidget(QtWidgets.QWidget):
         self.load_button.setToolTip(
             "Replace the mixer's poses with those in a json file",
         )
+        self.mirror_mixer_button = QtWidgets.QPushButton("Mirror to Other Side")
         bottom_layout.addWidget(self.add_button)
         bottom_layout.addWidget(self.not_editable_label, stretch=1)
+        bottom_layout.addWidget(self.mirror_mixer_button)
         bottom_layout.addWidget(self.store_button)
         bottom_layout.addWidget(self.save_button)
         bottom_layout.addWidget(self.load_button)
@@ -354,6 +356,7 @@ class PoseEditorWidget(QtWidgets.QWidget):
         self.add_driven_button.clicked.connect(self.add_selected_driven)
         self.remove_driven_button.clicked.connect(self.remove_driven)
         self.select_driven_button.clicked.connect(self.select_driven)
+        self.mirror_mixer_button.clicked.connect(self.mirror_to_other_side)
         self.store_button.clicked.connect(self.store_to_component)
         self.save_button.clicked.connect(self.save_json)
         self.load_button.clicked.connect(self.load_json)
@@ -440,6 +443,8 @@ class PoseEditorWidget(QtWidgets.QWidget):
         fixed = bool(self.source and getattr(self.source.component, "mixer_fixed_driven", False))
         self.add_driven_button.setVisible(not fixed)
         self.remove_driven_button.setVisible(not fixed)
+
+        self.update_mirror_mixer_button()
 
         if not self.source:
             self.set_status("There is no matrix mixer in the scene. Build the rig, then press Refresh.")
@@ -711,6 +716,92 @@ class PoseEditorWidget(QtWidgets.QWidget):
         self.source.store()
         self.set_status(f"Mirrored {pose_name} into {target}.")
         self.show_details(f"Mirrored {pose_name}", result)
+
+    # ----------------------------------------------------------------------
+    def opposite_source(self):
+        """
+        Returns the MixerSource whose node name is the current mixer's with
+        its side tokens swapped (left/right, lf/rt), or None if there is none.
+        """
+        if not self.source:
+            return None
+
+        name = editing.mirror_name(self.source.node.name())
+        if name == self.source.node.name():
+            return None
+
+        for source in self.sources:
+            if source.node.name() == name:
+                return source
+        return None
+
+    # ----------------------------------------------------------------------
+    def update_mirror_mixer_button(self):
+        """
+        Enables Mirror to Other Side only when there is a mixer on the other
+        side, and describes what it will do.
+        """
+        opposite = self.opposite_source()
+        self.mirror_mixer_button.setEnabled(bool(opposite))
+
+        if opposite:
+            self.mirror_mixer_button.setToolTip(
+                f"Overwrite the poses of {opposite.node.name()} with a mirror of this mixer's poses, "
+                f"creating any it does not have",
+            )
+        elif self.source and editing.mirror_name(self.source.node.name()) != self.source.node.name():
+            self.mirror_mixer_button.setToolTip(
+                f"There is no mixer called {editing.mirror_name(self.source.node.name())}",
+            )
+        else:
+            self.mirror_mixer_button.setToolTip("This mixer has no side (left/right, lf/rt) in its name")
+
+    # ----------------------------------------------------------------------
+    def mirror_to_other_side(self):
+        """
+        Writes every pose of this mixer, mirrored, into the mixer on the
+        other side, after confirming, and stores that mixer into its
+        component.
+        """
+        target = self.opposite_source()
+        if not target:
+            return
+
+        confirmed = qtility.request.confirmation(
+            title="Mirror to Other Side",
+            message=f"Overwrite the poses of {target.node.name()} with a mirror of {self.source.node.name()}?",
+            parent=self,
+        )
+        if not confirmed:
+            return
+
+        self.end_solo()
+
+        try:
+            result = editing.mirror_to_mixer(self.source.mixer, target.mixer, source_links=self.links)
+
+        except ValueError as error:
+            qtility.request.message(title="Cannot Mirror", message=str(error), parent=self)
+            return
+
+        target.store()
+
+        status = f"Mirrored {len(result.poses)} pose(s) into {target.node.name()}"
+        if result.created:
+            status += f", creating {len(result.created)}"
+        if not target.component:
+            status += ". It has no owning component, so this is lost on rebuild"
+        self.set_status(status + ".")
+
+        details = [
+            f"{key} skipped: {reason}"
+            for key, reason in result.skipped
+        ] + result.warnings
+        if result.created:
+            details.append("Created poses: " + ", ".join(result.created))
+
+        if details:
+            qtility.request.message(title="Mirrored to Other Side", message="\n".join(details), parent=self)
 
     # ----------------------------------------------------------------------
     def reset_pose(self, pose_name):

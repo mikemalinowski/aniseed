@@ -4,6 +4,7 @@ constrains one node to another. Options control whether the offset is
 maintained and whether a scale constraint is added alongside the parent
 constraint.
 """
+import os
 import mref
 import aniseed
 import aniseed_utilities as au
@@ -16,6 +17,7 @@ class ParentConstraint(aniseed.RigComponent):
     """
 
     identifier = "Utility : Parent Constraint"
+    icon = os.path.join(os.path.dirname(__file__), "parent_constraint.png")
 
     def __init__(self, *args, **kwargs):
         """

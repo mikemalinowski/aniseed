@@ -24,7 +24,7 @@ class ApplyIKBiasData(aniseed.RigComponent):
     """
 
     identifier = "Utility : Apply IK Bias Data"
-    icon = os.path.join(os.path.dirname(__file__), "icon.png")
+    icon = os.path.join(os.path.dirname(__file__), "apply_ik_bias_data.png")
 
     _RECORDABLE_ATTRIBUTES = (
         "springAngleBias_Position",

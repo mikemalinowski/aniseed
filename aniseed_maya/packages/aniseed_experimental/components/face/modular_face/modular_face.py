@@ -92,6 +92,7 @@ class ModularFace(aniseed.RigComponent):
     """
 
     identifier = "Limb : Modular Face"
+    icon = os.path.join(os.path.dirname(__file__), "modular_face.png")
 
     def __init__(self, *args, **kwargs):
         """

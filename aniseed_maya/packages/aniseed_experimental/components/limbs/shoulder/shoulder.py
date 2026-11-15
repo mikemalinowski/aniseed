@@ -41,11 +41,7 @@ class ShoulderComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Limb : Shoulder"
-    icon = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "flexi_two_bone_ik",
-        "flexi_two_bone_ik.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "shoulder.png")
 
     def __init__(self, *args, **kwargs):
         """

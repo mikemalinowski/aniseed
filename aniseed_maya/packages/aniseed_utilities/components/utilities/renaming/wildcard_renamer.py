@@ -3,6 +3,7 @@ Provides the "Utility : Wildcard Renamer" component, which finds every node
 matching a wildcard search string (optionally only those under a given
 node) and replaces a substring in their names.
 """
+import os
 import aniseed
 import mref
 
@@ -14,6 +15,7 @@ class WildCardRenamer(aniseed.RigComponent):
     """
 
     identifier = "Utility : Wildcard Renamer"
+    icon = os.path.join(os.path.dirname(__file__), "wildcard_renamer.png")
 
     def __init__(self, *args, **kwargs):
         """

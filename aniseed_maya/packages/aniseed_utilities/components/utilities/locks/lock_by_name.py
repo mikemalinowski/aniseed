@@ -4,6 +4,7 @@ locks every scene node whose name and node type match the given regexes,
 "Utility : Lock By Name (Including Transform)" also locks their transform
 channels, and "Utility : Unlock By Name" unlocks the matched nodes instead.
 """
+import os
 import re
 import logging
 import mref
@@ -20,6 +21,7 @@ class LockByNameComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Lock By Name"
+    icon = os.path.join(os.path.dirname(__file__), "lock_by_name.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -105,6 +107,7 @@ class LockNodeAndTransformByNameComponent(LockByNameComponent):
     """
 
     identifier = "Utility : Lock By Name (Including Transform)"
+    icon = os.path.join(os.path.dirname(__file__), "lock_by_name_including_transform.png")
 
     def run_lock(self, node: mref.ReferencedItem):
         """
@@ -130,6 +133,7 @@ class UnlockByNameComponent(LockByNameComponent):
     """
 
     identifier = "Utility : Unlock By Name"
+    icon = os.path.join(os.path.dirname(__file__), "unlock_by_name.png")
 
     def run_lock(self, node: mref.ReferencedItem):
         """

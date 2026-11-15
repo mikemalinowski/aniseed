@@ -4,6 +4,7 @@ boolean toggle attribute to a host node and connects it to the
 alwaysDrawOnTop attribute of every control shape in the scene, allowing
 X-Ray display of all controls to be toggled from the channel box.
 """
+import os
 import mref
 import aniseed
 
@@ -22,6 +23,7 @@ class XRayNodesExposure(aniseed.RigComponent):
     """
 
     identifier = "Utility : Expose Controls As XRay"
+    icon = os.path.join(os.path.dirname(__file__), "expose_controls_as_xray.png")
 
     def __init__(self, *args, **kwargs):
         """

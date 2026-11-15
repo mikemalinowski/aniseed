@@ -38,10 +38,7 @@ class FlexiTwoBoneIkComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Limb : Flexi Two Bone IK"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "flexi_two_bone_ik.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "flexi_two_bone_ik.png")
 
     # -- Version 2 removed the twist count options, as the counts come from
     # -- the twist joint inputs. They have since returned as hidden options

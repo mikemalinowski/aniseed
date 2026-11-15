@@ -3,6 +3,7 @@ Provides the "Augment : Insert Control" component, which creates a control
 beneath a parent node and optionally moves the parent's existing transform
 children under that control.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -21,6 +22,7 @@ class InsertControlComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Augment : Insert Control"
+    icon = os.path.join(os.path.dirname(__file__), "insert_control.png")
 
     def __init__(self, *args, **kwargs):
         """

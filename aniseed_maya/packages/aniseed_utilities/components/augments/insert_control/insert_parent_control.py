@@ -2,6 +2,7 @@
 Provides the "Augment : Add Parent Control" component, which creates a
 control under a node's current parent and then parents the node beneath it.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -17,6 +18,7 @@ class InsertParentControlComponent(aniseed.RigComponent):
     """
 
     identifier = "Augment : Add Parent Control"
+    icon = os.path.join(os.path.dirname(__file__), "add_parent_control.png")
 
     def __init__(self, *args, **kwargs):
         """

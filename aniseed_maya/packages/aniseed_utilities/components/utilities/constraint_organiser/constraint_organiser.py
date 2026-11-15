@@ -4,6 +4,7 @@ constraint found on the descendants of a hierarchy root and reparents them
 under a single chosen node. This keeps constraints out of the deformation
 hierarchy and tidies the outliner.
 """
+import os
 import logging
 
 import aniseed
@@ -22,6 +23,7 @@ class ConstraintOrganiser(aniseed.RigComponent):
     """
 
     identifier = "Utility : Constraint Organiser"
+    icon = os.path.join(os.path.dirname(__file__), "constraint_organiser.png")
 
     def __init__(self, *args, **kwargs):
         """

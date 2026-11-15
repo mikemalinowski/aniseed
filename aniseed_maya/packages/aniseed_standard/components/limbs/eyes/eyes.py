@@ -112,10 +112,7 @@ class EyesComponent(aniseed.RigComponent):
 
     identifier = "Limb : Eyes"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "eyes.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -551,6 +548,7 @@ class EyeComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     This is a single eye component
     """
     identifier = "Limb : Eye"
+    icon = os.path.join(os.path.dirname(__file__), "eye.png")
 
     # -- Set on a mirrored component during a mirror when it should use the existing
     # -- other side joints it was given, rather than creating its own

@@ -31,11 +31,7 @@ class MultiChainTwistsComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Augment : Multi Chain Twists"
-    icon = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "bendy_twists",
-        "bendy_twists.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "multi_chain_twists.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -27,10 +27,7 @@ class TwisterComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Augment : Twister"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "twister.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "twister.png")
 
     def __init__(self, *args, **kwargs):
         """

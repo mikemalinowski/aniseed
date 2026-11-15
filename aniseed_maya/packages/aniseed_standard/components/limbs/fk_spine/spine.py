@@ -22,10 +22,7 @@ class FKSpineComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Limb : FK Spine"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "spine.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "fk_spine.png")
 
     def __init__(self, *args, **kwargs):
         """

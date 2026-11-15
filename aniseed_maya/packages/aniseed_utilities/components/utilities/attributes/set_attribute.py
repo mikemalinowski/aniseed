@@ -5,6 +5,7 @@ string and coerced into each attribute's python type, with booleans resolved
 from common truthy/falsy strings. An Ignore Errors option controls whether
 unresolvable nodes are skipped or raise.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -43,6 +44,7 @@ class SetAttributeMany(aniseed.RigComponent):
     """
 
     identifier = "Utility : Set Attribute (Multi)"
+    icon = os.path.join(os.path.dirname(__file__), "set_attribute_multi.png")
 
     def __init__(self, *args, **kwargs):
         """

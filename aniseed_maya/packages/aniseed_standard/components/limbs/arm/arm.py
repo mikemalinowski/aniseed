@@ -29,10 +29,7 @@ _ARM_TWISTS = [
 class ArmComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     identifier = "Limb : Arm"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "arm.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "arm.png")
 
     # noinspection PyUnresolvedReferences
     def __init__(self, *args, **kwargs):

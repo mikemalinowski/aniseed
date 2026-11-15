@@ -35,10 +35,7 @@ _TRILEG_UNGENERATED_TWISTS = ["Mid Twist Joints", "Foot Twist Joints"]
 class TriLegComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     identifier = "Limb : Tri Leg"
 
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "tri_leg.png")
 
     # -- These are indices to get the various joints
     INDEX_UPPER_LEG = 0

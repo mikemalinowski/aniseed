@@ -4,6 +4,7 @@ a base joint and a tip joint. Each end has an aim transform aimed at the
 opposite control, sharing an upvector offset along a chosen axis, and the
 joints are constrained to those aim transforms.
 """
+import os
 import mref
 import aniseed
 import aniseed_utilities as au
@@ -21,6 +22,7 @@ class PistonComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Mechanics : Piston"
+    icon = os.path.join(os.path.dirname(__file__), "piston.png")
 
     def __init__(self, *args, **kwargs):
         """

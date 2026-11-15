@@ -27,10 +27,7 @@ class PosingComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Apply Pose"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "icon.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "apply_pose.png")
 
     def __init__(self, *args, **kwargs):
         """

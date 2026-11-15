@@ -3,6 +3,7 @@ Provides the "Basic : Singular" component, which creates a single control
 that parent and scale constrains a joint. It can create the joint from the
 current selection when added to the stack and supports mirroring.
 """
+import os
 import re
 import mref
 import aniseed
@@ -18,6 +19,7 @@ class Singular(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Basic : Singular"
+    icon = os.path.join(os.path.dirname(__file__), "singular.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -4,6 +4,7 @@ blendshape weights from driver attributes, each divided by a value and
 optionally clamped to a zero to one range. Also provides the BlendShapeEditor
 table widget used to author the connection data.
 """
+import os
 import logging
 import mref
 import aniseed
@@ -34,6 +35,7 @@ class BlendShapeConnectorComponent(aniseed.RigComponent):
     """
 
     identifier = "Utility : Blendshape Connector"
+    icon = os.path.join(os.path.dirname(__file__), "blendshape_connector.png")
 
     def __init__(self, *args, **kwargs):
         """

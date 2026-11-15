@@ -22,6 +22,7 @@ class ComponentImporter(aniseed.RigComponent):
     """
 
     identifier = "Custom : Import Rig Part"
+    icon = os.path.join(os.path.dirname(__file__), "import_rig_part.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -6,6 +6,7 @@ connects one source attribute into the same named attribute on a list of
 nodes (an entry may be an address, such as a component's list output). Both
 expose a Force option to replace existing connections.
 """
+import os
 import mref
 import aniseed
 
@@ -17,6 +18,7 @@ class ConnectAttr(aniseed.RigComponent):
     """
 
     identifier = "Utility : Connect Attribute"
+    icon = os.path.join(os.path.dirname(__file__), "connect_attribute.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -101,6 +103,7 @@ class ConnectManyAttr(aniseed.RigComponent):
     """
 
     identifier = "Utility : Connect Attribute (Multi)"
+    icon = os.path.join(os.path.dirname(__file__), "connect_attribute_multi.png")
 
     def __init__(self, *args, **kwargs):
         """

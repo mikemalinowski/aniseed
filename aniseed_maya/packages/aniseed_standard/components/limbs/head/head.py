@@ -21,10 +21,7 @@ class HeadComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Limb : Head"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "head.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "head.png")
 
     # -- Set on a mirrored component during a mirror when it should keep the joints it
     # -- was given, rather than creating its own

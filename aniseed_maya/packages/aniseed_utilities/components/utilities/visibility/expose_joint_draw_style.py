@@ -4,6 +4,7 @@ channel box integer attribute to a host node and connects it to the
 drawStyle of every joint in a hierarchy, so the joints can be shown or
 hidden from a single control.
 """
+import os
 import mref
 import aniseed
 
@@ -17,6 +18,7 @@ class ExposeJointDrawStyle(aniseed.RigComponent):
     """
 
     identifier = "Utility : Expose Joint Draw Style"
+    icon = os.path.join(os.path.dirname(__file__), "expose_joint_draw_style.png")
 
     def __init__(self, *args, **kwargs):
         """

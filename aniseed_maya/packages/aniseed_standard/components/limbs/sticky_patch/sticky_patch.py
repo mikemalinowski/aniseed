@@ -34,10 +34,7 @@ class StickyPatchComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Limb : Sticky Patch"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "sticky_patch.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "sticky_patch.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -629,6 +626,7 @@ class AngledStickyPatchComponent(StickyPatchComponent):
     """
 
     identifier = "Limb : Sticky Patch (Aimed)"
+    icon = os.path.join(os.path.dirname(__file__), "sticky_patch_aimed.png")
 
     def run(self):
         """

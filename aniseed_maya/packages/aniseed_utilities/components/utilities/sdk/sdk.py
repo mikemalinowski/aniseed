@@ -5,6 +5,7 @@ node. The curve shape is stored on the component, captured from the live
 curve with the Store Set Driven Key Data button, so it rebuilds
 identically.
 """
+import os
 import logging
 import typing
 
@@ -23,6 +24,7 @@ class SetDrivenKey(aniseed.RigComponent):
     """
 
     identifier = "Utility : Set Driven Key"
+    icon = os.path.join(os.path.dirname(__file__), "set_driven_key.png")
 
     _DEFAULT_CURVE_DATA = {
         'name': 'UNITLESS',

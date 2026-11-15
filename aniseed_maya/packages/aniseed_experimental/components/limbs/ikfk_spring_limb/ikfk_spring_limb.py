@@ -30,11 +30,7 @@ class IkfkSpringLimbComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
 
     # -- The outputs declared per joint by run, e.g. "FK 1", "IK 2", "Blended 3"
     _NUMBERED_OUTPUT = re.compile(r"^(FK|IK|Blended) \d+$")
-    icon = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)),
-        "flexi_two_bone_ik",
-        "flexi_two_bone_ik.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "ikfk_spring_limb.png")
 
     def __init__(self, *args, **kwargs):
         """

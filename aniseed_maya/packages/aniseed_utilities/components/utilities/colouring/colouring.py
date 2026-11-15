@@ -21,7 +21,7 @@ class ColorControls(aniseed.RigComponent):
     """
 
     identifier = "Utility : Color Controls"
-    icon = os.path.join(os.path.dirname(__file__), "colouring.png")
+    icon = os.path.join(os.path.dirname(__file__), "color_controls.png")
 
     def __init__(self, *args, **kwargs):
         """
@@ -108,7 +108,7 @@ class ColorSpecificControls(aniseed.RigComponent):
     """
 
     identifier = "Utility : Color Specific Controls"
-    icon = os.path.join(os.path.dirname(__file__), "colouring.png")
+    icon = os.path.join(os.path.dirname(__file__), "color_specific_controls.png")
 
     def __init__(self, *args, **kwargs):
         """

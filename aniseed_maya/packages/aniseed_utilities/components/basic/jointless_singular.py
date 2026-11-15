@@ -2,6 +2,7 @@
 Provides the "Basic : Singular (Jointless)" component, which creates a single
 control placed at a guide without driving a joint.
 """
+import os
 import mref
 import aniseed
 import logging
@@ -17,6 +18,7 @@ class JointlessSingular(aniseed.RigComponent, au.mixins.MirrorMixin):
     """
 
     identifier = "Basic : Singular (Jointless)"
+    icon = os.path.join(os.path.dirname(__file__), "singular_jointless.png")
 
     def __init__(self, *args, **kwargs):
         """

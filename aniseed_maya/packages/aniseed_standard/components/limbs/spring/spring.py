@@ -43,7 +43,7 @@ class Spring(aniseed.RigComponent):
     """
 
     identifier = "Limb : Spring"
-    icon = os.path.join(os.path.dirname(__file__), "icon.png")
+    icon = os.path.join(os.path.dirname(__file__), "spring.png")
 
     def __init__(self, *args, **kwargs):
         """

@@ -16,10 +16,7 @@ log = logging.getLogger(__name__)
 
 class HandComponent(aniseed.RigComponent, au.mixins.MirrorMixin):
     identifier = "Limb : Hand"
-    icon = os.path.join(
-        os.path.dirname(__file__),
-        "hand.png",
-    )
+    icon = os.path.join(os.path.dirname(__file__), "hand.png")
 
     def __init__(self, *args, **kwargs):
         """

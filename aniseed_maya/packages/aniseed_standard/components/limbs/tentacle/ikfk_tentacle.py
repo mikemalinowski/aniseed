@@ -6,6 +6,7 @@ distributed with Aniseed and must be made available for this to build. This
 component is not production ready.
 """
 # NOT PRODUCTION READY!
+import os
 import logging
 import mref
 import aniseed
@@ -30,6 +31,7 @@ log = logging.getLogger(__name__)
 # ------------------------------------------------------------------------------
 class TentacleComponent(aniseed.RigComponent):
     identifier = 'Limb : IKFK Tentacle'
+    icon = os.path.join(os.path.dirname(__file__), "ikfk_tentacle.png")
     version = 1
 
     def __init__(self, *args, **kwargs):
