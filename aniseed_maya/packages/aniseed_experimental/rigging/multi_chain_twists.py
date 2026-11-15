@@ -812,7 +812,7 @@ def create_twist_joints(
 
         for percentage in percentages:
             joint = au.scene.joints.create(
-                description=f"{prefix[:1].upper()}{prefix[1:]}MultiChainTwist",
+                description=f"{prefix[:1].upper()}{prefix[1:]}Twist",
                 location=location,
                 parent=start_key.full_name(),
                 config=config,

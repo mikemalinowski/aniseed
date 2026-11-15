@@ -18,7 +18,7 @@ class BlendshapeFacialRig(aniseed.RigComponent):
     blendshape created from the given target shapes.
     """
 
-    identifier = "TPS : BlendShape Based Facial Rig"
+    identifier = "Face : BlendShape Based Facial Rig"
 
     shape_list = [
 
@@ -296,7 +296,7 @@ class LinkBlendshapes(aniseed.RigComponent):
     weights of the driving blendshape.
     """
 
-    identifier = "TPS : Link BlendShapes"
+    identifier = "Face : Link BlendShapes"
 
     def __init__(self, *args, **kwargs):
         """
