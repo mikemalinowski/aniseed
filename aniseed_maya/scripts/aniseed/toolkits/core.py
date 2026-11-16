@@ -71,6 +71,11 @@ class Tool(xstack.Component):
     # -- The organisers the tool shows under. Without any it shows under General
     categories = []
 
+    # -- The tool's icon: the name (without .png) of an icon in the toolkit's
+    # -- icon folders or its package's _res/icons, or a full path. If None, the
+    # -- icon named after the identifier is used
+    icon = None
+
     # ----------------------------------------------------------------------------------
     def declare_input(self, *args, **kwargs):
         raise TypeError(f"{self.identifier} : toolkit tools only have options, not inputs")
@@ -217,10 +222,11 @@ class ToolkitStack(xstack.Stack):
         if component is None:
             return None
 
-        if not component.icon:
-            icon = self._find_icon(identifier, _package_icon_folder(type(component)))
-            if icon:
-                component.icon = icon
+        if not os.path.isfile(component.icon or ""):
+            component.icon = self._find_icon(
+                component.icon or identifier,
+                _package_icon_folder(type(component)),
+            )
 
         remembered = scribble.get(self.settings_id()).get(identifier) or {}
         for name, value in remembered.items():

@@ -56,11 +56,7 @@ def create_two_bone_soft_ik(root, target, second_joint, third_joint, host=None):
     soft_dist_attr = f"{host}.SoftDistance"
     stretch_attr = f"{host}.Stretch"
 
-    root_matrix = _add_matrix_attribute(host, "root_matrix")
-    target_matrix = _add_matrix_attribute(host, "target_matrix")
-
-    mref.get(root).attr("worldMatrix[0]").connect(root_matrix)
-    mref.get(target).attr("worldMatrix[0]").connect(target_matrix)
+    root_matrix, target_matrix = _connect_root_space_matrices(host, root, target)
 
     max_len_attr = au.scene.node_math.add(
         au.scene.node_math.add(au.scene.node_math.add(default_upper_len_attr, upper_addition_attr), lower_addition_attr),
@@ -120,6 +116,32 @@ def _add_matrix_attribute(host: str, name: str) -> str:
     if not mref.objExists(address):
         mref.addAttr(host, shortName=name, attributeType="matrix")
     return address
+
+
+def _connect_root_space_matrices(host: str, root: str, target: str) -> tuple[str, str]:
+    """
+    Adds the root_matrix and target_matrix attributes to the host and
+    drives them with the root and target expressed in the space of the
+    root's parent. The default bone lengths are in that space (the root
+    must share its parent space with the ik chain), so any scale above
+    it, such as a scaled global control, does not change the measured
+    distance relative to them.
+
+    Returns:
+        The addresses of the root_matrix and target_matrix attributes
+    """
+    root_matrix = _add_matrix_attribute(host, "root_matrix")
+    target_matrix = _add_matrix_attribute(host, "target_matrix")
+
+    root_node = mref.get(root)
+    root_node.attr("matrix").connect(root_matrix)
+
+    target_in_root_space = mref.create("multMatrix")
+    mref.get(target).attr("worldMatrix[0]").connect(target_in_root_space.attr("matrixIn[0]"))
+    root_node.attr("parentInverseMatrix[0]").connect(target_in_root_space.attr("matrixIn[1]"))
+    target_in_root_space.attr("matrixSum").connect(target_matrix)
+
+    return root_matrix, target_matrix
 
 
 def _soft_scale(actual_distance_attr: str, overstretch_amount_attr: str, soft_dist_attr: str) -> str:
@@ -208,6 +230,9 @@ def create_multi_bone_soft_ik(root_target, end_target, root_joint, end_joint, ho
     soft_dist_attr = f"{host}.SoftDistance"
     stretch_attr = f"{host}.Stretch"
 
+    # -- Unlike the two bone soft ik, this measures in world space. Its
+    # -- caller (the Trileg) builds the chain with a root which does not
+    # -- inherit its parent's transform, so the lengths are world lengths.
     root_matrix = _add_matrix_attribute(host, "root_matrix")
     target_matrix = _add_matrix_attribute(host, "target_matrix")
 

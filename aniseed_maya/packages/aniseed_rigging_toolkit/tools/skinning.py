@@ -225,6 +225,7 @@ class SnapshotCopyDestination(toolkits.Tool):
     """
 
     identifier = "Localised Copy : Snapshot Destination"
+    icon = "Localised Copy _ Snapshot Destination"
     toolkit = "Rigging"
     categories = ["Skinning"]
 
@@ -250,6 +251,7 @@ class CopyLocalised(toolkits.Tool):
     """
 
     identifier = "Localised Copy : Copy"
+    icon = "Localised Copy _ Copy"
     toolkit = "Rigging"
     categories = ["Skinning"]
 
@@ -366,6 +368,7 @@ class SkinInterpSetTargetAWeights(toolkits.Tool):
     """
 
     identifier = "Interp : Set Target A Weights"
+    icon = "Interp _ Set Target A Weights"
     toolkit = "Rigging"
     categories = ["Skinning"]
 
@@ -384,6 +387,7 @@ class SkinInterpSetTargetBWeights(toolkits.Tool):
     """
 
     identifier = "Interp : Set Target B Weights"
+    icon = "Interp _ Set Target B Weights"
     toolkit = "Rigging"
     categories = ["Skinning"]
 
@@ -404,6 +408,7 @@ class SkinInterpApply(toolkits.Tool):
     """
 
     identifier = "Interp : Apply Interpolation"
+    icon = "Interp _ Apply Interpolation"
     toolkit = "Rigging"
     categories = ["Skinning"]
 

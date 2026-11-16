@@ -3,7 +3,7 @@ Shared builder for the high level, animator facing facial controls. These
 controls drive a set of pose/shape attributes (transform mixer poses or
 blendshape weights) through clamps and math nodes.
 
-Used by the "Limb : Face" and "TPS : BlendShape Based Facial Rig" components.
+Used by the "Limb : Face" and "BlendShape Based Facial Rig" components.
 
 Note: the order in which nodes are created here decides the default names of
 the utility nodes (clamp1, floatMath2...) and the order of the setup calls

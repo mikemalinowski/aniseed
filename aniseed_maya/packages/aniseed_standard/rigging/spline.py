@@ -308,6 +308,13 @@ class SimpleSplineSetup:
             # -- Name it as an anchor
             anchor.rename(f"SplineAnchor{idx}")
 
+            # -- The anchors are scale constrained, and with segment scale
+            # -- compensation on, a scale constraint on a joint below the first
+            # -- gives it the scale above the setup a second time (so a global
+            # -- scale of 2 becomes 4). Anything reading the anchors' local
+            # -- matrices, such as the spline spine's fk controls, inherits that.
+            anchor.attr("segmentScaleCompensate").set(False)
+
             # -- The target (i.e, what it should follow) varies depending
             # -- on whether we're at the start/end of the curve and whether
             # -- we have the locking option enabled. So we resolve the constraint

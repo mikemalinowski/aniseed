@@ -152,6 +152,16 @@ class DevExampleConfig(aniseed.RigConfiguration):
 
         return parts
 
+    def user_functions(self):
+        """
+        Removes the base class's Update, which adds the standard default
+        stack. This configuration replaces that stack, so Update would add
+        components this rig does not use.
+        """
+        menu = super().user_functions()
+        menu.pop("Update", None)
+        return menu
+
     def create_default_stack(self):
         """
         Called when this configuration is the first component added to a new

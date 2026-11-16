@@ -1,8 +1,8 @@
 """
-Provides the "TPS : BlendShape Based Facial Rig" component, which replaces
+Provides the " BlendShape Based Facial Rig" component, which replaces
 any blendshapes on a base mesh with one built from the given target shapes and
 builds high level facial controls to drive its weights. Also provides the
-"TPS : Link BlendShapes" component, which connects the aliased weights of a
+"Link BlendShapes" component, which connects the aliased weights of a
 driving blendshape to the matching weights of other blendshapes.
 """
 import os
