@@ -220,14 +220,32 @@ class FlexiArm(ikfk_spring_limb.IkfkSpringLimb):
         ]
         return max(lengths + [0.0]) or self.chain_length / 10.0
 
+    def _create_root(self):
+        """
+        Creates the root control, with a pin shape
+        """
+        super()._create_root()
+        _set_shape(self.root_control, "core_pin", 10, rotate=[90, 0, 0])
+
+    def _create_fk(self):
+        """
+        Creates the fk chain and controls. Every fk control has a rounded
+        square shape, as the flexi leg's do.
+        """
+        super()._create_fk()
+
+        for control in self.fk_controls:
+            _set_shape(control, "core_rounded_square", 14, rotate=[0, 0, 90])
+
     def _create_ik(self):
         """
-        Creates the ik chain, then the pivot control under the ik target
-        control (at the pivot control transform, or the ik target if not
-        given) and moves the ik handle under it. Soft ik is applied if
-        enabled.
+        Creates the ik chain (the ik target control with a stumpy cross
+        shape), then the pivot control under the ik target control (at the
+        pivot control transform, or the ik target if not given) and moves
+        the ik handle under it. Soft ik is applied if enabled.
         """
         super()._create_ik()
+        _set_shape(self.ik_target_control, "core_stumpy_cross", 20, rotate=[-90, 0, 0])
 
         self.pivot_control = self._create_control(
             "IkHandPivot",

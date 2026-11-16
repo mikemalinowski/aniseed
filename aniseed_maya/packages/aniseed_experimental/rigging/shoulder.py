@@ -211,11 +211,11 @@ class Shoulder:
             description=self.prefix or "Shoulder",
             location=self.location,
             parent=self.parent,
-            shape="core_paddle",
+            shape="core_saddle",
             config=self.config,
             match_to=self.shoulder_joint,
-            shape_scale=self.shape_scale * 0.5,
-            rotate_shape=[0, 0, 90],
+            shape_scale=5,
+            rotate_shape=[0, 90, 0],
         )
 
         ctl = self.shoulder_control.ctl
@@ -398,7 +398,8 @@ class Shoulder:
             shape="core_rounded_square",
             config=self.config,
             match_to=self.scapula_joint,
-            shape_scale=self.shape_scale * 0.4,
+            shape_scale=self.shape_scale * 0.6,
+            rotate_shape=[90, 0, 0],
         )
 
     def _create_remap(

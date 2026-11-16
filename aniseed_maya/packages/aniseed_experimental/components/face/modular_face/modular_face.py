@@ -5,7 +5,8 @@ children when it enters the stack, and fills in all of their details:
 
     Limb : Mouth                  (jaw, upper and lower lip)
     Limb : Eyes                   (eyes, lids and pupils)
-    Basic : Singular              (one per other bone in skeleton.json)
+    Stack : Organiser             (grouping the Singulars)
+        Basic : Singular          (one per other bone in skeleton.json)
     Utility : Matrix Mixer        (driving every bone's control, starting
                                    from the poses in default_pose_data.json)
     Face : High Level Controls    (the animator facing controls driving the
@@ -26,6 +27,8 @@ face itself only builds the face org, which the children are built under.
 import os
 import json
 import logging
+
+from maya import cmds
 
 import mref
 import aniseed
@@ -62,6 +65,21 @@ _EYE_BONES = {
         ("eye_lower_lid", "Lower Eye Lid"),
         ("eye_pupil", "Pupil"),
     ]
+}
+
+# -- The guide of each high level control group: (description, location
+# -- attribute on the config, the bone labels it sits at - midway between
+# -- them if there are several). It takes its orientation from the first.
+_GUIDE_BONES = {
+    "left_lip_corner": ("FacialLipCorner", "left", ["upper_lip_outer_left", "lower_lip_outer_left"]),
+    "right_lip_corner": ("FacialLipCorner", "right", ["upper_lip_outer_right", "lower_lip_outer_right"]),
+    "upper_lip": ("FacialUpperLip", "middle", ["upper_lip_middle"]),
+    "lower_lip": ("FacialLowerLip", "middle", ["lower_lip_middle"]),
+    "nose": ("FacialNose", "middle", ["nose_middle"]),
+    "left_brow_inner": ("FacialBrowInner", "left", ["brow_inner_left"]),
+    "left_brow_outer": ("FacialBrowOuter", "left", ["brow_outer_left"]),
+    "right_brow_inner": ("FacialBrowInner", "right", ["brow_inner_right"]),
+    "right_brow_outer": ("FacialBrowOuter", "right", ["brow_outer_right"]),
 }
 
 # -- The options the eyes are created with, as "Limb : Face" sets them
@@ -222,6 +240,10 @@ class ModularFace(aniseed.RigComponent):
         for label, (_, output_name) in _MOUTH_BONES.items():
             controls[label] = mouth.output(output_name).address()
 
+        # -- The Singulars are grouped under an organiser. It comes before the
+        # -- eyes, which sit under one of the Singulars' controls.
+        singular_group = self._add_child("Stack : Organiser", "Singulars")
+
         singulars = dict()
         eyes = None
 
@@ -259,6 +281,7 @@ class ModularFace(aniseed.RigComponent):
                     "Location": sides[bone["location"]],
                     "Create Joint": False,
                 },
+                parent=singular_group,
             )
             singulars[label] = singular
             controls[label] = singular.output("Control").address()
@@ -276,14 +299,20 @@ class ModularFace(aniseed.RigComponent):
         self._add_child(
             "Face : High Level Controls",
             "High Level Controls",
-            inputs={
-                "Parent": face_org,
-                "Attribute Host": attribute_host,
-                "Mixer": mixer.output("Mixer").address(),
-                "Jaw Control": controls["jaw_middle"],
-                "Left Eye Control": controls["eye_left"],
-                "Right Eye Control": controls["eye_right"],
-            },
+            inputs=dict(
+                {
+                    f"{group}_guide": guide
+                    for group, guide in self._create_guides(joints).items()
+                },
+                **{
+                    "Parent": face_org,
+                    "Attribute Host": attribute_host,
+                    "Mixer": mixer.output("Mixer").address(),
+                    "Jaw Control": controls["jaw_middle"],
+                    "Left Eye Control": controls["eye_left"],
+                    "Right Eye Control": controls["eye_right"],
+                },
+            ),
         )
 
         smoothing_inputs = {
@@ -329,6 +358,51 @@ class ModularFace(aniseed.RigComponent):
             options={"Attribute Name": "show_teeth_and_tongue"},
         )
 
+    def _create_guides(self, joints: dict) -> dict:
+        """
+        Creates a locator for each high level control to be placed at, in a
+        single FaceGuides group under the world. Each sits at (and is
+        oriented to) the bone it represents; a lip corner sits midway between
+        the outer upper and lower lip bones of its side. They can be moved
+        afterwards to place the controls.
+
+        Args:
+            joints: The joint name for each bone label
+
+        Returns:
+            The locator for each high level control group
+        """
+        group = au.scene.transforms.create(
+            classification=self.config.organisational,
+            description="FaceGuides",
+            location=self.config.middle,
+            config=self.config,
+            parent=None,
+        )
+
+        guides = dict()
+        for control_group, (description, side, labels) in _GUIDE_BONES.items():
+            name = self.config.generate_name(
+                classification="guide",
+                description=description,
+                location=getattr(self.config, side),
+            )
+            locator = cmds.spaceLocator(name=name)[0]
+            locator = cmds.parent(locator, group)[0]
+
+            cmds.xform(locator, worldSpace=True, matrix=cmds.xform(joints[labels[0]], query=True, worldSpace=True, matrix=True))
+            positions = [cmds.xform(joints[label], query=True, worldSpace=True, translation=True) for label in labels]
+            cmds.xform(
+                locator,
+                worldSpace=True,
+                translation=[sum(axis) / len(positions) for axis in zip(*positions)],
+            )
+
+            guides[control_group] = cmds.ls(locator, long=True)[0]
+
+        cmds.select(clear=True)
+        return guides
+
     @staticmethod
     def _singular_parent(label: str, bone: dict, controls: dict, face_org: str) -> str:
         """
@@ -343,18 +417,19 @@ class ModularFace(aniseed.RigComponent):
 
         return controls.get(bone["parent"], face_org)
 
-    def _add_child(self, component_type: str, label: str, inputs: dict = None, options: dict = None):
+    def _add_child(self, component_type: str, label: str, inputs: dict = None, options: dict = None, parent=None):
         """
-        Adds a component of the given type beneath this one, labelled with
-        this component's label then the given label. Its on_enter_stack is
-        not run, as everything it needs (such as its joints) is given.
+        Adds a component of the given type beneath this one (or beneath the
+        given parent component), labelled with this component's label then
+        the given label. Its on_enter_stack is not run, as everything it
+        needs (such as its joints) is given.
         """
         component = self.stack.add_component(
             component_type=component_type,
             label=f"{self.label()} {label}",
             inputs=inputs,
             options=options,
-            parent=self,
+            parent=parent or self,
             suppress_events=True,
         )
         if not component:
